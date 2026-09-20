@@ -260,6 +260,7 @@ body {
 
 /* ═══ CUSTOM DEDICATED TITLE BAR ═══ */
 #customTitleBar {
+  position: relative;
   height: 34px;
   background: #0f172a;
   color: #f8fafc;
@@ -271,7 +272,7 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   user-select: none;
   -webkit-app-region: drag;
-  z-index: 9999;
+  z-index: 100000;
 }
 
 .titlebar-left {
@@ -1065,15 +1066,15 @@ button:active:not(:disabled) {
 .tree-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  font-size: 10px;
+  justify-content: center;
+  padding: 3px 6px;
+  font-size: 11px;
   font-weight: 600;
   border-radius: 4px;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
-  line-height: 1.2;
+  line-height: 1;
 }
 
 .tree-btn-edit {
@@ -1289,7 +1290,7 @@ button:active:not(:disabled) {
   font-size: 10px;
   border-radius: 3px;
   background-color: var(--primary-hover);
-  /* color: #ffffff; */
+  color: #ffffff;
   border: none;
   cursor: pointer;
   white-space: nowrap;
@@ -2533,6 +2534,12 @@ body.dark-theme #userModal .admin-green-card input[type="text"] {
 
 /* ═══ Login Screen Overlay Dual-Theme Support ═══ */
 #loginScreenOverlay {
+  position: fixed !important;
+  top: 34px !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: calc(100vh - 34px) !important;
   background: var(--modal-backdrop) !important;
   backdrop-filter: blur(8px);
 }
@@ -5008,4 +5015,613 @@ body.dark-theme .btn-function-network:hover {
 }
 .wb3-linked-badge .remove-btn:hover {
   color: #ef4444;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Stepper Progress Bar & Active Step Styles
+   ══════════════════════════════════════════════════════════════════════════ */
+.stepper-step {
+  display: flex;
+  /* flex-direction: column; */
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: all 0.2s ease;
+}
+.stepper-step.active,
+.stepper-step .active,
+.stepper-step.completed {
+  opacity: 1;
+}
+.stepper-step.active .step-num {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+.stepper-step.active .step-label {
+  color: #38bdf8;
+  font-weight: 700;
+}
+.stepper-step.completed .step-num {
+  background: #059669;
+  color: #ffffff;
+  border-color: #10b981;
+}
+.stepper-step.completed .step-label {
+  color: #34d399;
+}
+.stepper-line {
+  flex: 1;
+  height: 2px;
+  background: #334155;
+  margin: 0 8px;
+  transition: all 0.2s ease;
+}
+.stepper-line.completed {
+  background: #10b981;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Copy & Paste and Bi-directional Reference Styles
+   ══════════════════════════════════════════════════════════════════════════ */
+.badge-ref-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(14, 165, 233, 0.15);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 5px;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.badge-ref-sync:hover {
+  background: rgba(14, 165, 233, 0.25);
+  border-color: #0284c7;
+}
+
+/* Checkboxes visible ONLY when copy/move mode is active */
+.copy-select-chk {
+  display: none !important;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #0284c7;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+body.copy-mode-active .copy-select-chk,
+.copy-mode-active .copy-select-chk {
+  display: inline-block !important;
+}
+
+.btn-copy-inline {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 3px;
+  opacity: 0.7;
+  transition: opacity 0.15s, transform 0.15s;
+  border-radius: 3px;
+}
+.btn-copy-inline:hover {
+  opacity: 1;
+  background: rgba(2, 132, 199, 0.15);
+  transform: scale(1.1);
+}
+
+.btn-paste-fn-inline, .btn-paste-fm-inline {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+}
+.btn-paste-fn-inline {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.btn-paste-fn-inline:hover {
+  background: #059669;
+  color: #fff;
+}
+.btn-paste-fm-inline {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.btn-paste-fm-inline:hover {
+  background: #059669;
+  color: #fff;
+}
+
+/* Paste Modal Options */
+.paste-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.paste-mode-card {
+  position: relative;
+  background: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.paste-mode-card:hover {
+  border-color: #0284c7;
+  background: #1e293b;
+}
+.paste-mode-card.selected {
+  border-color: #38bdf8;
+  background: rgba(2, 132, 199, 0.15);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+.paste-mode-card input[type="radio"] {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  accent-color: #0284c7;
+}
+.paste-mode-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.paste-mode-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.4;
+  flex: 1;
+}
+
+.paste-preview-box {
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11.5px;
+  color: #e2e8f0;
+  max-height: 220px;
+  overflow-y: auto;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Custom FMEA Context Menu & Paste/Move Eligibility Highlights
+   ══════════════════════════════════════════════════════════════════════════ */
+.fmea-custom-context-menu {
+  position: fixed;
+  z-index: 999999;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  padding: 5px 0;
+  min-width: 220px;
+  font-family: inherit;
+  backdrop-filter: blur(8px);
+  animation: fmeaContextMenuFadeIn 0.12s ease-out;
+}
+
+@keyframes fmeaContextMenuFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.fmea-ctx-header {
+  padding: 6px 14px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin-bottom: 4px;
+}
+
+.fmea-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+
+.fmea-ctx-item:hover {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.fmea-ctx-item .ctx-icon {
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fmea-ctx-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* Paste/Move Eligible Target Cell Highlighting */
+.paste-eligible-target {
+  outline: 2px dashed #0284c7 !important;
+  outline-offset: -2px;
+  background-color: rgba(2, 132, 199, 0.1) !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s, outline 0.2s;
+}
+
+.paste-eligible-target:hover {
+  background-color: rgba(2, 132, 199, 0.22) !important;
+  outline: 2px solid #38bdf8 !important;
+}
+
+/* Move source pending relocation */
+.move-source-pending {
+  opacity: 0.55 !important;
+  outline: 2px dashed #f59e0b !important;
+  outline-offset: -2px;
+  background-color: rgba(245, 158, 11, 0.08) !important;
+}
+
+
+/* Dedicated Window Control Buttons (Native & Frameless Desktop Fallback) */
+.titlebar-right-controls {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag !important;
+  z-index: 100005;
+}
+
+.titlebar-win-btn {
+  width: 46px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  -webkit-app-region: no-drag !important;
+}
+
+.titlebar-win-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.titlebar-win-btn.titlebar-win-close:hover {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+}
+
+#splashScreenOverlay {
+  position: fixed !important;
+  top: 34px !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: calc(100vh - 34px) !important;
+  z-index: 99998 !important;
+}
+
+#loginScreenOverlay {
+  position: fixed !important;
+  top: 34px !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: calc(100vh - 34px) !important;
+  background: var(--modal-backdrop) !important;
+  backdrop-filter: blur(8px);
+  z-index: 99999 !important;
+}
+
+/* ── FMEA Centered Loading Overlay with Backdrop ── */
+.fmea-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  pointer-events: all;
+  user-select: none;
+}
+
+.fmea-loading-overlay.active {
+  display: flex !important;
+}
+
+.fmea-loading-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(11, 15, 25, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fmeaBackdropFadeIn 0.2s ease-out;
+}
+
+.fmea-loading-container {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 14px;
+  padding: 36px 52px;
+  min-width: 320px;
+  max-width: 520px;
+  border-radius: 18px;
+  background: #111827;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.15);
+  animation: fmeaLoadingPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fmea-loading-spinner {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 4px solid rgba(56, 189, 248, 0.18);
+  border-top-color: #38bdf8;
+  border-right-color: #0284c7;
+  animation: fmeaSpin 0.8s cubic-bezier(0.4, 0.1, 0.2, 1) infinite;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+}
+
+.fmea-loading-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+}
+
+.fmea-loading-subtitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  max-width: 440px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.fmea-loading-subtitle strong {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.fmea-loading-badge {
+  display: inline-block;
+  background: rgba(2, 132, 199, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 9999px;
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+}
+
+@keyframes fmeaSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fmeaBackdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fmeaLoadingPopIn {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Night-sky theme overrides */
+[data-theme="night-sky"] .fmea-loading-backdrop,
+body.night-sky-theme .fmea-loading-backdrop {
+  background: rgba(15, 18, 37, 0.8) !important;
+}
+
+[data-theme="night-sky"] .fmea-loading-container,
+body.night-sky-theme .fmea-loading-container {
+  background: #1e223d !important;
+  border-color: rgba(129, 140, 248, 0.4) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(129, 140, 248, 0.2) !important;
+}
+
+[data-theme="night-sky"] .fmea-loading-spinner,
+body.night-sky-theme .fmea-loading-spinner {
+  border-color: rgba(129, 140, 248, 0.2) !important;
+  border-top-color: #818cf8 !important;
+  border-right-color: #c084fc !important;
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.3) !important;
+}
+
+[data-theme="night-sky"] .fmea-loading-subtitle strong,
+body.night-sky-theme .fmea-loading-subtitle strong {
+  color: #a5b4fc !important;
+}
+
+[data-theme="night-sky"] .fmea-loading-badge,
+body.night-sky-theme .fmea-loading-badge {
+  background: rgba(129, 140, 248, 0.18) !important;
+  border-color: rgba(129, 140, 248, 0.4) !important;
+  color: #c7d2fe !important;
+}
+
+/* Light mode overrides (when light theme is explicitly set) */
+body:not(.night-sky-theme):not(.dark-theme):not([data-theme="night-sky"]):not([data-theme="dark"]) .fmea-loading-backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+body:not(.night-sky-theme):not(.dark-theme):not([data-theme="night-sky"]):not([data-theme="dark"]) .fmea-loading-container {
+  background: #ffffff;
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.2), 0 0 25px rgba(2, 132, 199, 0.12);
+}
+
+body:not(.night-sky-theme):not(.dark-theme):not([data-theme="night-sky"]):not([data-theme="dark"]) .fmea-loading-title {
+  color: #0f172a;
+}
+
+body:not(.night-sky-theme):not(.dark-theme):not([data-theme="night-sky"]):not([data-theme="dark"]) .fmea-loading-subtitle {
+  color: #64748b;
+}
+
+body:not(.night-sky-theme):not(.dark-theme):not([data-theme="night-sky"]):not([data-theme="dark"]) .fmea-loading-subtitle strong {
+  color: #0284c7;
+}
+
+/* ── FMEA Table Right-Click Effect & Cause Item Styling ── */
+.fmea-effect-item,
+.fmea-cause-item {
+  position: relative;
+  border-radius: 4px;
+  padding: 3px 5px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  cursor: context-menu;
+}
+
+.fmea-effect-item:hover,
+.fmea-cause-item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+}
+
+/* ── Failure Network Diagram Chain Hover & Delink Button ── */
+.failure-net-edge-group {
+  cursor: pointer;
+  pointer-events: visiblePainted;
+}
+
+.failure-net-edge-hitarea {
+  stroke: transparent;
+  stroke-width: 32px;
+  fill: none;
+  pointer-events: stroke !important;
+  cursor: pointer;
+}
+
+.failure-net-edge-group:hover .failure-net-connector-path {
+  stroke: #ef4444 !important;
+  stroke-width: 2.8px !important;
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.65));
+}
+
+.failure-net-edge-delink-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: center;
+  cursor: pointer;
+}
+
+.failure-net-edge-group:hover .failure-net-edge-delink-btn,
+.failure-net-edge-delink-btn:hover {
+  opacity: 1 !important;
+  pointer-events: all !important;
+}
+
+.failure-net-edge-delink-btn,
+.failure-net-edge-delink-btn * {
+  cursor: pointer !important;
+}
+
+.failure-net-edge-group:hover .failure-net-edge-delink-btn *,
+.failure-net-edge-delink-btn:hover * {
+  pointer-events: all !important;
+}
+
+.failure-net-edge-delink-btn rect {
+  transition: fill 0.15s ease, transform 0.15s ease;
+}
+
+.failure-net-edge-delink-btn:hover rect {
+  fill: #b91c1c !important;
+}
+
+.failure-net-edge-delink-btn:hover text {
+  fill: #ffffff !important;
+  font-weight: 800 !important;
+}
+
+
+/* ── FMEA Table Characteristic Item & Inline Unlink ── */
+.fmea-char-item {
+  position: relative;
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  cursor: context-menu;
+}
+
+.fmea-char-item:hover {
+  background: rgba(56, 189, 248, 0.1);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+}
+
+.char-unlink-btn {
+  opacity: 0.6;
+  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+
+.char-unlink-btn:hover {
+  opacity: 1 !important;
+  color: #dc2626 !important;
+  transform: scale(1.25);
 }

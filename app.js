@@ -1,13 +1,35 @@
+
+// ─── Desktop App Window Controls (Minimize, Maximize, Close) ───────────────
+function handleWindowClose() {
+  if (window.electronAPI && typeof window.electronAPI.closeWindow === 'function') {
+    window.electronAPI.closeWindow();
+  } else {
+    try { window.close(); } catch(e) {}
+  }
+}
+function handleWindowMinimize() {
+  if (window.electronAPI && typeof window.electronAPI.minimizeWindow === 'function') {
+    window.electronAPI.minimizeWindow();
+  }
+}
+function handleWindowMaximize() {
+  if (window.electronAPI && typeof window.electronAPI.maximizeWindow === 'function') {
+    window.electronAPI.maximizeWindow();
+  }
+}
+
 /**
  * AIAG DFMEA Standalone Engine & State Manager
  * Plain JS implementation with zero dependencies.
  */
 
 // ----------------------------------------------------
-// DIV-BASED CUSTOM ALERT & CONFIRMATION SYSTEM
+// DIV-BASED CUSTOM ALERT, CONFIRM & PROMPT SYSTEM
 // ----------------------------------------------------
 let customAlertQueue = [];
 let activeCustomAlertResolver = null;
+let activeCustomAlertData = null;
+let lastFocusedElementBeforeAlert = null;
 
 function ensureCustomAlertDOM() {
   if (document.getElementById('customAlertOverlay')) return;
@@ -15,31 +37,49 @@ function ensureCustomAlertDOM() {
   const div = document.createElement('div');
   div.id = 'customAlertOverlay';
   div.className = 'custom-alert-overlay';
-  div.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.75); backdrop-filter:blur(4px); z-index:1111111111199999; align-items:center; justify-content:center;';
+  div.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.8); backdrop-filter:blur(5px); z-index:2147483647; align-items:center; justify-content:center;';
   div.onclick = handleCustomAlertOverlayClick;
 
   div.innerHTML = `
-    <div id="customAlertBox" class="custom-alert-box" style="background:var(--bg-modal-content, #0f172a); color:var(--text-primary, #f8fafc); border:1px solid var(--border-modal, #312e81); border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.6); width:90%; max-width:480px; padding:22px; display:flex; flex-direction:column; gap:16px;">
+    <div id="customAlertBox" class="custom-alert-box" style="background:var(--bg-modal-content, #0f172a); color:var(--text-primary, #f8fafc); border:1px solid var(--border-modal, #38bdf8); border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.8); width:92%; max-width:480px; padding:22px; display:flex; flex-direction:column; gap:14px; z-index:2147483647;">
       <div style="display:flex; align-items:center; gap:12px;">
-        <span id="customAlertIcon" style="font-size:32px;">ℹ️</span>
-        <div>
-          <h3 id="customAlertTitle" style="font-size:16px; font-weight:700; color:var(--text-primary, #f8fafc); margin:0;">System Notification</h3>
-          <span id="customAlertCategory" style="font-size:11px; color:var(--accent-color, #38bdf8); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">JOST FMEA Workbench</span>
+        <span id="customAlertIcon" style="font-size:30px; flex-shrink:0;">ℹ️</span>
+        <div style="flex:1; min-width:0;">
+          <h3 id="customAlertTitle" style="font-size:15px; font-weight:700; color:var(--text-primary, #f8fafc); margin:0; line-height:1.3;">System Notification</h3>
+          <span id="customAlertCategory" style="font-size:10.5px; color:var(--accent-color, #38bdf8); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">JOST FMEA Workbench</span>
         </div>
       </div>
-      <div id="customAlertMessage" style="font-size:13.5px; line-height:1.5; color:var(--text-secondary, #cbd5e1); white-space:pre-wrap; max-height:300px; overflow-y:auto; padding-right:4px;"></div>
-      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
-        <button id="customAlertCancelBtn" class="btn btn-secondary" onclick="closeCustomAlert(false)" style="display:none; padding:6px 16px; font-weight:600; border-radius:6px; cursor:pointer;">Cancel</button>
-        <button id="customAlertOkBtn" class="btn btn-primary" onclick="closeCustomAlert(true)" style="padding:6px 20px; font-weight:700; border-radius:6px; cursor:pointer;">OK</button>
+      <div id="customAlertMessage" style="font-size:13px; line-height:1.5; color:var(--text-secondary, #cbd5e1); white-space:pre-wrap; max-height:280px; overflow-y:auto; padding-right:4px;"></div>
+      <div id="customAlertInputContainer" style="display:none; margin-top:2px;">
+        <input type="text" id="customAlertInput" style="width:100%; padding:8px 12px; background:#080d1a; color:#f8fafc; border:1px solid #334155; border-radius:6px; font-size:13px; box-sizing:border-box; outline:none;" />
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:6px;">
+        <button id="customAlertCancelBtn" type="button" class="btn btn-secondary" onclick="closeCustomAlert(false)" style="display:none; padding:6px 16px; font-weight:600; border-radius:6px; cursor:pointer;">Cancel</button>
+        <button id="customAlertOkBtn" type="button" class="btn btn-primary" onclick="closeCustomAlert(true)" style="padding:6px 20px; font-weight:700; border-radius:6px; cursor:pointer;">OK</button>
       </div>
     </div>
   `;
   document.body.appendChild(div);
+
+  const inp = div.querySelector('#customAlertInput');
+  if (inp) {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCustomAlert(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCustomAlert(false);
+      }
+    });
+  }
 }
 
 function showCustomAlert(message, title, type) {
   return new Promise((resolve) => {
-    const alertData = { message, title, type, isConfirm: false, resolve };
+    const alertData = { message, title, type, isConfirm: false, isPrompt: false, resolve };
     if (activeCustomAlertResolver) {
       customAlertQueue.push(alertData);
     } else {
@@ -50,7 +90,7 @@ function showCustomAlert(message, title, type) {
 
 function showCustomConfirm(message, title, type) {
   return new Promise((resolve) => {
-    const alertData = { message, title, type, isConfirm: true, resolve };
+    const alertData = { message, title, type, isConfirm: true, isPrompt: false, resolve };
     if (activeCustomAlertResolver) {
       customAlertQueue.push(alertData);
     } else {
@@ -59,9 +99,24 @@ function showCustomConfirm(message, title, type) {
   });
 }
 
-function renderCustomAlert({ message, title, type, isConfirm, resolve }) {
+function showCustomPrompt(message, defaultValue = '', title = 'Input Required', type = 'info') {
+  return new Promise((resolve) => {
+    const alertData = { message, defaultValue, title, type, isConfirm: false, isPrompt: true, resolve };
+    if (activeCustomAlertResolver) {
+      customAlertQueue.push(alertData);
+    } else {
+      renderCustomAlert(alertData);
+    }
+  });
+}
+
+function renderCustomAlert(alertData) {
   ensureCustomAlertDOM();
+  const { message, defaultValue, title, type, isConfirm, isPrompt, resolve } = alertData;
   activeCustomAlertResolver = resolve;
+  activeCustomAlertData = alertData;
+
+  lastFocusedElementBeforeAlert = document.activeElement;
 
   const overlay = document.getElementById('customAlertOverlay');
   const box = document.getElementById('customAlertBox');
@@ -71,10 +126,12 @@ function renderCustomAlert({ message, title, type, isConfirm, resolve }) {
   const iconEl = document.getElementById('customAlertIcon');
   const okBtn = document.getElementById('customAlertOkBtn');
   const cancelBtn = document.getElementById('customAlertCancelBtn');
+  const inputContainer = document.getElementById('customAlertInputContainer');
+  const inputEl = document.getElementById('customAlertInput');
 
   if (!overlay || !box) {
-    console.log('[ALERT]', message);
-    if (resolve) resolve(true);
+    console.log('[ALERT/PROMPT]', message);
+    if (resolve) resolve(isPrompt ? defaultValue : (isConfirm ? true : true));
     return;
   }
 
@@ -86,24 +143,24 @@ function renderCustomAlert({ message, title, type, isConfirm, resolve }) {
   }
 
   let alertType = type || 'info';
-  let alertTitle = title || 'System Notification';
+  let alertTitle = title || (isPrompt ? 'Input Required' : (isConfirm ? 'Confirm Action' : 'System Notification'));
   let alertIcon = 'ℹ️';
 
   const lowerMsg = strMsg.toLowerCase();
   if (!type) {
-    if (lowerMsg.includes('access denied') || lowerMsg.includes('not permit') || lowerMsg.includes('unauthorized')) {
+    if (lowerMsg.includes('access denied') || lowerMsg.includes('not permit') || lowerMsg.includes('unauthorized') || lowerMsg.includes('restricted')) {
       alertType = 'error';
-      alertTitle = title || 'Access Denied';
+      alertTitle = title || 'Access Restricted';
       alertIcon = '🔒';
-    } else if (lowerMsg.includes('error') || lowerMsg.includes('failed') || lowerMsg.includes('invalid') || lowerMsg.includes('incorrect')) {
+    } else if (lowerMsg.includes('error') || lowerMsg.includes('failed') || lowerMsg.includes('invalid') || lowerMsg.includes('incorrect') || lowerMsg.includes('corrupted')) {
       alertType = 'error';
       alertTitle = title || 'System Error';
       alertIcon = '⛔';
-    } else if (lowerMsg.includes('warning') || lowerMsg.includes('caution') || lowerMsg.includes('unsaved')) {
+    } else if (lowerMsg.includes('warning') || lowerMsg.includes('caution') || lowerMsg.includes('unsaved') || lowerMsg.includes('delete') || lowerMsg.includes('erase') || lowerMsg.includes('clear')) {
       alertType = 'warning';
-      alertTitle = title || 'Validation Warning';
+      alertTitle = title || (isConfirm ? 'Confirm Deletion / Action' : 'Validation Warning');
       alertIcon = '⚠️';
-    } else if (lowerMsg.includes('success') || lowerMsg.includes('complete') || lowerMsg.includes('saved')) {
+    } else if (lowerMsg.includes('success') || lowerMsg.includes('complete') || lowerMsg.includes('saved') || lowerMsg.includes('imported')) {
       alertType = 'success';
       alertTitle = title || 'Action Successful';
       alertIcon = '✅';
@@ -121,31 +178,70 @@ function renderCustomAlert({ message, title, type, isConfirm, resolve }) {
   if (msgEl) msgEl.textContent = strMsg;
   if (iconEl) iconEl.textContent = alertIcon;
 
-  if (isConfirm) {
+  if (isPrompt) {
+    if (inputContainer) inputContainer.style.display = 'block';
+    if (inputEl) {
+      inputEl.value = defaultValue || '';
+    }
+    if (cancelBtn) cancelBtn.style.display = 'inline-block';
+    if (okBtn) okBtn.textContent = 'Submit';
+  } else if (isConfirm) {
+    if (inputContainer) inputContainer.style.display = 'none';
     if (cancelBtn) cancelBtn.style.display = 'inline-block';
     if (okBtn) okBtn.textContent = 'Confirm';
   } else {
+    if (inputContainer) inputContainer.style.display = 'none';
     if (cancelBtn) cancelBtn.style.display = 'none';
     if (okBtn) okBtn.textContent = 'OK';
   }
 
   overlay.style.display = 'flex';
-  setTimeout(() => { if (okBtn) okBtn.focus(); }, 50);
+
+  setTimeout(() => {
+    if (isPrompt && inputEl) {
+      inputEl.focus();
+      inputEl.select();
+    } else if (okBtn) {
+      okBtn.focus();
+    }
+  }, 50);
 }
 
-function closeCustomAlert(result) {
+function closeCustomAlert(confirmed) {
   const overlay = document.getElementById('customAlertOverlay');
   if (overlay) overlay.style.display = 'none';
 
-  if (activeCustomAlertResolver) {
-    const res = activeCustomAlertResolver;
-    activeCustomAlertResolver = null;
-    res(result);
+  const inputEl = document.getElementById('customAlertInput');
+  const curData = activeCustomAlertData;
+  const res = activeCustomAlertResolver;
+
+  activeCustomAlertResolver = null;
+  activeCustomAlertData = null;
+
+  if (res) {
+    if (curData && curData.isPrompt) {
+      if (confirmed && inputEl) {
+        res(inputEl.value);
+      } else {
+        res(null);
+      }
+    } else if (curData && curData.isConfirm) {
+      res(Boolean(confirmed));
+    } else {
+      res(true);
+    }
   }
+
+  // Restore focus to prevent input freeze
+  try {
+    if (lastFocusedElementBeforeAlert && typeof lastFocusedElementBeforeAlert.focus === 'function') {
+      lastFocusedElementBeforeAlert.focus();
+    }
+  } catch (e) {}
 
   if (customAlertQueue.length > 0) {
     const nextAlert = customAlertQueue.shift();
-    setTimeout(() => renderCustomAlert(nextAlert), 100);
+    setTimeout(() => renderCustomAlert(nextAlert), 80);
   }
 }
 
@@ -160,21 +256,33 @@ document.addEventListener('keydown', (e) => {
   if (overlay && overlay.style.display !== 'none') {
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       closeCustomAlert(false);
     } else if (e.key === 'Enter') {
-      e.preventDefault();
-      closeCustomAlert(true);
+      const inputEl = document.getElementById('customAlertInput');
+      if (document.activeElement !== inputEl) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCustomAlert(true);
+      }
     }
   }
 });
 
-// Override window.alert to route all alerts through custom div modal
+// Override window.alert, window.confirm, and window.prompt globally
 window.alert = function (message, title, type) {
-  showCustomAlert(message, title, type);
+  return showCustomAlert(message, title, type);
+};
+window.confirm = function (message, title, type) {
+  return showCustomConfirm(message, title, type);
+};
+window.prompt = function (message, defaultValue, title, type) {
+  return showCustomPrompt(message, defaultValue, title, type);
 };
 
 window.showCustomConfirm = showCustomConfirm;
 window.showCustomAlert = showCustomAlert;
+window.showCustomPrompt = showCustomPrompt;
 
 // ----------------------------------------------------
 // ----------------------------------------------------
@@ -564,53 +672,128 @@ function isCurrentUserAdmin() {
 }
 
 
-// Initial default user accounts with encrypted SHA-256 passwords
-// 'admin123' -> 240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9
-// 'eng123'   -> a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
-let systemUsers = [
+// ----------------------------------------------------
+// Dedicated Central User Library Engine (fmea_user_library.json)
+// ----------------------------------------------------
+const USER_LIBRARY_FILE_NAME = 'fmea_user_library.json';
+
+const DEFAULT_USER_LIBRARY = [
   {
-    id: 'usr-1',
-    name: 'System Admin',
+    id: 'usr-admin',
+    name: 'System Administrator',
     username: 'admin',
     email: 'admin@jostworld.com',
-    passwordHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
+    passwordHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', // 'admin123'
     role: 'Admin',
+    noPasswordRequired: false,
+    allowedStorageLocationIds: ['*'],
     permissions: {
       canCreateRevision: true, canFreezeRevision: true, canEditFMEA: true,
       canExport: true, canManageVariants: true, canViewReports: true,
-      canManageUsers: true, canManagePFMEA: true
+      canManageUsers: true, canManagePFMEA: true, canManageFileRights: true
     }
   },
   {
-    id: 'usr-2',
-    name: 'Lead Engineer',
-    username: 'engineer',
-    email: 'engineer@jostworld.com',
-    passwordHash: 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3',
-    role: 'Lead Engineer',
+    id: 'usr-readonly',
+    name: 'Read-Only Viewer',
+    username: 'readonly',
+    email: 'readonly@jostworld.com',
+    passwordHash: '',
+    role: 'Viewer',
+    noPasswordRequired: true,
+    allowedStorageLocationIds: ['*'],
     permissions: {
-      canCreateRevision: true, canFreezeRevision: false, canEditFMEA: true,
-      canExport: true, canManageVariants: true, canViewReports: true,
-      canManageUsers: false, canManagePFMEA: true
-    }
-  },
-  {
-    id: 'usr-3',
-    name: 'Process Leader',
-    username: 'processlead',
-    email: 'pfmea.owner@jostworld.com',
-    passwordHash: 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3',
-    role: 'Process Leader',
-    permissions: {
-      canCreateRevision: true, canFreezeRevision: true, canEditFMEA: true,
+      canCreateRevision: false, canFreezeRevision: false, canEditFMEA: false,
       canExport: true, canManageVariants: false, canViewReports: true,
-      canManageUsers: false, canManagePFMEA: true
+      canManageUsers: false, canManagePFMEA: false, canManageFileRights: false
     }
   }
 ];
 
-
+let systemUsers = [...DEFAULT_USER_LIBRARY];
 let loginAuditLogs = [];
+
+function getUserLibraryFilePath() {
+  const baseDir = getEffectiveSharePointPath();
+  return (baseDir.endsWith('\\') || baseDir.endsWith('/'))
+    ? `${baseDir}${USER_LIBRARY_FILE_NAME}`
+    : `${baseDir}/${USER_LIBRARY_FILE_NAME}`;
+}
+
+async function checkAndInitUserLibrary() {
+  const isElectron = window.electronAPI && window.electronAPI.isElectron;
+  const filePath = getUserLibraryFilePath();
+
+  if (isElectron && window.electronAPI.readFileContent) {
+    try {
+      const readRes = await window.electronAPI.readFileContent(filePath);
+      if (readRes && readRes.success && readRes.content && readRes.content.trim()) {
+        try {
+          const parsed = JSON.parse(readRes.content);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            let merged = [...parsed];
+            if (!merged.some(u => u.username && u.username.toLowerCase() === 'admin')) {
+              merged.unshift(DEFAULT_USER_LIBRARY[0]);
+            }
+            if (!merged.some(u => u.username && u.username.toLowerCase() === 'readonly')) {
+              merged.push(DEFAULT_USER_LIBRARY[1]);
+            }
+            systemUsers = merged;
+            try { localStorage.setItem('jost_system_users', JSON.stringify(systemUsers)); } catch (e) {}
+            return systemUsers;
+          }
+        } catch (parseErr) {
+          console.warn("Could not parse fmea_user_library.json, re-initializing default:", parseErr);
+        }
+      }
+
+      // File does not exist yet or was empty - automatically create default user library on disk!
+      systemUsers = [...DEFAULT_USER_LIBRARY];
+      await saveUserLibraryToDisk();
+      try { localStorage.setItem('jost_system_users', JSON.stringify(systemUsers)); } catch (e) {}
+      return systemUsers;
+    } catch (err) {
+      console.warn("Error checking user library on disk:", err);
+    }
+  }
+
+  // Fallback to local storage or defaults
+  try {
+    const localStored = localStorage.getItem('jost_system_users');
+    if (localStored) {
+      const parsed = JSON.parse(localStored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        systemUsers = parsed;
+        return systemUsers;
+      }
+    }
+  } catch (e) {}
+
+  systemUsers = [...DEFAULT_USER_LIBRARY];
+  return systemUsers;
+}
+
+async function saveUserLibraryToDisk() {
+  const isElectron = window.electronAPI && window.electronAPI.isElectron;
+  const filePath = getUserLibraryFilePath();
+  const jsonContent = JSON.stringify(systemUsers, null, 2);
+
+  try {
+    localStorage.setItem('jost_system_users', jsonContent);
+  } catch (e) {}
+
+  if (isElectron && window.electronAPI.writeFile) {
+    try {
+      const res = await window.electronAPI.writeFile(filePath, jsonContent);
+      if (res && res.success) {
+        return true;
+      }
+    } catch (err) {
+      console.warn("Failed to write fmea_user_library.json to disk:", err);
+    }
+  }
+  return false;
+}
 
 // ----------------------------------------------------
 // Authentication Logic
@@ -618,12 +801,30 @@ let loginAuditLogs = [];
 async function handleLoginSubmit(e) {
   if (e) e.preventDefault();
   try {
+    // Refresh user library from disk first
+    await checkAndInitUserLibrary();
+
     const usernameInput = document.getElementById('loginUsername').value.trim();
     const passwordInput = document.getElementById('loginPassword').value.trim();
     const errDiv = document.getElementById('loginErrorMsg');
 
-    const hashedInput = await hashPasswordSHA256(passwordInput);
-    const foundUser = systemUsers.find(u => u.username.toLowerCase() === usernameInput.toLowerCase() && u.passwordHash === hashedInput);
+    const isReadOnlyLogin = usernameInput.toLowerCase() === 'readonly';
+
+    let foundUser = null;
+    if (isReadOnlyLogin) {
+      foundUser = systemUsers.find(u => u.username && u.username.toLowerCase() === 'readonly');
+      if (!foundUser) {
+        foundUser = DEFAULT_USER_LIBRARY[1];
+        systemUsers.push(foundUser);
+        await saveUserLibraryToDisk();
+      }
+    } else {
+      const hashedInput = await hashPasswordSHA256(passwordInput);
+      foundUser = systemUsers.find(u => 
+        u.username && u.username.toLowerCase() === usernameInput.toLowerCase() && 
+        (u.noPasswordRequired === true || u.passwordHash === hashedInput)
+      );
+    }
 
     if (foundUser) {
       currentUser = foundUser;
@@ -665,6 +866,14 @@ async function handleLoginSubmit(e) {
     alert("Login Error: " + err.message);
   }
   return false;
+}
+
+async function loginAsReadOnly() {
+  const userInput = document.getElementById('loginUsername');
+  const passInput = document.getElementById('loginPassword');
+  if (userInput) userInput.value = 'readonly';
+  if (passInput) passInput.value = '';
+  await handleLoginSubmit(null);
 }
 
 async function logout() {
@@ -774,6 +983,9 @@ if (typeof window !== 'undefined') {
 }
 
 function closeActiveFileAndResetWorkspace() {
+  if (typeof releaseCurrentFileLock === 'function') {
+    releaseCurrentFileLock();
+  }
   cleanupLegacyLocalStorageFileStores();
   activeSharePointFileName = null;
   if (typeof hasUnsavedChanges !== 'undefined') {
@@ -816,6 +1028,336 @@ function closeActiveFileAndResetWorkspace() {
 
 window.logout = logout;
 window.closeActiveFileAndResetWorkspace = closeActiveFileAndResetWorkspace;
+
+// ----------------------------------------------------
+// 100% FOOLPROOF CONCURRENCY LOCK & CRASH RESCUE SYSTEM
+// ----------------------------------------------------
+let clientSessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+let activeLockFilePath = null;
+let currentFileLockMode = 'EDIT'; // 'EDIT' | 'READ_ONLY'
+let currentFileLockInfo = null;
+let lockHeartbeatTimer = null;
+let readOnlyPollerTimer = null;
+let lastUserActivityTimestamp = Date.now();
+let isUserCurrentlyIdle = false;
+
+const USER_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes inactivity pauses heartbeat
+const LOCK_HEARTBEAT_INTERVAL_MS = 15 * 1000; // 15 seconds heartbeat interval
+const READ_ONLY_POLL_INTERVAL_MS = 10 * 1000; // 10 seconds check for read-only users
+
+function initLockActivityTracker() {
+  const recordActivity = () => {
+    const now = Date.now();
+    const wasIdle = isUserCurrentlyIdle;
+    lastUserActivityTimestamp = now;
+    isUserCurrentlyIdle = false;
+
+    if (wasIdle && currentFileLockMode === 'EDIT' && activeLockFilePath) {
+      // Re-trigger heartbeat immediately upon returning from idle
+      sendLockHeartbeatPulse();
+    }
+  };
+
+  ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+    window.addEventListener(evt, () => {
+      if (Date.now() - lastUserActivityTimestamp > 2000) {
+        recordActivity();
+      }
+    }, { passive: true });
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (typeof releaseCurrentFileLock === 'function') {
+      releaseCurrentFileLock();
+    }
+  });
+}
+
+async function initFileLockOnOpen(filePath) {
+  if (!window.electronAPI || !window.electronAPI.isElectron || !filePath) {
+    currentFileLockMode = 'EDIT';
+    activeLockFilePath = filePath || null;
+    return;
+  }
+
+  activeLockFilePath = filePath;
+  stopLockTimers();
+
+  const userProfile = {
+    name: (currentUser && (currentUser.fullName || currentUser.username)) || 'Editor',
+    role: (currentUser && currentUser.role) || 'User',
+    email: (currentUser && currentUser.email) || ''
+  };
+
+  try {
+    const acquireRes = await window.electronAPI.acquireOrRenewFileLock({
+      filePath,
+      sessionId: clientSessionId,
+      userProfile,
+      isIdle: false
+    });
+
+    if (acquireRes && acquireRes.success) {
+      currentFileLockMode = 'EDIT';
+      currentFileLockInfo = acquireRes.lockInfo || null;
+      if (typeof fmeaData !== 'undefined' && fmeaData) {
+        fmeaData.isReadOnly = false;
+      }
+      startLockHeartbeatTimer();
+      updateLockStatusBannerUI();
+      updateSaveStatusBadgeUI('saved', '✓ Edit Mode Active');
+    } else {
+      currentFileLockMode = 'READ_ONLY';
+      currentFileLockInfo = acquireRes ? acquireRes.lockInfo : null;
+      if (typeof fmeaData !== 'undefined' && fmeaData) {
+        fmeaData.isReadOnly = true;
+      }
+      startReadOnlyPollerTimer();
+      updateLockStatusBannerUI();
+      updateSaveStatusBadgeUI('readOnly', '🔒 Read-Only (Locked)');
+      
+      const lockUser = (currentFileLockInfo && currentFileLockInfo.userProfile && currentFileLockInfo.userProfile.name) ? currentFileLockInfo.userProfile.name : 'another user';
+      const lockMachine = (currentFileLockInfo && currentFileLockInfo.machineName) ? ` on ${currentFileLockInfo.machineName}` : '';
+      if (typeof showToast === 'function') {
+        showToast(`🔒 File is currently being edited by ${lockUser}${lockMachine}. Opened in Read-Only mode.`, 'warning');
+      }
+    }
+  } catch (err) {
+    console.warn('[Lock Manager] Failed to check/acquire lock:', err);
+    currentFileLockMode = 'EDIT';
+    startLockHeartbeatTimer();
+  }
+}
+
+function startLockHeartbeatTimer() {
+  if (lockHeartbeatTimer) clearInterval(lockHeartbeatTimer);
+  lockHeartbeatTimer = setInterval(() => {
+    sendLockHeartbeatPulse();
+  }, LOCK_HEARTBEAT_INTERVAL_MS);
+}
+
+function startReadOnlyPollerTimer() {
+  if (readOnlyPollerTimer) clearInterval(readOnlyPollerTimer);
+  readOnlyPollerTimer = setInterval(() => {
+    pollReadOnlyLockStatus();
+  }, READ_ONLY_POLL_INTERVAL_MS);
+}
+
+function stopLockTimers() {
+  if (lockHeartbeatTimer) {
+    clearInterval(lockHeartbeatTimer);
+    lockHeartbeatTimer = null;
+  }
+  if (readOnlyPollerTimer) {
+    clearInterval(readOnlyPollerTimer);
+    readOnlyPollerTimer = null;
+  }
+}
+
+async function sendLockHeartbeatPulse() {
+  if (!window.electronAPI || !window.electronAPI.isElectron || !activeLockFilePath || currentFileLockMode !== 'EDIT') {
+    return;
+  }
+
+  const idle = (Date.now() - lastUserActivityTimestamp) > USER_IDLE_TIMEOUT_MS;
+  isUserCurrentlyIdle = idle;
+
+  const userProfile = {
+    name: (currentUser && (currentUser.fullName || currentUser.username)) || 'Editor',
+    role: (currentUser && currentUser.role) || 'User',
+    email: (currentUser && currentUser.email) || ''
+  };
+
+  try {
+    const res = await window.electronAPI.acquireOrRenewFileLock({
+      filePath: activeLockFilePath,
+      sessionId: clientSessionId,
+      userProfile,
+      isIdle: idle
+    });
+
+    if (res && res.success) {
+      currentFileLockInfo = res.lockInfo || null;
+      if (idle) {
+        updateLockStatusBannerUI('idle');
+      } else {
+        updateLockStatusBannerUI('normal');
+      }
+    } else {
+      stopLockTimers();
+      currentFileLockMode = 'READ_ONLY';
+      if (typeof fmeaData !== 'undefined' && fmeaData) {
+        fmeaData.isReadOnly = true;
+      }
+      startReadOnlyPollerTimer();
+      updateLockStatusBannerUI('lost');
+      updateSaveStatusBadgeUI('readOnly', '🔒 Read-Only (Access Lost)');
+      
+      if (typeof showCustomAlert === 'function') {
+        showCustomAlert(
+          `⚠️ Edit Access Transferred\n\nAnother team member took over edit access for this file while your session was idle.\n\nYour session is now in READ-ONLY mode. Any unsaved edits can be saved to a local draft copy using "Save Local Copy As...".`,
+          "Lock Transferred",
+          "warning"
+        );
+      } else {
+        alert("⚠️ Edit Access Transferred: Another user took over editing access for this file. Your session is now in Read-Only mode.");
+      }
+    }
+  } catch (err) {
+    console.warn('[Lock Heartbeat] Heartbeat pulse error:', err);
+  }
+}
+
+async function pollReadOnlyLockStatus() {
+  if (!window.electronAPI || !window.electronAPI.isElectron || !activeLockFilePath || currentFileLockMode !== 'READ_ONLY') {
+    return;
+  }
+
+  try {
+    const statusRes = await window.electronAPI.checkFileLockStatus(activeLockFilePath);
+    if (statusRes) {
+      currentFileLockInfo = statusRes.lockInfo || null;
+      if (statusRes.status === 'UNLOCKED' || statusRes.status === 'EXPIRED') {
+        updateLockStatusBannerUI('available');
+      } else if (statusRes.status === 'LOCKED') {
+        updateLockStatusBannerUI('readonly');
+      }
+    }
+  } catch (err) {
+    console.warn('[Lock Poller] Error checking lock status:', err);
+  }
+}
+
+async function handleManualLockTakeover() {
+  if (!window.electronAPI || !window.electronAPI.isElectron || !activeLockFilePath) {
+    return;
+  }
+
+  const confirmTakeover = await showCustomConfirm(
+    `Take over editing access for this file?\n\nA rescue backup will be created automatically before takeover, and you will become the primary active editor.`,
+    "Take Over Edit Access",
+    "info"
+  );
+  if (!confirmTakeover) return;
+
+  const userProfile = {
+    name: (currentUser && (currentUser.fullName || currentUser.username)) || 'Editor',
+    role: (currentUser && currentUser.role) || 'User',
+    email: (currentUser && currentUser.email) || ''
+  };
+
+  try {
+    const takeoverRes = await window.electronAPI.takeoverFileLock({
+      filePath: activeLockFilePath,
+      sessionId: clientSessionId,
+      userProfile,
+      forceTakeover: true
+    });
+
+    if (takeoverRes && takeoverRes.success) {
+      currentFileLockMode = 'EDIT';
+      currentFileLockInfo = takeoverRes.lockInfo || null;
+      if (typeof fmeaData !== 'undefined' && fmeaData) {
+        fmeaData.isReadOnly = false;
+      }
+      stopLockTimers();
+      startLockHeartbeatTimer();
+      updateLockStatusBannerUI('normal');
+      updateSaveStatusBadgeUI('saved', '✓ Edit Mode Acquired');
+      
+      showToast("⚡ Edit access acquired! You are now the active editor.");
+    } else {
+      alert(`Could not take over lock: ${takeoverRes ? takeoverRes.error : 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert(`Takeover failed: ${err.message}`);
+  }
+}
+
+async function handleSaveCopyAsDraft() {
+  if (typeof saveJSON === 'function') {
+    await saveJSON();
+  }
+}
+
+function releaseCurrentFileLock() {
+  if (window.electronAPI && window.electronAPI.isElectron && activeLockFilePath && currentFileLockMode === 'EDIT') {
+    try {
+      window.electronAPI.releaseFileLock({
+        filePath: activeLockFilePath,
+        sessionId: clientSessionId
+      });
+    } catch (err) {
+      console.warn('[Lock Manager] Failed to release lock:', err);
+    }
+  }
+  stopLockTimers();
+  activeLockFilePath = null;
+  currentFileLockMode = 'EDIT';
+  currentFileLockInfo = null;
+  updateLockStatusBannerUI('hidden');
+}
+
+function updateLockStatusBannerUI(forcedState = null) {
+  const banner = document.getElementById('wbLockStatusBanner');
+  const icon = document.getElementById('wbLockBannerIcon');
+  const text = document.getElementById('wbLockBannerText');
+  const takeoverBtn = document.getElementById('wbLockTakeoverBtn');
+  const saveCopyBtn = document.getElementById('wbLockSaveCopyBtn');
+
+  if (!banner) return;
+
+  if (forcedState === 'hidden' || (!activeLockFilePath && !activeSharePointFileName)) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  if (currentFileLockMode === 'READ_ONLY') {
+    banner.style.display = 'flex';
+    if (forcedState === 'available') {
+      banner.className = 'wb-lock-banner wb-lock-banner--takeover';
+      if (icon) icon.textContent = '🟢';
+      if (text) text.textContent = 'Edit access is available! The previous editor disconnected or became inactive.';
+      if (takeoverBtn) takeoverBtn.style.display = 'inline-flex';
+      if (saveCopyBtn) saveCopyBtn.style.display = 'inline-flex';
+    } else if (forcedState === 'lost') {
+      banner.className = 'wb-lock-banner wb-lock-banner--readonly';
+      if (icon) icon.textContent = '⚠️';
+      if (text) text.textContent = 'Edit access was transferred to another user while you were idle. Your session is now Read-Only.';
+      if (takeoverBtn) takeoverBtn.style.display = 'none';
+      if (saveCopyBtn) saveCopyBtn.style.display = 'inline-flex';
+    } else {
+      banner.className = 'wb-lock-banner wb-lock-banner--readonly';
+      if (icon) icon.textContent = '🔒';
+      const lockUser = (currentFileLockInfo && currentFileLockInfo.userProfile && currentFileLockInfo.userProfile.name) ? currentFileLockInfo.userProfile.name : 'another user';
+      const lockMachine = (currentFileLockInfo && currentFileLockInfo.machineName) ? ` on ${currentFileLockInfo.machineName}` : '';
+      if (text) text.textContent = `Read-Only Mode: Currently being edited by ${lockUser}${lockMachine}. Edits and auto-saves are disabled.`;
+      if (takeoverBtn) takeoverBtn.style.display = 'none';
+      if (saveCopyBtn) saveCopyBtn.style.display = 'inline-flex';
+    }
+  } else if (forcedState === 'idle') {
+    banner.style.display = 'flex';
+    banner.className = 'wb-lock-banner wb-lock-banner--idle';
+    if (icon) icon.textContent = '⏳';
+    if (text) text.textContent = 'You have been idle for >5 minutes. File lock pulse is paused to allow team handoff if needed.';
+    if (takeoverBtn) takeoverBtn.style.display = 'none';
+    if (saveCopyBtn) saveCopyBtn.style.display = 'none';
+  } else {
+    // Normal edit mode
+    banner.style.display = 'none';
+  }
+}
+
+function dismissLockBanner() {
+  const banner = document.getElementById('wbLockStatusBanner');
+  if (banner) banner.style.display = 'none';
+}
+
+window.handleManualLockTakeover = handleManualLockTakeover;
+window.handleSaveCopyAsDraft = handleSaveCopyAsDraft;
+window.dismissLockBanner = dismissLockBanner;
+window.releaseCurrentFileLock = releaseCurrentFileLock;
+window.initFileLockOnOpen = initFileLockOnOpen;
 
 // ----------------------------------------------------
 // User Rights & Permission Enforcement Helpers
@@ -983,6 +1525,16 @@ function getCurrentUserPermissions() {
 }
 
 function checkCanEditFMEA() {
+  if (typeof currentFileLockMode !== 'undefined' && currentFileLockMode === 'READ_ONLY') {
+    const lockUser = (currentFileLockInfo && currentFileLockInfo.userProfile && currentFileLockInfo.userProfile.name) ? currentFileLockInfo.userProfile.name : 'another user';
+    const lockMachine = (currentFileLockInfo && currentFileLockInfo.machineName) ? ` (${currentFileLockInfo.machineName})` : '';
+    if (typeof showToast === 'function') {
+      showToast(`🔒 Read-Only Mode: File is locked for editing by ${lockUser}${lockMachine}.`, 'warning');
+    } else {
+      alert(`Access Denied: This file is currently open in Read-Only Mode (locked by ${lockUser}${lockMachine}).`);
+    }
+    return false;
+  }
   const perms = getCurrentUserPermissions();
   if (perms.canEditFMEA === false) {
     alert("Access Denied: Your user account rights do not permit editing FMEA data.");
@@ -1208,19 +1760,28 @@ function renderFileRightsModalContent(targetKey) {
   usersList.forEach(u => {
     const uname = u.username || u.name;
     const isFileCreator = matchesUserIdentity(creatorName, u);
-    const isSysAdmin = u.role === 'Admin' || u.role === 'SuperAdmin';
+    const isSysAdmin = u.role === 'Admin' || u.role === 'SuperAdmin' || (uname && uname.toLowerCase() === 'admin');
+    const isReadOnlyUser = (uname && uname.toLowerCase() === 'readonly') || u.noPasswordRequired;
 
-    let assignedRights = currentRightsMap[uname] || (isFileCreator || isSysAdmin ? 'Owner' : 'Editor');
-    if (isFileCreator || isSysAdmin) assignedRights = 'Owner';
+    let assignedRights = currentRightsMap[uname];
+    if (isFileCreator || isSysAdmin) {
+      assignedRights = 'Owner';
+    } else if (isReadOnlyUser) {
+      assignedRights = 'Viewer';
+    } else if (!assignedRights) {
+      assignedRights = currentRightsMap['*'] || 'Viewer';
+    }
 
-    const disabledAttr = (!isAuthorized || isFileCreator || isSysAdmin) ? 'disabled' : '';
+    const isProtectedDefault = isFileCreator || isSysAdmin || isReadOnlyUser;
+    const disabledAttr = (!isAuthorized || isProtectedDefault) ? 'disabled' : '';
 
     html += `
       <tr style="border-bottom:1px solid var(--border-color);">
         <td style="padding:10px 14px; font-weight:600; color:var(--text-primary);">
           ${escapeHtml(uname)}
-          ${isFileCreator ? '<span style="background:rgba(56, 189, 248, 0.15); color:#38bdf8; border:1px solid rgba(56, 189, 248, 0.3); padding:1px 6px; border-radius:4px; font-size:10px; margin-left:4px;">File Owner</span>' : ''}
-          ${isSysAdmin ? '<span style="background:rgba(245, 158, 11, 0.15); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.3); padding:1px 6px; border-radius:4px; font-size:10px; margin-left:4px;">Admin</span>' : ''}
+          ${isFileCreator ? '<span style="background:rgba(56, 189, 248, 0.15); color:#38bdf8; border:1px solid rgba(56, 189, 248, 0.3); padding:1px 6px; border-radius:4px; font-size:10px; margin-left:4px;">👑 File Creator (Protected)</span>' : ''}
+          ${isSysAdmin ? '<span style="background:rgba(245, 158, 11, 0.15); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.3); padding:1px 6px; border-radius:4px; font-size:10px; margin-left:4px;">🔒 Admin (Protected)</span>' : ''}
+          ${isReadOnlyUser ? '<span style="background:rgba(100, 116, 139, 0.15); color:#94a3b8; border:1px solid rgba(100, 116, 139, 0.3); padding:1px 6px; border-radius:4px; font-size:10px; margin-left:4px;">🔒 Default Read-Only</span>' : ''}
         </td>
         <td style="padding:10px 14px; color:var(--text-muted);">${escapeHtml(u.name || uname)}</td>
         <td style="padding:10px 14px;"><span style="background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color); padding:2px 8px; border-radius:4px; font-size:11px;">${escapeHtml(u.role || 'User')}</span></td>
@@ -1336,6 +1897,7 @@ function openUserModal(initialTab = 'users') {
   renderClassLibraryTable();
   renderAutoSaveAdminForm();
   applyAdminModalPermissions();
+  populateUserStorageLocationChecklist(null);
   switchUserTab(isSysAdmin ? initialTab : 'users');
   openModal('userModal');
 }
@@ -1387,24 +1949,93 @@ function switchUserTab(tab) {
 let autoSaveTimer = null;
 let autoSaveDebounceTimer = null;
 
-function getEffectiveSharePointPath() {
+function getStorageLocations() {
   const settings = getAutoSaveSettings();
-  const isUserDefinedAllowed = (settings.fileAccessMode === 'user_defined') || settings.allowUserDefinedLocation;
+  let locs = settings.storageLocations;
+  if (!Array.isArray(locs) || locs.length === 0) {
+    try {
+      const stored = localStorage.getItem('jost_storage_locations');
+      if (stored) {
+        locs = JSON.parse(stored);
+      }
+    } catch (e) {}
+  }
+  if (!Array.isArray(locs) || locs.length === 0) {
+    const defaultPath = settings.sharepointSiteUrl || localStorage.getItem('jost_admin_sharepoint_url') || 'd:\\Jost';
+    locs = [
+      {
+        id: 'loc_primary',
+        name: 'Primary JOST Repository',
+        path: defaultPath,
+        libraryPath: settings.sharepointLibraryPath || '/Shared Documents/FMEAs',
+        isDefault: true
+      }
+    ];
+  }
+  // Ensure at least one default
+  if (!locs.some(l => l.isDefault)) {
+    locs[0].isDefault = true;
+  }
+  settings.storageLocations = locs;
+  return locs;
+}
 
-  if (activeResolvedSharePointLocalPath && activeResolvedSharePointLocalPath !== 'd:\\Jost') {
+function saveStorageLocations(locList) {
+  const settings = getAutoSaveSettings();
+  settings.storageLocations = locList;
+  try {
+    localStorage.setItem('jost_storage_locations', JSON.stringify(locList));
+  } catch (e) {}
+  if (typeof saveProjectToLocalStorage === 'function') {
+    saveProjectToLocalStorage();
+  }
+}
+
+function getActiveStorageLocation() {
+  const locs = getStorageLocations();
+  const activeId = localStorage.getItem('jost_active_storage_location_id');
+  if (activeId) {
+    const found = locs.find(l => l.id === activeId);
+    if (found) return found;
+  }
+  const defaultLoc = locs.find(l => l.isDefault) || locs[0];
+  return defaultLoc;
+}
+
+function setActiveStorageLocation(locationId) {
+  const locs = getStorageLocations();
+  const loc = locs.find(l => l.id === locationId) || locs[0];
+  if (!loc) return;
+
+  localStorage.setItem('jost_active_storage_location_id', loc.id);
+  activeResolvedSharePointLocalPath = loc.path;
+
+  const settings = getAutoSaveSettings();
+  settings.sharepointSiteUrl = loc.path;
+  if (loc.libraryPath) {
+    settings.sharepointLibraryPath = loc.libraryPath;
+  }
+
+  const badge = document.getElementById('spModalLocationPathBadge');
+  if (badge) {
+    badge.textContent = loc.path;
+    badge.title = `Full Path: ${loc.path}`;
+  }
+  const libDisplay = document.getElementById('spModalLibraryPathDisplay');
+  if (libDisplay) {
+    libDisplay.textContent = loc.libraryPath || '/Shared Documents/FMEAs';
+  }
+}
+
+function getEffectiveSharePointPath() {
+  const activeLoc = getActiveStorageLocation();
+  if (activeLoc && activeLoc.path) {
+    return activeLoc.path;
+  }
+  if (activeResolvedSharePointLocalPath) {
     return activeResolvedSharePointLocalPath;
   }
-
-  if (isUserDefinedAllowed) {
-    const userUrl = settings.userDefinedSharePointUrl || localStorage.getItem('jost_user_sharepoint_url');
-    if (userUrl) return userUrl;
-  }
-
-  const adminUrl = localStorage.getItem('jost_admin_sharepoint_url') || settings.adminConfigSharePointUrl || settings.sharepointSiteUrl;
-  if (adminUrl && adminUrl !== 'd:\\Jost') {
-    return adminUrl;
-  }
-
+  const settings = getAutoSaveSettings();
   return settings.sharepointSiteUrl || 'd:\\Jost';
 }
 
@@ -1426,6 +2057,14 @@ function getAutoSaveSettings() {
   fmeaData.adminSettings.sharepointFileName = fmeaData.adminSettings.sharepointFileName || 'Jost_FMEA_Master.json';
   fmeaData.adminSettings.fileAccessMode = fmeaData.adminSettings.fileAccessMode || 'admin_defined';
   fmeaData.adminSettings.allowUserDefinedLocation = !!fmeaData.adminSettings.allowUserDefinedLocation;
+  if (!Array.isArray(fmeaData.adminSettings.storageLocations)) {
+    try {
+      const stored = localStorage.getItem('jost_storage_locations');
+      if (stored) {
+        fmeaData.adminSettings.storageLocations = JSON.parse(stored);
+      }
+    } catch (e) {}
+  }
   return fmeaData.adminSettings;
 }
 
@@ -1637,15 +2276,8 @@ function populateAutoSaveAdminSettingsForm() {
   if (document.getElementById('settingAutoSaveMode')) document.getElementById('settingAutoSaveMode').value = settings.autoSaveMode || 'activity';
   if (document.getElementById('settingAutoSaveInterval')) document.getElementById('settingAutoSaveInterval').value = settings.autoSaveIntervalMinutes || 1;
   if (document.getElementById('settingSharePointEnabled')) document.getElementById('settingSharePointEnabled').checked = !!settings.sharepointEnabled;
-  if (document.getElementById('settingSharePointUrl')) document.getElementById('settingSharePointUrl').value = settings.sharepointSiteUrl || '';
   if (document.getElementById('settingAdminConfigSharePointUrl')) document.getElementById('settingAdminConfigSharePointUrl').value = settings.adminConfigSharePointUrl || settings.sharepointSiteUrl || '';
-  if (document.getElementById('settingSharePointLibrary')) document.getElementById('settingSharePointLibrary').value = settings.sharepointLibraryPath || '';
-  if (document.getElementById('settingSharePointFileName')) document.getElementById('settingSharePointFileName').value = settings.sharepointFileName || '';
-  if (document.getElementById('settingSharePointClientId')) document.getElementById('settingSharePointClientId').value = settings.sharepointClientId || '';
-  if (document.getElementById('settingFileAccessMode')) {
-    document.getElementById('settingFileAccessMode').value = settings.fileAccessMode || 'admin_defined';
-    toggleFileAccessModeFields();
-  }
+  if (typeof renderStorageLocationsTable === 'function') renderStorageLocationsTable();
 }
 
 function toggleFileAccessModeFields() {
@@ -1689,6 +2321,86 @@ function toggleFileAccessModeFields() {
     if (window.electronAPI && window.electronAPI.isElectron) {
       browseBtn.style.display = 'block';
     }
+  }
+}
+
+function renderAutoSaveAdminForm() {
+  populateAutoSaveAdminSettingsForm();
+}
+
+function toggleSharePointFields() {
+  const enabled = document.getElementById('settingSharePointEnabled')?.checked;
+  const grp = document.getElementById('sharePointFieldsGroup');
+  if (grp) grp.style.opacity = enabled ? '1' : '0.6';
+}
+
+function toggleAutoSaveIntervalVisibility() {
+  const mode = document.getElementById('settingAutoSaveMode')?.value;
+  const container = document.getElementById('autoSaveIntervalContainer');
+  if (container) container.style.display = (mode === 'interval') ? 'block' : 'none';
+}
+
+function saveAutoSaveAdminSettings(event) {
+  if (event) event.preventDefault();
+  const settings = getAutoSaveSettings();
+  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+
+  const autoSaveModeEl = document.getElementById('settingAutoSaveMode');
+  const autoSaveIntervalEl = document.getElementById('settingAutoSaveInterval');
+  const sharePointEnabledEl = document.getElementById('settingSharePointEnabled');
+  const fileAccessModeEl = document.getElementById('settingFileAccessMode');
+  const sharePointUrlEl = document.getElementById('settingSharePointUrl');
+  const adminConfigSharePointUrlEl = document.getElementById('settingAdminConfigSharePointUrl');
+  const sharePointLibraryEl = document.getElementById('settingSharePointLibrary');
+  const sharePointFileNameEl = document.getElementById('settingSharePointFileName');
+  const sharePointClientIdEl = document.getElementById('settingSharePointClientId');
+
+  if (autoSaveModeEl) settings.autoSaveMode = autoSaveModeEl.value;
+  if (autoSaveIntervalEl) settings.autoSaveIntervalMinutes = parseInt(autoSaveIntervalEl.value) || 1;
+  if (sharePointEnabledEl) settings.sharepointEnabled = sharePointEnabledEl.checked;
+  if (fileAccessModeEl) settings.fileAccessMode = fileAccessModeEl.value;
+  if (sharePointLibraryEl) settings.sharepointLibraryPath = sharePointLibraryEl.value.trim();
+  if (sharePointFileNameEl) settings.sharepointFileName = sharePointFileNameEl.value.trim();
+  if (sharePointClientIdEl) settings.sharepointClientId = sharePointClientIdEl.value.trim();
+
+  let targetUrl = '';
+  if (sharePointUrlEl && sharePointUrlEl.value.trim()) {
+    targetUrl = sharePointUrlEl.value.trim();
+    settings.sharepointSiteUrl = targetUrl;
+    activeResolvedSharePointLocalPath = targetUrl;
+  }
+  if (adminConfigSharePointUrlEl && adminConfigSharePointUrlEl.value.trim() && isAdmin) {
+    settings.adminConfigSharePointUrl = adminConfigSharePointUrlEl.value.trim();
+  }
+
+  if (isAdmin) {
+    if (targetUrl) {
+      settings.adminConfigSharePointUrl = targetUrl;
+      localStorage.setItem('jost_admin_sharepoint_url', targetUrl);
+    }
+  } else {
+    if (targetUrl) {
+      settings.userDefinedSharePointUrl = targetUrl;
+      localStorage.setItem('jost_user_sharepoint_url', targetUrl);
+    }
+  }
+
+  saveProjectToLocalStorage();
+  initAutoSaveEngine();
+
+  sharePointFileListCache = null;
+  loadSharePointCatalogFromDisk().then(() => {
+    if (typeof renderSharePointFileList === 'function') renderSharePointFileList();
+  });
+
+  if (isAdmin && typeof exportAdminSettingsToSharePoint === 'function') {
+    exportAdminSettingsToSharePoint();
+  }
+
+  if (typeof showToast === 'function') {
+    showToast("✅ Auto-Save and Storage Directory settings saved successfully!");
+  } else {
+    alert("Settings saved successfully!");
   }
 }
 
@@ -1813,6 +2525,224 @@ function triggerAutoSave(reason = 'Activity Edit') {
 }
 
 // ----------------------------------------------------
+// Enterprise Repository Storage Locations & Multi-Location Manager
+// ----------------------------------------------------
+function renderStorageLocationsTable() {
+  const tbody = document.getElementById('adminStorageLocationsTableBody');
+  if (!tbody) return;
+
+  const locs = getStorageLocations();
+  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+
+  if (locs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:15px; color:#64748b;">No storage locations defined. Click "+ Add Storage Location" to create one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = locs.map((loc, idx) => {
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color, #e2e8f0);">
+        <td style="padding: 8px 12px; font-weight: 600; color: var(--text-primary, #1e293b);">
+          ${escapeHtml(loc.name || 'Location ' + (idx + 1))}
+          ${loc.isDefault ? '<span class="badge" style="background:#10b981; color:#fff; font-size:10px; margin-left:6px; padding:1px 6px; border-radius:4px;">Default</span>' : ''}
+        </td>
+        <td style="padding: 8px 12px; font-family: monospace; font-size: 11.5px; color: #0284c7; word-break: break-all;">
+          ${escapeHtml(loc.path || '')}
+        </td>
+        <td style="padding: 8px 12px; font-size: 11.5px; color: var(--text-muted, #64748b);">
+          ${escapeHtml(loc.libraryPath || '/Shared Documents/FMEAs')}
+        </td>
+        <td style="padding: 8px 12px; text-align: center;">
+          ${loc.isDefault
+            ? '<span style="color:#10b981; font-weight:700; font-size:11.5px;">⭐ Default</span>'
+            : (isAdmin ? `<button type="button" class="btn btn-sm btn-outline" style="font-size:11px; padding:2px 8px;" onclick="setDefaultStorageLocation('${escapeHtml(loc.id)}')">Set Default</button>` : '<span style="color:#94a3b8; font-size:11px;">Standard</span>')
+          }
+        </td>
+        <td style="padding: 8px 12px; text-align: center;">
+          <div style="display:flex; gap:5px; justify-content:center;">
+            ${isAdmin ? `
+              <button type="button" class="btn btn-sm btn-outline" style="font-size:11px; padding:2px 8px;" onclick="openEditStorageLocationModal('${escapeHtml(loc.id)}')" title="Edit Location">✏️ Edit</button>
+              <button type="button" class="btn btn-sm" style="font-size:11px; padding:2px 8px; background:#ef4444; color:#fff; border:none; border-radius:4px; ${locs.length <= 1 ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}" onclick="deleteStorageLocation('${escapeHtml(loc.id)}')" ${locs.length <= 1 ? 'disabled title="Cannot delete the only location"' : 'title="Delete Location"'}>🗑️</button>
+            ` : '<span style="color:#94a3b8; font-size:11px;">Admin Only</span>'}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openAddStorageLocationModal() {
+  const title = document.getElementById('storageLocationModalTitle');
+  const idInput = document.getElementById('storageLocationEditId');
+  const nameInput = document.getElementById('storageLocationNameInput');
+  const pathInput = document.getElementById('storageLocationPathInput');
+  const libInput = document.getElementById('storageLocationLibraryInput');
+  const isDefaultCheck = document.getElementById('storageLocationIsDefaultInput');
+
+  if (title) title.textContent = '📁 Add Storage Repository Location';
+  if (idInput) idInput.value = '';
+  if (nameInput) nameInput.value = '';
+  if (pathInput) pathInput.value = '';
+  if (libInput) libInput.value = '/Shared Documents/FMEAs';
+  if (isDefaultCheck) isDefaultCheck.checked = false;
+
+  openModal('storageLocationModal');
+}
+
+function openEditStorageLocationModal(locationId) {
+  const locs = getStorageLocations();
+  const loc = locs.find(l => l.id === locationId);
+  if (!loc) return;
+
+  const title = document.getElementById('storageLocationModalTitle');
+  const idInput = document.getElementById('storageLocationEditId');
+  const nameInput = document.getElementById('storageLocationNameInput');
+  const pathInput = document.getElementById('storageLocationPathInput');
+  const libInput = document.getElementById('storageLocationLibraryInput');
+  const isDefaultCheck = document.getElementById('storageLocationIsDefaultInput');
+
+  if (title) title.textContent = '✏️ Edit Storage Repository Location';
+  if (idInput) idInput.value = loc.id;
+  if (nameInput) nameInput.value = loc.name || '';
+  if (pathInput) pathInput.value = loc.path || '';
+  if (libInput) libInput.value = loc.libraryPath || '/Shared Documents/FMEAs';
+  if (isDefaultCheck) isDefaultCheck.checked = !!loc.isDefault;
+
+  openModal('storageLocationModal');
+}
+
+async function browseFolderForStorageLocationForm() {
+  if (window.electronAPI && window.electronAPI.selectDirectory) {
+    const selected = await window.electronAPI.selectDirectory();
+    if (selected) {
+      const pathInput = document.getElementById('storageLocationPathInput');
+      if (pathInput) pathInput.value = selected;
+    }
+  }
+}
+
+function saveStorageLocationFormSubmit(event) {
+  if (event) event.preventDefault();
+  const idInput = document.getElementById('storageLocationEditId');
+  const nameInput = document.getElementById('storageLocationNameInput');
+  const pathInput = document.getElementById('storageLocationPathInput');
+  const libInput = document.getElementById('storageLocationLibraryInput');
+  const isDefaultCheck = document.getElementById('storageLocationIsDefaultInput');
+
+  const name = nameInput ? nameInput.value.trim() : '';
+  const path = pathInput ? pathInput.value.trim() : '';
+  const libraryPath = (libInput ? libInput.value.trim() : '') || '/Shared Documents/FMEAs';
+  const isDefault = isDefaultCheck ? isDefaultCheck.checked : false;
+
+  if (!name) {
+    alert("Please enter a location name (e.g., 'Primary JOST Repository').");
+    return;
+  }
+  if (!path) {
+    alert("Please enter or browse for a valid directory path.");
+    return;
+  }
+
+  const locs = getStorageLocations();
+  const editId = idInput ? idInput.value.trim() : '';
+
+  if (isDefault) {
+    locs.forEach(l => { l.isDefault = false; });
+  }
+
+  if (editId) {
+    const existing = locs.find(l => l.id === editId);
+    if (existing) {
+      existing.name = name;
+      existing.path = path;
+      existing.libraryPath = libraryPath;
+      if (isDefault) existing.isDefault = true;
+    }
+  } else {
+    const newId = 'loc_' + Date.now();
+    const isFirst = locs.length === 0;
+    locs.push({
+      id: newId,
+      name: name,
+      path: path,
+      libraryPath: libraryPath,
+      isDefault: isDefault || isFirst
+    });
+  }
+
+  if (!locs.some(l => l.isDefault)) {
+    locs[0].isDefault = true;
+  }
+
+  saveStorageLocations(locs);
+  renderStorageLocationsTable();
+  closeModal('storageLocationModal');
+  showToast(`✅ Storage location "${name}" saved.`);
+
+  const activeLoc = getActiveStorageLocation();
+  if (activeLoc) {
+    setActiveStorageLocation(activeLoc.id);
+  }
+
+  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+  if (isAdmin && typeof exportAdminSettingsToSharePoint === 'function') {
+    exportAdminSettingsToSharePoint();
+  }
+}
+
+async function deleteStorageLocation(locationId) {
+  const locs = getStorageLocations();
+  if (locs.length <= 1) {
+    alert("Cannot delete the only configured storage location. At least one repository location must remain active.");
+    return;
+  }
+
+  const loc = locs.find(l => l.id === locationId);
+  if (!loc) return;
+
+  const confirmed = await showCustomConfirm(`Are you sure you want to delete the storage location "${loc.name}"?\n(Path: ${loc.path})`, "Delete Storage Location", "warning");
+  if (!confirmed) return;
+
+  const wasDefault = loc.isDefault;
+  const filtered = locs.filter(l => l.id !== locationId);
+
+  if (wasDefault && filtered.length > 0) {
+    filtered[0].isDefault = true;
+  }
+
+  saveStorageLocations(filtered);
+  renderStorageLocationsTable();
+
+  const activeId = localStorage.getItem('jost_active_storage_location_id');
+  if (activeId === locationId) {
+    const newDefault = filtered.find(l => l.isDefault) || filtered[0];
+    if (newDefault) {
+      setActiveStorageLocation(newDefault.id);
+    }
+  }
+
+  showToast(`🗑️ Storage location "${loc.name}" removed.`);
+
+  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+  if (isAdmin && typeof exportAdminSettingsToSharePoint === 'function') {
+    exportAdminSettingsToSharePoint();
+  }
+}
+
+function setDefaultStorageLocation(locationId) {
+  const locs = getStorageLocations();
+  locs.forEach(l => {
+    l.isDefault = (l.id === locationId);
+  });
+  saveStorageLocations(locs);
+  renderStorageLocationsTable();
+  const selected = locs.find(l => l.id === locationId);
+  if (selected) {
+    showToast(`⭐ "${selected.name}" is now the default repository location.`);
+  }
+}
+
+// ----------------------------------------------------
 // SharePoint Multi-File Workspace & Repository Manager
 // ----------------------------------------------------
 let activeSharePointFileName = null;
@@ -1820,7 +2750,6 @@ let sharePointFileListCache = null;
 let activeResolvedSharePointLocalPath = '';
 
 async function loadSharePointCatalogFromDisk() {
-  const settings = getAutoSaveSettings();
   const siteUrl = getEffectiveSharePointPath();
 
   if (window.electronAPI && window.electronAPI.isElectron) {
@@ -1911,61 +2840,107 @@ function updateActiveFileNameBadge() {
   updateAdminMenuVisibility();
 }
 
+function getAccessibleStorageLocations() {
+  const allLocs = getStorageLocations();
+  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+
+  if (isAdmin || !currentUser || !currentUser.allowedStorageLocationIds || currentUser.allowedStorageLocationIds.includes('*')) {
+    return allLocs;
+  }
+
+  const allowedIds = Array.isArray(currentUser.allowedStorageLocationIds) ? currentUser.allowedStorageLocationIds : [];
+  const filtered = allLocs.filter(l => allowedIds.includes(l.id));
+  return filtered.length > 0 ? filtered : [allLocs[0]];
+}
+
+function renderSharePointLocationDropdown() {
+  const select = document.getElementById('spModalLocationSelect');
+  const pathBadge = document.getElementById('spModalLocationPathBadge');
+  const manageBtn = document.getElementById('spModalAdminManageLocationsBtn');
+
+  const locs = getAccessibleStorageLocations();
+  let activeLoc = getActiveStorageLocation();
+  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
+
+  // If current active location is not in user's accessible locations, switch to first accessible
+  if (!locs.some(l => l.id === activeLoc.id)) {
+    activeLoc = locs[0];
+    setActiveStorageLocation(activeLoc.id);
+  }
+
+  if (manageBtn) {
+    manageBtn.style.display = isAdmin ? 'inline-block' : 'none';
+  }
+
+  if (select) {
+    select.innerHTML = locs.map(l => {
+      const isSelected = l.id === activeLoc.id;
+      return `<option value="${escapeHtml(l.id)}" ${isSelected ? 'selected' : ''}>${escapeHtml(l.name)}${l.isDefault ? ' (Default)' : ''}</option>`;
+    }).join('');
+  }
+
+  if (pathBadge && activeLoc) {
+    pathBadge.textContent = activeLoc.path || '';
+    pathBadge.title = `Full Path: ${activeLoc.path || ''}`;
+  }
+
+  const libDisplay = document.getElementById('spModalLibraryPathDisplay');
+  if (libDisplay && activeLoc) {
+    libDisplay.textContent = activeLoc.libraryPath || '/Shared Documents/FMEAs';
+  }
+}
+
+async function onSharePointLocationDropdownChange(locationId) {
+  if (!locationId) {
+    const select = document.getElementById('spModalLocationSelect');
+    if (select) locationId = select.value;
+  }
+  if (!locationId) return;
+
+  setActiveStorageLocation(locationId);
+  renderSharePointLocationDropdown();
+
+  // Reload file catalog from the new directory
+  sharePointFileListCache = null;
+  const tbody = document.getElementById('sharePointFileListTable');
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:#0284c7;">🔄 Loading files from selected location...</td></tr>`;
+  }
+
+  await loadSharePointCatalogFromDisk();
+  renderSharePointFileList();
+
+  const activeLoc = getActiveStorageLocation();
+  showToast(`📁 Switched to repository location: ${activeLoc.name}`);
+}
 
 async function openSharePointFileBrowserModal() {
-  const settings = getAutoSaveSettings();
-  const siteDisplay = document.getElementById('spModalSiteUrlDisplay');
-  const libDisplay = document.getElementById('spModalLibraryPathDisplay');
+  const activeLoc = getActiveStorageLocation();
+  if (activeLoc) {
+    setActiveStorageLocation(activeLoc.id);
+  }
 
-  const siteUrl = getEffectiveSharePointPath();
-  const libPath = settings.sharepointLibraryPath || '/Shared Documents/FMEAs';
+  renderSharePointLocationDropdown();
 
   sharePointFileListCache = null;
   await loadSharePointCatalogFromDisk();
   renderSharePointFileList();
 
-  const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
-  const isUserDefinedAllowed = (settings.fileAccessMode === 'user_defined');
-  const canChangeFolder = isAdmin || isUserDefinedAllowed;
-
-  if (siteDisplay) {
-    if (window.electronAPI && window.electronAPI.isElectron) {
-      const displayPath = activeResolvedSharePointLocalPath || siteUrl;
-      const modeBadge = isUserDefinedAllowed
-        ? `<span class="badge" style="background:#0284c7; color:#ffffff; padding:2px 8px; font-size:10px; font-weight:700; border-radius:4px;">📂 User Defined Mode</span>`
-        : `<span class="badge" style="background:#475569; color:#ffffff; padding:2px 8px; font-size:10px; font-weight:700; border-radius:4px;">🔒 Admin Defined Mode</span>`;
-
-      siteDisplay.innerHTML = `<div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-        <div>
-          <span style="color:#0284c7; font-weight:600; font-size:12px;">📁 Storage Location: ${escapeHtml(displayPath)}</span>
-          <span style="margin-left:8px;">${modeBadge}</span>
-        </div>
-        ${canChangeFolder
-          ? `<button class="btn btn-sm btn-outline" style="font-size:11px; padding:3px 8px;" onclick="browseLocalSharePointFolder()">📁 Change Folder</button>`
-          : `<span style="font-size:10.5px; color:#64748b; font-style:italic;">🔒 Folder Location Locked by Admin</span>`
-        }
-      </div>`;
-    } else {
-      siteDisplay.innerHTML = `<a href="${escapeHtml(siteUrl)}" target="_blank" style="color:#0284c7; text-decoration:underline;" title="Click to open SharePoint in browser">${escapeHtml(siteUrl)} 🔗</a>`;
-    }
-  }
-  if (libDisplay) {
-    libDisplay.textContent = libPath;
-  }
+  const isReadOnlyUser = !currentUser || currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly');
 
   const optsContainer = document.getElementById('spModalNewFileOptsContainer');
   if (optsContainer) {
-    optsContainer.style.display = activeSharePointFileName ? 'none' : 'flex';
+    optsContainer.style.display = (isReadOnlyUser || activeSharePointFileName) ? 'none' : 'flex';
   }
 
   const btnUploadFile = document.getElementById('spModalUploadFileBtn');
   if (btnUploadFile) {
-    btnUploadFile.style.display = canChangeFolder ? 'inline-flex' : 'none';
+    btnUploadFile.style.display = isReadOnlyUser ? 'none' : 'inline-flex';
   }
 
   const btnConnectLink = document.getElementById('spModalConnectSharedLinkBtn');
   if (btnConnectLink) {
-    btnConnectLink.style.display = canChangeFolder ? 'inline-flex' : 'none';
+    btnConnectLink.style.display = 'none';
   }
 
   renderSharePointFileList();
@@ -1979,9 +2954,8 @@ function openSharePointFileFolderLocation(fileName) {
     return;
   }
 
-  const settings = typeof getAutoSaveSettings === 'function' ? getAutoSaveSettings() : {};
-  const folderPath = (settings && settings.sharepointPath) ? settings.sharepointPath : 'd:\\Jost';
-  const fullPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${fileName}` : `${folderPath}\\${fileName}`;
+  const folderPath = activeResolvedSharePointLocalPath || getEffectiveSharePointPath();
+  const fullPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${fileName}` : `${folderPath}{fileName}`;
 
   if (window.electronAPI && window.electronAPI.showItemInFolder) {
     window.electronAPI.showItemInFolder(fullPath);
@@ -2018,18 +2992,73 @@ function canDeleteSharePointFile(fileObj) {
   return false;
 }
 
-async function copySharePointFile(fileName) {
+let pendingCopySourceFileName = '';
+
+function copySharePointFile(fileName) {
+  pendingCopySourceFileName = fileName;
+  const baseName = fileName.replace(/\.[^/.]+$/, "");
+  const ext = fileName.includes('.') ? fileName.split('.').pop() : 'json';
+
+  // Calculate smart default copy name avoiding duplicates
+  const catalog = getSharePointRepoFiles();
+  let defaultCopyName = `${baseName}_Copy.${ext}`;
+  let copyIndex = 2;
+  while (catalog.some(f => f.name && f.name.toLowerCase() === defaultCopyName.toLowerCase())) {
+    defaultCopyName = `${baseName}_Copy_${copyIndex}.${ext}`;
+    copyIndex++;
+  }
+
+  const srcLabel = document.getElementById('copySourceFileName');
+  if (srcLabel) srcLabel.textContent = fileName;
+
+  const input = document.getElementById('copySpFileNameInput');
+  if (input) {
+    input.value = defaultCopyName;
+    openModal('copySharePointFileModal');
+    setTimeout(() => {
+      input.focus();
+      const dotIdx = input.value.lastIndexOf('.');
+      if (dotIdx > 0) {
+        input.setSelectionRange(0, dotIdx);
+      } else {
+        input.select();
+      }
+    }, 80);
+  } else {
+    // Fallback prompt if modal element is not in DOM
+    const fallbackName = prompt(`Enter name for the duplicate file copy:`, defaultCopyName);
+    if (fallbackName && fallbackName.trim()) {
+      executeSharePointFileCopy(fileName, fallbackName.trim());
+    }
+  }
+}
+
+async function confirmCopySharePointFile() {
+  const input = document.getElementById('copySpFileNameInput');
+  const rawName = input ? input.value.trim() : '';
+  if (!rawName) {
+    showCustomAlert("Please enter a valid file name for the copy.", "File Name Required", "warning");
+    return;
+  }
+  const srcName = pendingCopySourceFileName;
+  if (!srcName) {
+    closeModal('copySharePointFileModal');
+    return;
+  }
+  await executeSharePointFileCopy(srcName, rawName);
+}
+
+async function executeSharePointFileCopy(fileName, newName) {
   const settings = getAutoSaveSettings();
   const folderPath = activeResolvedSharePointLocalPath || getEffectiveSharePointPath();
 
-  const baseName = fileName.replace(/\.[^/.]+$/, "");
-  const ext = fileName.includes('.') ? fileName.split('.').pop() : 'json';
-  const defaultCopyName = `${baseName}_Copy.${ext}`;
-
-  const newName = prompt(`Enter name for the duplicate file copy:`, defaultCopyName);
-  if (!newName || !newName.trim()) return;
-
   let finalName = newName.trim();
+  // Remove illegal filesystem characters
+  finalName = finalName.replace(/[<>:"/\\|?*]/g, '');
+  if (!finalName) {
+    showCustomAlert("File name contains invalid characters.", "Invalid Name", "warning");
+    return;
+  }
   if (!finalName.toLowerCase().endsWith('.json')) finalName += '.json';
 
   if (finalName.toLowerCase() === fileName.toLowerCase()) {
@@ -2037,56 +3066,111 @@ async function copySharePointFile(fileName) {
     return;
   }
 
-  // Check if file already exists
+  // Check if file already exists in repository catalog
   const catalog = getSharePointRepoFiles();
   if (catalog.some(f => f.name && f.name.toLowerCase() === finalName.toLowerCase())) {
-    const overwrite = confirm(`A file named "${finalName}" already exists in the repository. Do you want to overwrite it?`);
+    const overwrite = await showCustomConfirm(`A file named "${finalName}" already exists in the repository. Do you want to overwrite it?`, "File Already Exists", "warning");
     if (!overwrite) return;
   }
 
+  closeModal('copySharePointFileModal');
+
   if (window.electronAPI && window.electronAPI.isElectron) {
     try {
-      const srcPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${fileName}` : `${folderPath}\\${fileName}`;
-      const destPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${finalName}` : `${folderPath}\\${finalName}`;
+      const srcPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${fileName}` : `${folderPath}{fileName}`;
+      const destPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${finalName}` : `${folderPath}{finalName}`;
 
-      const readRes = await window.electronAPI.readFileContent(srcPath);
-      if (!readRes || !readRes.success || !readRes.content) {
-        showCustomAlert("Could not read original file to duplicate: " + (readRes?.error || 'File read failed'), "Copy Failed", "error");
-        return;
+      let fileData = null;
+      let rawContent = '';
+
+      if (window.electronAPI.readFileContent) {
+        const readRes = await window.electronAPI.readFileContent(srcPath);
+        if (readRes && readRes.success && readRes.content) {
+          rawContent = readRes.content;
+        }
       }
 
-      let fileData;
-      try {
-        fileData = JSON.parse(readRes.content);
-      } catch (err) {
-        showCustomAlert("The original file contains invalid JSON data and could not be copied.", "Copy Failed", "error");
-        return;
+      if (rawContent) {
+        try {
+          fileData = JSON.parse(rawContent);
+        } catch (err) {
+          fileData = null;
+        }
       }
 
-      // Attribute creator of the copy to the active user
-      const activeUser = currentUser ? (currentUser.username || currentUser.name || '').trim() || 'Admin' : 'Admin';
-      fileData.createdBy = activeUser;
-      if (fileData.projectInfo) {
-        fileData.projectInfo.author = activeUser;
-        fileData.projectInfo.creatorName = activeUser;
-        fileData.projectInfo.name = finalName.replace(/\.json$/i, '');
-      }
+      if (fileData) {
+        // Attribute creator of the copy to the active user
+        const activeUser = currentUser ? (currentUser.username || currentUser.name || '').trim() || 'Admin' : 'Admin';
+        fileData.createdBy = activeUser;
+        if (fileData.projectInfo) {
+          fileData.projectInfo.author = activeUser;
+          fileData.projectInfo.creatorName = activeUser;
+          fileData.projectInfo.name = finalName.replace(/\.json$/i, '');
+        }
 
-      const writeRes = await window.electronAPI.writeFile(destPath, JSON.stringify(fileData, null, 2));
-      if (writeRes && writeRes.success) {
-        showToast(`📋 File "${fileName}" copied as "${finalName}".`);
-        sharePointFileListCache = null;
-        await loadSharePointCatalogFromDisk();
-        renderSharePointFileList();
+        const writeRes = await window.electronAPI.writeFile(destPath, JSON.stringify(fileData, null, 2));
+        if (!writeRes || !writeRes.success) {
+          showCustomAlert("Failed to save copied file: " + (writeRes?.error || 'Write error'), "Copy Failed", "error");
+          return;
+        }
       } else {
-        showCustomAlert("Failed to save copied file: " + (writeRes?.error || 'Write error'), "Copy Failed", "error");
+        if (window.electronAPI.copyFile) {
+          const cpRes = await window.electronAPI.copyFile(srcPath, destPath);
+          if (!cpRes || !cpRes.success) {
+            showCustomAlert("Failed to copy file: " + (cpRes?.error || 'Copy error'), "Copy Failed", "error");
+            return;
+          }
+        } else {
+          showCustomAlert("Could not read original file to copy.", "Copy Failed", "error");
+          return;
+        }
       }
+
+      // Also copy dashboard file if exists
+      try {
+        const srcBase = fileName.replace(/\.json$/i, '');
+        const destBase = finalName.replace(/\.json$/i, '');
+        const srcDashPath = (folderPath.endsWith('\\') || folderPath.endsWith('/'))
+          ? `${folderPath}dashboard{srcBase}_dashboard.json`
+          : `${folderPath}\\dashboard{srcBase}_dashboard.json`;
+        const destDashPath = (folderPath.endsWith('\\') || folderPath.endsWith('/'))
+          ? `${folderPath}dashboard{destBase}_dashboard.json`
+          : `${folderPath}\\dashboard{destBase}_dashboard.json`;
+
+        if (window.electronAPI.readFileContent) {
+          const dashRead = await window.electronAPI.readFileContent(srcDashPath);
+          if (dashRead && dashRead.success && dashRead.content) {
+            let dashObj = JSON.parse(dashRead.content);
+            if (dashObj.projectInfo) {
+              dashObj.projectInfo.name = destBase;
+            }
+            await window.electronAPI.writeFile(destDashPath, JSON.stringify(dashObj, null, 2));
+          }
+        }
+      } catch (dashErr) {
+        console.warn("Dashboard copy skipped/failed:", dashErr);
+      }
+
+      showToast(`📋 File "${fileName}" copied as "${finalName}".`);
+      sharePointFileListCache = null;
+      await loadSharePointCatalogFromDisk();
+      renderSharePointFileList();
     } catch (err) {
       console.error("Error copying file:", err);
       showCustomAlert("Error copying file: " + err.message, "Copy Error", "error");
     }
   } else {
-    showCustomAlert("Copying file to repository is supported in the Desktop application.", "Desktop Feature", "info");
+    // Web fallback
+    const orig = catalog.find(f => f.name && f.name.toLowerCase() === fileName.toLowerCase());
+    catalog.unshift({
+      name: finalName,
+      lastModified: new Date().toISOString(),
+      size: orig ? orig.size : '50 KB',
+      description: `Copy of ${fileName}`,
+      createdBy: currentUser ? currentUser.username || currentUser.name : 'User'
+    });
+    showToast(`📋 File "${fileName}" copied as "${finalName}".`);
+    renderSharePointFileList();
   }
 }
 
@@ -2104,7 +3188,7 @@ async function deleteSharePointFile(fileName) {
     return;
   }
 
-  const confirmed = confirm(`Are you sure you want to permanently delete "${fileName}" from the repository?\n\nThis action cannot be undone.`);
+  const confirmed = await showCustomConfirm(`Are you sure you want to permanently delete "${fileName}" from the repository?\n\nThis action cannot be undone.`, "Delete File Confirmation", "warning");
   if (!confirmed) return;
 
   // If this file is currently open in active workspace, close it first
@@ -2117,7 +3201,7 @@ async function deleteSharePointFile(fileName) {
   if (window.electronAPI && window.electronAPI.isElectron) {
     try {
       const folderPath = activeResolvedSharePointLocalPath || getEffectiveSharePointPath();
-      const fullPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${fileName}` : `${folderPath}\\${fileName}`;
+      const fullPath = (folderPath.endsWith('\\') || folderPath.endsWith('/')) ? `${folderPath}${fileName}` : `${folderPath}{fileName}`;
 
       if (window.electronAPI.deleteFile) {
         const res = await window.electronAPI.deleteFile(fullPath);
@@ -2178,19 +3262,19 @@ function renderSharePointFileList(filterQuery = '') {
         <td style="text-align:center; padding: 8px 12px;">
           <div style="display:flex; gap:5px; justify-content:center; flex-wrap:wrap;">
             ${isActive ? `
-              <button class="btn btn-sm" disabled style="opacity:0.6; background:#0284c7; color:#fff; border:none; padding:3px 8px; font-size:10.5px; border-radius:3px;">Active</button>
+              <button class="btn btn-sm" disabled style="opacity:0.6; background:#0284c7; color:#fff; border:none; padding:3px 7px; font-size:12px; border-radius:4px;" title="Active Opened File">✅</button>
             ` : `
-              <button class="btn btn-sm btn-primary" style="font-weight:700; padding:3px 9px; font-size:10.5px; border-radius:3px; cursor:pointer;" onclick="openSharePointFile('${escapeHtml(f.name)}')">📂 Open</button>
+              <button class="btn btn-sm btn-primary" style="padding:3px 7px; font-size:12px; border-radius:4px; cursor:pointer;" onclick="openSharePointFile('${escapeHtml(f.name)}')" title="Open FMEA File">📂</button>
             `}
-            <button class="btn btn-sm btn-outline" style="padding:3px 8px; font-size:10.5px; border-radius:3px; cursor:pointer; background:#ffffff; color:#334155; border:1px solid #cbd5e1;" onclick="copySharePointFile('${escapeHtml(f.name)}')" title="Duplicate file in same repository location">📋 Copy</button>
-            <button class="btn btn-sm btn-secondary" style="padding:3px 8px; font-size:10.5px; border-radius:3px; cursor:pointer;" onclick="downloadSharePointFileToLocal('${escapeHtml(f.name)}')" title="Download copy to PC hard drive">💾 Download</button>
+            <button class="btn btn-sm btn-outline" style="padding:3px 7px; font-size:12px; border-radius:4px; cursor:pointer; background:#ffffff; color:#334155; border:1px solid #cbd5e1;" onclick="copySharePointFile('${escapeHtml(f.name)}')" title="Duplicate / Copy file in same repository location">📋</button>
+            <button class="btn btn-sm btn-secondary" style="padding:3px 7px; font-size:12px; border-radius:4px; cursor:pointer;" onclick="downloadSharePointFileToLocal('${escapeHtml(f.name)}')" title="Download copy to PC hard drive">💾</button>
             ${canDelete ? `
-              <button class="btn btn-sm" style="padding:3px 8px; font-size:10.5px; border-radius:3px; cursor:pointer; background:#ef4444; color:#fff; border:none;" onclick="deleteSharePointFile('${escapeHtml(f.name)}')" title="Permanently delete this file from repository">🗑️ Delete</button>
+              <button class="btn btn-sm" style="padding:3px 7px; font-size:12px; border-radius:4px; cursor:pointer; background:#ef4444; color:#fff; border:none;" onclick="deleteSharePointFile('${escapeHtml(f.name)}')" title="Permanently delete this file from repository">🗑️</button>
             ` : `
-              <button class="btn btn-sm" disabled style="padding:3px 8px; font-size:10.5px; border-radius:3px; opacity:0.35; cursor:not-allowed; background:#94a3b8; color:#fff; border:none;" title="Only the file creator (${escapeHtml(creatorDisplay || 'Creator')}) or an Administrator can delete this file">🔒 Delete</button>
+              <button class="btn btn-sm" disabled style="padding:3px 7px; font-size:12px; border-radius:4px; opacity:0.35; cursor:not-allowed; background:#94a3b8; color:#fff; border:none;" title="Only the file creator (${escapeHtml(creatorDisplay || 'Creator')}) or an Administrator can delete this file">🔒</button>
             `}
             ${isAdmin ? `
-              <button class="btn btn-sm btn-info" style="padding:3px 8px; font-size:10.5px; border-radius:3px; cursor:pointer; background:#0284c7; color:#fff;" onclick="openSharePointFileFolderLocation('${escapeHtml(f.name)}')" title="Admin Only: Open file storage location in File Explorer">📁 Location</button>
+              <button class="btn btn-sm btn-info" style="padding:3px 7px; font-size:12px; border-radius:4px; cursor:pointer; background:#0284c7; color:#fff; border:none;" onclick="openSharePointFileFolderLocation('${escapeHtml(f.name)}')" title="Admin Only: Open file storage location in File Explorer">📁</button>
             ` : ''}
           </div>
         </td>
@@ -2200,6 +3284,12 @@ function renderSharePointFileList(filterQuery = '') {
 }
 
 function triggerUploadLocalFileToSharePoint() {
+  const isReadOnlyUser = !currentUser || currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly');
+  if (isReadOnlyUser) {
+    showCustomAlert("Access Denied: Read-Only users cannot upload files to the repository.", "Read-Only Restriction", "warning");
+    return;
+  }
+
   const settings = getAutoSaveSettings();
   const isAdmin = (typeof isCurrentUserAdmin === 'function') ? isCurrentUserAdmin() : (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin'));
   const isUserDefinedAllowed = (settings.fileAccessMode === 'user_defined') || settings.allowUserDefinedLocation;
@@ -3115,6 +4205,16 @@ async function openSharePointFile(fileName) {
 
   loadParsedFMEAData(loadedData);
 
+  if (isElectron) {
+    const catalog = getSharePointRepoFiles();
+    const fileEntry = catalog.find(f => f.name === fileName);
+    const targetDir = activeResolvedSharePointLocalPath || settings.sharepointSiteUrl || '';
+    const resolvedPath = fileEntry ? fileEntry.fullPath : `${targetDir}/${fileName}`;
+    if (typeof initFileLockOnOpen === 'function') {
+      await initFileLockOnOpen(resolvedPath);
+    }
+  }
+
   updateActiveFileNameBadge();
   saveProjectToLocalStorage();
   updateWorkspaceVisibility();
@@ -3169,12 +4269,27 @@ async function closeCurrentFile() {
 }
 
 function openCreateNewSharePointFilePrompt() {
+  const isReadOnlyUser = !currentUser || currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly');
+  if (isReadOnlyUser) {
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert("Access Denied: Read-Only users cannot create new files in the repository.", "Read-Only Restriction", "warning");
+    } else {
+      alert("Access Denied: Read-Only users cannot create new files in the repository.");
+    }
+    return;
+  }
   const input = document.getElementById('newSpFileNameInput');
   if (input) input.value = '';
   openModal('createNewSharePointFileModal');
 }
 
 async function confirmCreateNewSharePointFile(customName) {
+  const isReadOnlyUser = !currentUser || currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly');
+  if (isReadOnlyUser) {
+    alert("Access Denied: Read-Only users cannot create new files in the repository.");
+    return;
+  }
+
   const input = document.getElementById('newSpFileNameInput');
   const rawName = customName || (input ? input.value : '');
   if (!rawName || !rawName.trim()) {
@@ -3207,6 +4322,14 @@ async function confirmCreateNewSharePointFile(customName) {
   fmeaData.projectInfo.author = activeUser;
   fmeaData.projectInfo.creatorName = activeUser;
 
+  // Protected default user rights baseline
+  fmeaData.userRights = {
+    'admin': 'Owner',
+    'readonly': 'Viewer',
+    '*': 'Viewer',
+    [activeUser]: 'Owner'
+  };
+
   activeSharePointFileName = cleanName;
   settings.sharepointFileName = cleanName;
 
@@ -3221,6 +4344,9 @@ async function confirmCreateNewSharePointFile(customName) {
         return;
       }
       await loadSharePointCatalogFromDisk();
+      if (typeof initFileLockOnOpen === 'function') {
+        await initFileLockOnOpen(filePath);
+      }
     } catch (e) {
       alert("Error writing file: " + e.message);
       return;
@@ -3311,6 +4437,14 @@ async function performAutoSave(reason = 'Auto-Save') {
     }
     return;
   }
+  if (typeof currentFileLockMode !== 'undefined' && currentFileLockMode === 'READ_ONLY') {
+    updateSaveStatusBadgeUI('readOnly', '🔒 Read-Only');
+    if (reason === 'Manual Save' || (typeof reason === 'string' && reason.includes('Ctrl+S'))) {
+      if (typeof showToast === 'function') showToast("Save is disabled: This file is opened in Read-Only Mode (locked by active editor).", "warning");
+      else alert("Save is disabled: This file is opened in Read-Only Mode (locked by active editor).");
+    }
+    return;
+  }
   const rev = typeof getContextRevision === 'function' ? getContextRevision() : null;
   const hasInProgressRev = rev && (rev.status === 'In Progress' || rev.status === 'Draft');
   if (!hasInProgressRev) {
@@ -3355,6 +4489,10 @@ async function performAutoSave(reason = 'Auto-Save') {
 }
 
 async function saveToSharePoint(settings, targetFileName) {
+  if (typeof currentFileLockMode !== 'undefined' && currentFileLockMode === 'READ_ONLY') {
+    console.warn('[Save Guard] Aborting SharePoint save: File is locked in Read-Only mode.');
+    return { success: false, error: 'FILE_IS_READ_ONLY_LOCKED' };
+  }
   try {
     const fileName = targetFileName || activeSharePointFileName || settings.sharepointFileName || 'Jost_FMEA_Master.json';
     const dashFileName = getDashboardFileName(fileName);
@@ -3519,21 +4657,35 @@ function updateAiFeaturesVisibilityUI() {
   const networkEnabled = isAiFeatureModuleEnabled('network_linker');
   const interfaceEnabled = isAiFeatureModuleEnabled('interface_gen');
 
-  const setVis = (id, isVis) => {
+  const ctx = typeof getActiveFmeaData === 'function' ? getActiveFmeaData() : null;
+  const isPfmea = !!(ctx && ctx.isPFMEA);
+
+  const canShowWorkbench = masterEnabled && workbenchEnabled && !isPfmea;
+  const canShowNetwork = masterEnabled && networkEnabled && !isPfmea;
+  const canShowInterface = masterEnabled && interfaceEnabled && !isPfmea;
+
+  const setVis = (id, isVis, displayType = '') => {
     const el = document.getElementById(id);
-    if (el) el.style.display = isVis ? '' : 'none';
+    if (el) el.style.display = isVis ? displayType : 'none';
   };
 
-  setVis('navItemAiWorkbench', masterEnabled && workbenchEnabled);
-  setVis('btnToolbarAiWorkbench', masterEnabled && workbenchEnabled);
-  setVis('navItemAiWorkbench2', masterEnabled && workbenchEnabled);
-  setVis('btnToolbarAiWorkbench2', masterEnabled && workbenchEnabled);
+  setVis('globalWorkbenchContainer', canShowWorkbench, 'inline-flex');
+  setVis('globalWorkbenchSelect', canShowWorkbench, 'inline-block');
+  setVis('btnOpenSelectedWorkbench', canShowWorkbench, 'inline-flex');
+  setVis('btnToolbarAiWorkbench', canShowWorkbench, 'inline-flex');
+  setVis('btnToolbarAiWorkbench2', canShowWorkbench, 'inline-flex');
+  setVis('btnModalAiStructureGenerator', masterEnabled && workbenchEnabled, 'inline-block');
 
-  setVis('navItemAiNetworkLinker', masterEnabled && networkEnabled);
-  setVis('sidebarNetLinkerBtn', masterEnabled && networkEnabled);
-  setVis('btnToolbarAiNetLinker', masterEnabled && networkEnabled);
+  setVis('navItemAiWorkbench', canShowWorkbench, 'flex');
+  setVis('navItemAiWorkbench2', canShowWorkbench, 'flex');
+  setVis('navItemAiWorkbench3', canShowWorkbench, 'flex');
+  setVis('navItemAiWorkbench4', canShowWorkbench, 'flex');
 
-  setVis('navItemAiInterfaceGenerator', masterEnabled && interfaceEnabled);
+  setVis('navItemAiNetworkLinker', canShowNetwork, 'flex');
+  setVis('sidebarNetLinkerBtn', canShowNetwork, 'inline-block');
+  setVis('btnToolbarAiNetLinker', canShowNetwork, 'inline-flex');
+
+  setVis('navItemAiInterfaceGenerator', canShowInterface, 'flex');
 
   const isIfaceEnabled = masterEnabled && interfaceEnabled;
   document.querySelectorAll('button[onclick*="openAiInterfaceGeneratorModal"]').forEach(btn => {
@@ -3548,12 +4700,26 @@ function updateAiFeaturesVisibilityUI() {
     }
   });
 
+  const isWbActive = masterEnabled && workbenchEnabled;
+  document.querySelectorAll('button[onclick*="openAiWorkbench"], button[onclick*="openSelectedWorkbench"], button[onclick*="openAiStructureImportModal"]').forEach(btn => {
+    btn.disabled = !isWbActive;
+    if (!isWbActive) {
+      btn.setAttribute('title', 'Access Restricted: AI Workbench is disabled by System Admin policy.');
+    }
+  });
+
   const helpText = document.getElementById('aiFeaturesHelpText');
   if (helpText) {
-    helpText.innerHTML = masterEnabled
-      ? '🤖 <strong>AI Enabled:</strong> AI toolbar items, failure network predictors, and content generation assistants are active.'
-      : '🚫 <strong>AI Disabled (Admin Policy):</strong> All AI toolbar buttons, failure predictors, and generation workflows are hidden and locked.';
+    if (!masterEnabled) {
+      helpText.innerHTML = '🚫 <strong>AI Disabled (Admin Policy):</strong> All AI workbench modules, failure predictors, and generation workflows are hidden and locked.';
+    } else if (!workbenchEnabled) {
+      helpText.innerHTML = '⚠️ <strong>AI Workbench Disabled:</strong> Drawing-driven & micro-step AI Workbenches (1.0 - 4.0) are disabled and hidden.';
+    } else {
+      helpText.innerHTML = '🤖 <strong>AI Enabled:</strong> AI toolbar items, failure network predictors, and content generation assistants are active.';
+    }
   }
+
+  updateAiPackageGeneratorButtonVisibility();
 }
 
 function toggleAiFeaturesAdminControl() {
@@ -3579,6 +4745,18 @@ function toggleAiFeaturesAdminControl() {
   if (ifaceChk) {
     settings.enable_ai_interface_gen = ifaceChk.checked;
     localStorage.setItem('jost_enable_ai_interface_gen', ifaceChk.checked ? 'true' : 'false');
+  }
+
+  // If workbench was unchecked or master AI unchecked, immediately close any open workbench modals
+  if (!masterChk.checked || (wbChk && !wbChk.checked)) {
+    if (typeof closeModal === 'function') {
+      closeModal('aiWorkbenchModal');
+      closeModal('embeddedAiWorkstationModal');
+      closeModal('aiStructureImportModal');
+    }
+    if (typeof closeAiWorkbench2Modal === 'function') closeAiWorkbench2Modal();
+    if (typeof closeAiWorkbench3Modal === 'function') closeAiWorkbench3Modal();
+    if (typeof closeAiWorkbench4Modal === 'function') closeAiWorkbench4Modal();
   }
 
   updateAiFeaturesVisibilityUI();
@@ -3679,6 +4857,22 @@ function saveAutoSaveAdminSettings(e) {
   if (aiCheck) {
     settings.enableAiFeatures = aiCheck.checked;
     localStorage.setItem('jost_enable_ai_features', aiCheck.checked ? 'true' : 'false');
+  }
+
+  const wbChk = document.getElementById('settingEnableAiWorkbench');
+  if (wbChk) {
+    settings.enable_ai_workbench = wbChk.checked;
+    localStorage.setItem('jost_enable_ai_workbench', wbChk.checked ? 'true' : 'false');
+  }
+  const netChk = document.getElementById('settingEnableAiNetworkLinker');
+  if (netChk) {
+    settings.enable_ai_network_linker = netChk.checked;
+    localStorage.setItem('jost_enable_ai_network_linker', netChk.checked ? 'true' : 'false');
+  }
+  const ifaceChk = document.getElementById('settingEnableAiInterfaceGen');
+  if (ifaceChk) {
+    settings.enable_ai_interface_gen = ifaceChk.checked;
+    localStorage.setItem('jost_enable_ai_interface_gen', ifaceChk.checked ? 'true' : 'false');
   }
 
   if (document.getElementById('settingFileAccessMode')) {
@@ -3862,6 +5056,72 @@ function onUserRoleChange(role) {
   if (document.getElementById('perm_canManageUsers')) document.getElementById('perm_canManageUsers').checked = perms.canManageUsers;
 }
 
+function toggleAllUserStorageLocations(checked) {
+  const container = document.getElementById('userStorageLocationChecklist');
+  if (!container) return;
+  const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    cb.checked = checked;
+  });
+}
+
+function onUserStorageLocCheckboxChange() {
+  const selectAllCb = document.getElementById('userStorageLocationSelectAll');
+  const checkboxes = document.querySelectorAll('.user-storage-loc-cb');
+  if (selectAllCb && checkboxes.length > 0) {
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    selectAllCb.checked = allChecked;
+  }
+}
+
+function populateUserStorageLocationChecklist(userObj = null) {
+  const isSysAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin');
+  const container = document.getElementById('userStorageLocationAccessContainer');
+  const checklist = document.getElementById('userStorageLocationChecklist');
+  const selectAllLabel = document.getElementById('userStorageLocationSelectAllLabel');
+  const selectAllCb = document.getElementById('userStorageLocationSelectAll');
+  const fileOwnerNotice = document.getElementById('userStorageLocationFileOwnerNotice');
+  const activeDirText = document.getElementById('userStorageLocationActiveFileDirText');
+
+  if (!container) return;
+
+  const allLocs = (typeof getStorageLocations === 'function') ? getStorageLocations() : [];
+  const activeLoc = (typeof getActiveStorageLocation === 'function') ? getActiveStorageLocation() : null;
+
+  if (isSysAdmin) {
+    if (selectAllLabel) selectAllLabel.style.display = 'flex';
+    if (checklist) checklist.style.display = 'flex';
+    if (fileOwnerNotice) fileOwnerNotice.style.display = 'none';
+
+    const allowedIds = (userObj && Array.isArray(userObj.allowedStorageLocationIds)) ? userObj.allowedStorageLocationIds : ['*'];
+    const isAll = !userObj || allowedIds.includes('*');
+
+    if (selectAllCb) selectAllCb.checked = isAll;
+
+    if (checklist) {
+      checklist.innerHTML = allLocs.map(loc => {
+        const isChecked = isAll || allowedIds.includes(loc.id);
+        return `
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; color: var(--text-primary); margin-bottom: 2px;">
+            <input type="checkbox" class="user-storage-loc-cb" value="${escapeHtml(loc.id)}" ${isChecked ? 'checked' : ''} onchange="onUserStorageLocCheckboxChange()">
+            <span>📁 <strong>${escapeHtml(loc.name)}</strong> <span style="color: var(--text-muted); font-size: 10px;">(${escapeHtml(loc.path || loc.localPath || '')})</span></span>
+          </label>
+        `;
+      }).join('');
+    }
+  } else {
+    // Non-Admin File Creator: Locked to Active Location, no checklist shown
+    if (selectAllLabel) selectAllLabel.style.display = 'none';
+    if (checklist) checklist.style.display = 'none';
+    if (fileOwnerNotice) {
+      fileOwnerNotice.style.display = 'block';
+      if (activeDirText) {
+        activeDirText.textContent = activeLoc ? `${activeLoc.name} (${activeLoc.path || activeLoc.localPath || ''})` : 'Active File Location';
+      }
+    }
+  }
+}
+
 function resetUserForm() {
   const form = document.getElementById('userForm');
   if (form) form.reset();
@@ -3872,6 +5132,7 @@ function resetUserForm() {
   const title = document.getElementById('userFormTitle');
   if (title) title.innerText = '👤 Add New User';
   onUserRoleChange('Engineer');
+  populateUserStorageLocationChecklist(null);
 }
 
 function renderUserListTable() {
@@ -3889,10 +5150,21 @@ function renderUserListTable() {
     'Viewer': { style: 'background:rgba(148, 163, 184, 0.2); color:#cbd5e1; border:1px solid rgba(148, 163, 184, 0.4);', icon: '👁️' }
   };
 
+  const allLocs = (typeof getStorageLocations === 'function') ? getStorageLocations() : [];
+
   tbody.innerHTML = systemUsers.map(u => {
     const cfg = roleConfig[u.role] || { style: 'background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border-color);', icon: '👤' };
     const isAdminTarget = u.role === 'Admin' || u.role === 'SuperAdmin' || u.username.toLowerCase() === 'admin';
     const isCurrentAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin');
+
+    let dirBadge = '';
+    if (!u.allowedStorageLocationIds || u.allowedStorageLocationIds.includes('*')) {
+      dirBadge = `<span class="badge" style="padding: 2px 8px; border-radius: 12px; font-size: 10px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);">🌐 All Locations</span>`;
+    } else {
+      const matchedNames = allLocs.filter(l => u.allowedStorageLocationIds.includes(l.id)).map(l => l.name);
+      const text = matchedNames.length > 0 ? matchedNames.join(', ') : 'Restricted';
+      dirBadge = `<span class="badge" style="padding: 2px 8px; border-radius: 12px; font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;" title="${escapeHtml(text)}">📁 ${escapeHtml(text)}</span>`;
+    }
 
     const actionCell = (isAdminTarget && !isCurrentAdmin)
       ? `<span style="font-size:11px; color:var(--text-muted); font-style:italic;">🔒 Protected Admin</span>`
@@ -3910,6 +5182,9 @@ function renderUserListTable() {
           <span class="badge" style="padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; ${cfg.style}">
             <span>${cfg.icon}</span> ${escapeHtml(u.role)}
           </span>
+        </td>
+        <td style="padding: 10px 12px;">
+          ${dirBadge}
         </td>
         <td style="padding: 10px 12px; text-align: right;">
           ${actionCell}
@@ -3968,6 +5243,7 @@ async function openAdminPasswordResetBackdoor() {
       email: 'admin@jostworld.com',
       passwordHash: newHash,
       role: 'Admin',
+      allowedStorageLocationIds: ['*'],
       permissions: { canEditFMEA: true, canCreateRevision: true, canFreezeRevision: true, canExport: true, canManageVariants: true, canManagePFMEA: true, canViewReports: true, canManageUsers: true }
     };
     systemUsers.push(adminUser);
@@ -3993,9 +5269,12 @@ async function openAdminPasswordResetBackdoor() {
 }
 
 async function saveUser(e) {
-  e.preventDefault();
-  if (!currentUser || (currentUser.role !== 'Admin' && currentUser.role !== 'SuperAdmin')) {
-    alert('Access Denied: Only System Administrators can create or edit user accounts.');
+  if (e) e.preventDefault();
+  const isCurrentAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin');
+  const isFileCreator = typeof canUserManageFileRights === 'function' && canUserManageFileRights();
+
+  if (!isCurrentAdmin && !isFileCreator) {
+    alert('Access Denied: Only System Administrators or File Owners can create or edit user accounts.');
     return;
   }
 
@@ -4007,22 +5286,44 @@ async function saveUser(e) {
   const pass = document.getElementById('userPasswordInput').value.trim();
   const role = document.getElementById('userRoleInput').value;
 
-  const isCurrentAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin');
+  if (!username || !name) {
+    alert('Please enter a Name and Username.');
+    return;
+  }
 
   if (!isCurrentAdmin && (role === 'Admin' || role === 'SuperAdmin')) {
     alert('Access Denied: Only existing Administrators can assign Admin privileges.');
     return;
   }
 
-  // Protect Admin target from modification by non-Admin
+  // Protect Admin and Readonly targets from modification by non-Admin
   if (editId) {
     const targetUser = systemUsers.find(item => item.id === editId);
-    if (targetUser && (targetUser.role === 'Admin' || targetUser.role === 'SuperAdmin' || targetUser.username.toLowerCase() === 'admin')) {
+    if (targetUser && (targetUser.role === 'Admin' || targetUser.role === 'SuperAdmin' || (targetUser.username && targetUser.username.toLowerCase() === 'admin') || (targetUser.username && targetUser.username.toLowerCase() === 'readonly'))) {
       if (!isCurrentAdmin) {
-        alert('Access Denied: Normal users cannot modify Admin accounts, passwords, or privileges.');
+        alert('Access Denied: Normal users cannot modify protected System accounts (Admin / Read-Only).');
         return;
       }
     }
+  }
+
+  // Determine allowed storage locations
+  let allowedStorageLocationIds = ['*'];
+  if (isCurrentAdmin) {
+    const selectAllCb = document.getElementById('userStorageLocationSelectAll');
+    if (selectAllCb && selectAllCb.checked) {
+      allowedStorageLocationIds = ['*'];
+    } else {
+      const checkedBoxes = Array.from(document.querySelectorAll('.user-storage-loc-cb:checked')).map(cb => cb.value);
+      allowedStorageLocationIds = checkedBoxes.length > 0 ? checkedBoxes : ['*'];
+    }
+  } else if (isFileCreator) {
+    // Automatically give access only to the location where active file is stored without prompting
+    const activeLoc = (typeof getActiveStorageLocation === 'function') ? getActiveStorageLocation() : null;
+    allowedStorageLocationIds = activeLoc ? [activeLoc.id] : ['*'];
+  } else if (editId) {
+    const existing = systemUsers.find(item => item.id === editId);
+    allowedStorageLocationIds = existing?.allowedStorageLocationIds || ['*'];
   }
 
   // Collect permissions from checkboxes
@@ -4043,22 +5344,36 @@ async function saveUser(e) {
     const u = systemUsers.find(item => item.id === editId);
     if (u) {
       u.name = name; u.username = username; u.email = email; u.role = role; u.permissions = perms;
+      u.allowedStorageLocationIds = allowedStorageLocationIds;
       if (pass) u.passwordHash = await hashPasswordSHA256(pass);
       if (currentUser && (currentUser.id === u.id || currentUser.username.toLowerCase() === u.username.toLowerCase())) {
         currentUser.email = email;
         currentUser.permissions = perms;
+        currentUser.allowedStorageLocationIds = allowedStorageLocationIds;
         try { localStorage.setItem('jost_current_user', JSON.stringify(currentUser)); } catch (e) { }
       }
     }
   } else {
-    if (!pass) { alert('Password is required for new users.'); return; }
-    const passwordHash = await hashPasswordSHA256(pass);
-    systemUsers.push({ id: 'usr-' + Date.now(), name, username, email, passwordHash, role, permissions: perms });
+    const isReadOnlyNew = username.toLowerCase() === 'readonly';
+    if (!pass && !isReadOnlyNew) { alert('Password is required for new users.'); return; }
+    const passwordHash = pass ? await hashPasswordSHA256(pass) : '';
+    systemUsers.push({
+      id: 'usr-' + Date.now(),
+      name,
+      username,
+      email,
+      passwordHash,
+      role,
+      noPasswordRequired: isReadOnlyNew,
+      allowedStorageLocationIds,
+      permissions: perms
+    });
   }
 
-  try { localStorage.setItem('jost_system_users', JSON.stringify(systemUsers)); } catch (e) { }
+  // Save to disk in dedicated fmea_user_library.json
+  await saveUserLibraryToDisk();
 
-  if (typeof exportAdminSettingsToSharePoint === 'function') {
+  if (typeof exportAdminSettingsToSharePoint === 'function' && isCurrentAdmin) {
     try { exportAdminSettingsToSharePoint(); } catch (e) { }
   }
 
@@ -4066,14 +5381,16 @@ async function saveUser(e) {
   renderUserListTable();
   populateUserDropdown('newRevCreator');
   populateUserDropdown('actResp');
+  if (typeof renderFileUserRightsTable === 'function') renderFileUserRightsTable();
   renderFMEATable();
+  if (typeof showToast === 'function') showToast(`✅ User "${username}" saved to Central User Library.`);
 }
 
 function editUser(id) {
   const u = systemUsers.find(item => item.id === id);
   if (!u) return;
 
-  const isAdminTarget = u.role === 'Admin' || u.role === 'SuperAdmin' || u.username.toLowerCase() === 'admin';
+  const isAdminTarget = u.role === 'Admin' || u.role === 'SuperAdmin' || (u.username && u.username.toLowerCase() === 'admin');
   const isCurrentAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin');
   if (isAdminTarget && !isCurrentAdmin) {
     alert('Access Denied: Normal users cannot edit or modify Admin accounts.');
@@ -4098,34 +5415,40 @@ function editUser(id) {
     if (document.getElementById('perm_canManagePFMEA')) document.getElementById('perm_canManagePFMEA').checked = !!u.permissions.canManagePFMEA;
   }
 
+  populateUserStorageLocationChecklist(u);
 
   const title = document.getElementById('userFormTitle');
   if (title) title.innerText = `✏️ Edit User: ${u.name}`;
 }
 
-function deleteUser(id) {
-  if (!currentUser || (currentUser.role !== 'Admin' && currentUser.role !== 'SuperAdmin')) {
-    alert('Access Denied: Only System Administrators can delete user accounts.');
+async function deleteUser(id) {
+  const isCurrentAdmin = currentUser && (currentUser.role === 'Admin' || currentUser.role === 'SuperAdmin');
+  const isFileCreator = typeof canUserManageFileRights === 'function' && canUserManageFileRights();
+
+  if (!isCurrentAdmin && !isFileCreator) {
+    alert('Access Denied: Only System Administrators or File Owners can delete user accounts.');
     return;
   }
   const u = systemUsers.find(item => item.id === id);
-  if (u && (u.role === 'Admin' || u.role === 'SuperAdmin' || u.username.toLowerCase() === 'admin')) {
-    alert('Access Denied: Protected Admin accounts cannot be deleted.');
+  if (u && (u.role === 'Admin' || u.role === 'SuperAdmin' || (u.username && u.username.toLowerCase() === 'admin') || (u.username && u.username.toLowerCase() === 'readonly'))) {
+    alert('Access Denied: Protected System accounts (Admin and Readonly) cannot be deleted.');
     return;
   }
   if (currentUser && currentUser.id === id) {
     alert('You cannot delete your active session user!');
     return;
   }
-  if (!confirm('Are you sure you want to delete this user?')) return;
-  systemUsers = systemUsers.filter(u => u.id !== id);
-  try { localStorage.setItem('jost_system_users', JSON.stringify(systemUsers)); } catch (e) { }
+  if (!confirm(`Are you sure you want to delete user "${u.username || u.name}"?`)) return;
+  systemUsers = systemUsers.filter(item => item.id !== id);
+  await saveUserLibraryToDisk();
 
-  if (typeof exportAdminSettingsToSharePoint === 'function') {
+  if (typeof exportAdminSettingsToSharePoint === 'function' && isCurrentAdmin) {
     try { exportAdminSettingsToSharePoint(); } catch (e) { }
   }
 
   renderUserListTable();
+  if (typeof renderFileUserRightsTable === 'function') renderFileUserRightsTable();
+  if (typeof showToast === 'function') showToast(`🗑️ User "${u.username || u.name}" removed from User Library.`);
 }
 
 function openChangePasswordModal() {
@@ -4199,6 +5522,9 @@ document.addEventListener("DOMContentLoaded", () => {
   updateHeaderRevisionBadge();
   updateActiveFileNameBadge();
   initAutoSaveEngine();
+  if (typeof initLockActivityTracker === 'function') {
+    initLockActivityTracker();
+  }
 
   // Verify and fetch encrypted Admin Settings from SharePoint on startup
   checkAndInitSharePointAdminSettings();
@@ -4501,51 +5827,146 @@ function findFailureModeObjById(fmId) {
 }
 
 function getEffectiveSeverityForFailureMode(fmId, visited = new Set()) {
-  if (!fmId || visited.has(fmId)) return 1;
-  visited.add(fmId);
+  if (!fmId || visited.has(String(fmId))) return 1;
+  const visitKey = String(fmId);
+  if (visited.size === 0 && window._fmeaRenderSeverityCache && window._fmeaRenderSeverityCache.has(visitKey)) {
+    return window._fmeaRenderSeverityCache.get(visitKey);
+  }
+  visited.add(visitKey);
 
-  const ctx = getActiveFmeaData();
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : (typeof fmeaData !== 'undefined' ? fmeaData : {});
   let maxSev = 1;
 
-  // 1. Direct linked library effects
-  const effMap = ctx.failureModeEffects || {};
-  const linkedEffIds = effMap[fmId] || [];
-  const linkedEffects = (fmeaData.libraries && fmeaData.libraries.effects || []).filter(e => linkedEffIds.includes(e.id));
-  linkedEffects.forEach(e => {
-    const s = parseInt(e.severity) || 1;
-    if (s > maxSev) maxSev = s;
-  });
+  // 0. Check active failure network diagram state if already computed
+  if (typeof activeFailureNetworkState !== 'undefined' && activeFailureNetworkState && activeFailureNetworkState.graph && Array.isArray(activeFailureNetworkState.graph.nodes)) {
+    const graphNode = activeFailureNetworkState.graph.nodes.find(n => String(n.id) === String(fmId) || String(n.fmId) === String(fmId));
+    if (graphNode && (graphNode.chainSeverity || graphNode.severity)) {
+      const gs = parseInt(graphNode.chainSeverity || graphNode.severity, 10);
+      if (gs > maxSev) maxSev = gs;
+    }
+  }
 
-  // 2. Direct catalog effects in failureEffects
-  if (ctx.failureNetworkLinks) {
-    const catalogLinks = ctx.failureNetworkLinks.filter(l => l.sourceFmId === fmId && l.targetEffectId);
-    catalogLinks.forEach(l => {
-      const effObj = (ctx.failureEffects || []).find(e => e.id === l.targetEffectId);
-      if (effObj) {
-        const s = parseInt(effObj.severity) || 1;
-        if (s > maxSev) maxSev = s;
+  // 1. Directly committed failure mode severity across all scopes
+  const allProjectModes = (typeof getAllProjectFailureModesWithContext === 'function') ? getAllProjectFailureModesWithContext() : [];
+  let fmObj = allProjectModes.find(m => String(m.fm.id) === String(fmId)) || (typeof findFailureModeObjById === 'function' ? findFailureModeObjById(fmId) : null);
+
+  if (!fmObj && ctx && ctx.functionLines) {
+    for (const fl of ctx.functionLines) {
+      if (fl.failureModes) {
+        const found = fl.failureModes.find(m => String(m.id) === String(fmId));
+        if (found) {
+          fmObj = { fm: found, fl, scope: ctx };
+          break;
+        }
       }
-    });
+    }
+  }
+  if (!fmObj && typeof fmeaData !== 'undefined' && fmeaData && fmeaData.functionLines && fmeaData !== ctx) {
+    for (const fl of fmeaData.functionLines) {
+      if (fl.failureModes) {
+        const found = fl.failureModes.find(m => String(m.id) === String(fmId));
+        if (found) {
+          fmObj = { fm: found, fl, scope: fmeaData };
+          break;
+        }
+      }
+    }
+  }
 
-    // 3. Upstream parent mode links (where this FM is a Cause for a parent FM)
-    const parentLinks = ctx.failureNetworkLinks.filter(l => l.sourceFmId === fmId && l.targetFmId);
-    parentLinks.forEach(l => {
-      const parentSev = getEffectiveSeverityForFailureMode(l.targetFmId, visited);
-      if (parentSev > maxSev) maxSev = parentSev;
+  if (fmObj && fmObj.fm) {
+    const s = parseInt(fmObj.fm.sev || fmObj.fm.severity, 10) || 1;
+    if (s > maxSev) maxSev = s;
+  }
+
+  // 2. All candidate effects across libraries, embedded arrays, and network links
+  let candidateEffects = (typeof getAllProjectEffectsForFm === 'function')
+    ? getAllProjectEffectsForFm(fmId, fmObj)
+    : [];
+
+  const effMap = (ctx && ctx.failureModeEffects) || (typeof fmeaData !== 'undefined' && fmeaData.failureModeEffects) || {};
+  const linkedEffIds = effMap[fmId] || [];
+  if (linkedEffIds.length > 0) {
+    const libEffects = (ctx && ctx.libraries && ctx.libraries.effects) || (typeof fmeaData !== 'undefined' && fmeaData.libraries && fmeaData.libraries.effects) || [];
+    linkedEffIds.forEach(eid => {
+      if (!candidateEffects.some(e => String(e.id) === String(eid))) {
+        const foundEff = libEffects.find(e => String(e.id) === String(eid));
+        if (foundEff) candidateEffects.push(foundEff);
+      }
     });
   }
 
-  // 4. Directly committed failure mode severity
-  (ctx.functionLines || []).forEach(fl => {
-    if (fl.failureModes) {
-      const fm = fl.failureModes.find(m => m.id === fmId);
-      if (fm && fm.sev) {
-        const s = parseInt(fm.sev, 10);
-        if (s > maxSev) maxSev = s;
+  const isPfmeaContext = !!(ctx && ctx.isPFMEA);
+  const currIsPfmea = !!(fmObj?.isPFMEA || (fmObj?.scope && fmObj.scope.isPFMEA) || fmObj?.origin === 'PFMEA');
+
+  candidateEffects.forEach(effItem => {
+    const s = parseInt(effItem.severity, 10) || 1;
+    if (s > maxSev) maxSev = s;
+
+    // Check direct linkage properties
+    const higherId = effItem.parentFmId || effItem.targetFmId || effItem.linkedHigherFmId || effItem.dfmeaFmId;
+    if (higherId && !visited.has(String(higherId))) {
+      const parentSev = getEffectiveSeverityForFailureMode(higherId, visited);
+      if (parentSev > maxSev) maxSev = parentSev;
+    }
+
+    // Check resolved failure mode from effect text/desc
+    if (typeof resolveFailureModeFromEffectObj === 'function' && allProjectModes.length > 0) {
+      const resolved = resolveFailureModeFromEffectObj(effItem, allProjectModes, fmId, isPfmeaContext);
+      if (resolved && resolved.fm && resolved.fm.id && !visited.has(String(resolved.fm.id))) {
+        const parentSev = getEffectiveSeverityForFailureMode(resolved.fm.id, visited);
+        if (parentSev > maxSev) maxSev = parentSev;
       }
     }
   });
 
+  // 3. Inverse Cause Linkages: Higher modes whose cause is this fmId
+  if (allProjectModes.length > 0 && fmObj && fmObj.fm) {
+    const currName = (fmObj.fm.name || '').trim().toLowerCase();
+    allProjectModes.forEach(cand => {
+      if (String(cand.fm.id) === String(fmId)) return;
+      const candIsPfmea = !!(cand.isPFMEA || (cand.scope && cand.scope.isPFMEA));
+      if (!isPfmeaContext && candIsPfmea) return;
+      if (isPfmeaContext && currIsPfmea && !candIsPfmea) return;
+
+      if (!visited.has(String(cand.fm.id)) && typeof getAllProjectCausesForFm === 'function') {
+        const candCauses = getAllProjectCausesForFm(cand.fm.id, cand);
+        const causesThisMode = candCauses.some(c => {
+          if (c.linkedLowerFmId && String(c.linkedLowerFmId) === String(fmId)) return true;
+          if (c.fmId && String(c.fmId) === String(fmId)) return true;
+          const cDesc = (c.details || c.desc || c.description || c.causeText || '').trim().toLowerCase();
+          return cDesc && currName && (cDesc === currName || (cDesc.length > 5 && currName.includes(cDesc)) || (currName.length > 5 && cDesc.includes(currName)));
+        });
+        if (causesThisMode) {
+          const parentSev = getEffectiveSeverityForFailureMode(cand.fm.id, visited);
+          if (parentSev > maxSev) maxSev = parentSev;
+        }
+      }
+    });
+  }
+
+  // 4. Failure network links across all scopes
+  const scopes = (typeof getAllProjectScopes === 'function') ? getAllProjectScopes() : [ctx];
+  scopes.forEach(scope => {
+    if (!scope) return;
+    if (!isPfmeaContext && scope.isPFMEA) return;
+    (scope.failureNetworkLinks || []).forEach(l => {
+      if (String(l.sourceFmId) === String(fmId)) {
+        if (l.targetFmId && !visited.has(String(l.targetFmId))) {
+          const parentSev = getEffectiveSeverityForFailureMode(l.targetFmId, visited);
+          if (parentSev > maxSev) maxSev = parentSev;
+        }
+        if (l.targetEffectId) {
+          const allEffs = (fmeaData && fmeaData.libraries?.effects || []).concat(fmeaData && fmeaData.failureEffects || []).concat(scope.failureEffects || []);
+          const fe = allEffs.find(e => String(e.id) === String(l.targetEffectId));
+          if (fe && parseInt(fe.severity, 10) > maxSev) maxSev = parseInt(fe.severity, 10);
+        }
+      }
+    });
+  });
+
+  if (visited.size === 1 && window._fmeaRenderSeverityCache) {
+    window._fmeaRenderSeverityCache.set(visitKey, maxSev);
+  }
   return maxSev;
 }
 
@@ -4700,10 +6121,22 @@ function renderFmeaContextDropdown() {
   if (sidebarPstepBtn) {
     sidebarPstepBtn.style.display = ctx.isPFMEA ? 'inline-block' : 'none';
   }
+  const sidebarReorderBtn = document.getElementById('sidebarReorderPStepsBtn');
+  if (sidebarReorderBtn) {
+    sidebarReorderBtn.style.display = ctx.isPFMEA ? 'inline-block' : 'none';
+    sidebarReorderBtn.title = 'Manage PFMEA Process Steps / Operations';
+    sidebarReorderBtn.innerHTML = '⚙️ Manage Process';
+  }
+  const navReorderOp = document.getElementById('navItemReorderOperations');
+  if (navReorderOp) {
+    navReorderOp.style.display = ctx.isPFMEA ? 'flex' : 'none';
+    navReorderOp.innerHTML = '<span class="nav-dd-icon">⚙️</span> Manage Process (PFMEA)';
+  }
   if (syncBtn) {
     syncBtn.style.display = ctx.isPFMEA ? 'inline-block' : 'none';
   }
 
+  const structNav = document.getElementById('navItemStructureEditor');
   const ifaceNav = document.getElementById('navItemInterfaceMatrix');
   const boundaryNav = document.getElementById('navItemBoundaryDiagram');
   const diagSidebarBtn = document.getElementById('sidebarDiagramBtn');
@@ -4717,11 +6150,26 @@ function renderFmeaContextDropdown() {
 
   const isPfmea = !!(ctx && ctx.isPFMEA);
 
+  // Structure Analysis: Hide when in PFMEA mode
+  if (structNav) structNav.style.display = isPfmea ? 'none' : 'flex';
+
   // Boundary diagram & interface matrix options: Hide when in PFMEA mode
   if (ifaceNav) ifaceNav.style.display = isPfmea ? 'none' : 'flex';
   if (boundaryNav) boundaryNav.style.display = isPfmea ? 'none' : 'flex';
-  if (diagSidebarBtn) diagSidebarBtn.style.display = isPfmea ? 'none' : 'inline-block';
   if (btnIfaceMatrixBoundaryDiagram) btnIfaceMatrixBoundaryDiagram.style.display = isPfmea ? 'none' : 'inline-block';
+
+  // Process Flow Diagram (PFD): Show when in PFMEA mode, HIDE when in DFMEA mode
+  const pfdNav = document.getElementById('navItemProcessFlowDiagram');
+  if (pfdNav) pfdNav.style.display = isPfmea ? 'flex' : 'none';
+
+  // Process Flow Diagram: single clean entry under Analysis menu
+
+  // Diagram button in sidebar: PFD for PFMEA, Boundary Diagram for DFMEA
+  if (diagSidebarBtn) {
+    diagSidebarBtn.style.display = 'inline-block';
+    diagSidebarBtn.innerHTML = isPfmea ? '🔀 PFD' : '📐 Diagram';
+    diagSidebarBtn.title = isPfmea ? 'Open Process Flow Diagram (PFD)' : 'Open Boundary Diagram (DFMEA)';
+  }
 
   // AI-related functions & buttons: Hide when in PFMEA mode
   if (aiWorkbenchNav) aiWorkbenchNav.style.display = isPfmea ? 'none' : 'flex';
@@ -4731,6 +6179,9 @@ function renderFmeaContextDropdown() {
   if (btnToolbarAiNetLinker) btnToolbarAiNetLinker.style.display = isPfmea ? 'none' : 'inline-flex';
 
   updateAiPackageGeneratorButtonVisibility();
+  if (typeof updateAiFeaturesVisibilityUI === 'function') {
+    updateAiFeaturesVisibilityUI();
+  }
 }
 
 function updateAiPackageGeneratorButtonVisibility() {
@@ -4740,6 +6191,15 @@ function updateAiPackageGeneratorButtonVisibility() {
   const btnPfmea = document.getElementById('btnToolbarPfmeaAiPackageGenerator');
 
   if (!btnDfmea && !btnPfmea) return;
+
+  const masterEnabled = isAiFeaturesEnabled();
+  const workbenchEnabled = isAiFeatureModuleEnabled('workbench');
+
+  if (!masterEnabled || !workbenchEnabled) {
+    if (btnDfmea) btnDfmea.style.display = 'none';
+    if (btnPfmea) btnPfmea.style.display = 'none';
+    return;
+  }
 
   if (!isPfmea) {
     // DFMEA Mode: Show DFMEA generator, hide PFMEA generator
@@ -4767,6 +6227,14 @@ function updateAiPackageGeneratorButtonVisibility() {
 let currentEmbeddedWorkstationMode = 'PFMEA';
 
 function openEmbeddedAiWorkstation(mode) {
+  if (!isAiFeaturesEnabled() || !isAiFeatureModuleEnabled('workbench')) {
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert("Access Restricted: The AI Workbench module is currently disabled by System Admin policy.", "Admin Policy Enforcement", "warning");
+    } else {
+      alert("Access Restricted: The AI Workbench module is currently disabled by System Admin policy.");
+    }
+    return;
+  }
   const targetMode = mode || (typeof getActiveFmeaData === 'function' && getActiveFmeaData()?.isPFMEA ? 'PFMEA' : 'DFMEA');
   currentEmbeddedWorkstationMode = targetMode;
 
@@ -5579,6 +7047,14 @@ function savePfmeaInstance(e) {
 // ----------------------------------------------------
 // Process Step Management per DFMEA Element (PFMEA Mode)
 // ----------------------------------------------------
+let _openedFromProcessManagerModal = false;
+
+function openAddProcessStepModalFromManager(dfmeaStructId = null, pstepId = null) {
+  _openedFromProcessManagerModal = true;
+  openAddProcessStepModal(dfmeaStructId, pstepId);
+}
+window.openAddProcessStepModalFromManager = openAddProcessStepModalFromManager;
+
 function openAddProcessStepModal(dfmeaStructId = null, pstepId = null) {
   if (!checkCanEditFMEA()) return;
   const ctx = getActiveFmeaData();
@@ -5606,6 +7082,7 @@ function openAddProcessStepModal(dfmeaStructId = null, pstepId = null) {
       document.getElementById('pstepDesc').value = pstep.description || '';
       if (btnDel) btnDel.style.display = 'inline-block';
       renderVariantCheckboxList('pstepVariantCheckboxList', 'pstep', pstep.variantId || ['ALL']);
+      if (typeof updateModalProcessStepPositionUI === 'function') updateModalProcessStepPositionUI(pstep.id);
     }
   } else {
     document.getElementById('pstepId').value = '';
@@ -5615,6 +7092,7 @@ function openAddProcessStepModal(dfmeaStructId = null, pstepId = null) {
     document.getElementById('pstepNo').value = `Op ${nextNum}`;
     if (btnDel) btnDel.style.display = 'none';
     renderVariantCheckboxList('pstepVariantCheckboxList', 'pstep', ['ALL']);
+    if (typeof updateModalProcessStepPositionUI === 'function') updateModalProcessStepPositionUI(null);
   }
 
   openModal('processStepModal');
@@ -5657,6 +7135,11 @@ function saveProcessStep(e) {
 
   closeModal('processStepModal');
   renderFMEATable();
+  if (_openedFromProcessManagerModal || (document.getElementById('reorderProcessStepsModal') && document.getElementById('reorderProcessStepsModal').style.display !== 'none')) {
+    renderReorderProcessStepsList();
+    openModal('reorderProcessStepsModal');
+  }
+  _openedFromProcessManagerModal = false;
 }
 
 function deleteProcessStepAndAllData(stepId, skipConfirm = false) {
@@ -5904,6 +7387,9 @@ function deleteProcessStepAndAllData(stepId, skipConfirm = false) {
   if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
   if (typeof renderFMEATable === 'function') renderFMEATable();
   if (typeof updateDashboardInsights === 'function') updateDashboardInsights();
+  if (typeof renderReorderProcessStepsList === 'function' && document.getElementById('reorderProcessStepsModal') && document.getElementById('reorderProcessStepsModal').style.display !== 'none') {
+    renderReorderProcessStepsList();
+  }
 
   if (typeof showToast === 'function') {
     showToast(`🗑️ Deleted Process Step "${stepName}" and all associated data.`, 'info');
@@ -5925,6 +7411,286 @@ function deleteProcessStepFromModal() {
   if (deleteProcessStepAndAllData(id)) {
     closeModal('processStepModal');
   }
+}
+
+// ----------------------------------------------------
+// PFMEA Process Steps / Operations Reordering Engine
+// ----------------------------------------------------
+function moveProcessStepOrder(stepId, direction) {
+  if (!checkCanEditFMEA()) return;
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.isPFMEA || !ctx.pfmea) {
+    if (typeof showToast === 'function') showToast("Must be in PFMEA mode to reorder operations.", "warning");
+    return;
+  }
+
+  ctx.pfmea.processSteps = ctx.pfmea.processSteps || [];
+  const steps = ctx.pfmea.processSteps;
+  const curIdx = steps.findIndex(s => s.id === stepId);
+  if (curIdx === -1) return;
+
+  const targetIdx = curIdx + direction;
+  if (targetIdx < 0 || targetIdx >= steps.length) return;
+
+  // Swap position in steps array
+  const temp = steps[curIdx];
+  steps[curIdx] = steps[targetIdx];
+  steps[targetIdx] = temp;
+
+  if (ctx.processSteps) {
+    ctx.processSteps = steps;
+  }
+
+  if (typeof syncProcessFlowDiagramWithPsteps === 'function') {
+    const select = document.getElementById('pfdStructureSelect');
+    syncProcessFlowDiagramWithPsteps(select ? select.value : 'ALL');
+  }
+
+  markDataChanged('Reordered PFMEA Operations');
+  renderFMEATable();
+  if (typeof updateModalProcessStepPositionUI === 'function') {
+    updateModalProcessStepPositionUI(stepId);
+  }
+  if (typeof showToast === 'function') {
+    const opName = temp ? `${temp.stepNo ? temp.stepNo + ': ' : ''}${temp.name || 'Operation'}` : 'Operation';
+    showToast(`↔️ Moved "${opName}" ${direction < 0 ? 'up' : 'down'}.`, 'info');
+  }
+}
+
+function reorderProcessStepToPosition(stepId, newIndex) {
+  if (!checkCanEditFMEA()) return;
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.isPFMEA || !ctx.pfmea) return;
+
+  ctx.pfmea.processSteps = ctx.pfmea.processSteps || [];
+  const steps = ctx.pfmea.processSteps;
+  const oldIndex = steps.findIndex(s => s.id === stepId);
+  if (oldIndex === -1) return;
+
+  if (newIndex < 0) newIndex = 0;
+  if (newIndex >= steps.length) newIndex = steps.length - 1;
+  if (oldIndex === newIndex) return;
+
+  const [removed] = steps.splice(oldIndex, 1);
+  steps.splice(newIndex, 0, removed);
+
+  if (ctx.processSteps) {
+    ctx.processSteps = steps;
+  }
+
+  if (typeof syncProcessFlowDiagramWithPsteps === 'function') {
+    const select = document.getElementById('pfdStructureSelect');
+    syncProcessFlowDiagramWithPsteps(select ? select.value : 'ALL');
+  }
+
+  markDataChanged('Reordered PFMEA Operations');
+  renderFMEATable();
+  renderReorderProcessStepsList();
+  if (typeof showToast === 'function') {
+    const opName = removed ? `${removed.stepNo ? removed.stepNo + ': ' : ''}${removed.name || 'Operation'}` : 'Operation';
+    showToast(`↔️ Moved "${opName}" to position ${newIndex + 1}.`, 'info');
+  }
+}
+
+function autoRenumberProcessSteps(stepIncrement = 10, prefix = 'Op ') {
+  if (!checkCanEditFMEA()) return;
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.isPFMEA || !ctx.pfmea) return;
+
+  const steps = ctx.pfmea.processSteps || [];
+  if (steps.length === 0) {
+    if (typeof showToast === 'function') showToast('No operations to renumber.', 'warning');
+    return;
+  }
+
+  steps.forEach((step, idx) => {
+    step.stepNo = `${prefix}${(idx + 1) * stepIncrement}`;
+  });
+
+  if (ctx.processSteps) {
+    ctx.processSteps = steps;
+  }
+
+  if (typeof syncProcessFlowDiagramWithPsteps === 'function') {
+    const select = document.getElementById('pfdStructureSelect');
+    syncProcessFlowDiagramWithPsteps(select ? select.value : 'ALL');
+  }
+
+  markDataChanged('Auto-Renumbered PFMEA Operations');
+  renderFMEATable();
+  renderReorderProcessStepsList();
+  if (typeof showToast === 'function') {
+    showToast(`🔢 Automatically renumbered ${steps.length} operations (${prefix}10, ${prefix}20, ${prefix}30...).`, 'success');
+  }
+}
+
+function moveCurrentModalProcessStep(direction) {
+  const stepId = document.getElementById('pstepId')?.value;
+  if (!stepId) return;
+
+  moveProcessStepOrder(stepId, direction);
+  updateModalProcessStepPositionUI(stepId);
+}
+
+function updateModalProcessStepPositionUI(stepId) {
+  const group = document.getElementById('pstepReorderGroup');
+  const posText = document.getElementById('pstepPositionText');
+  const btnUp = document.getElementById('btnModalPstepMoveUp');
+  const btnDown = document.getElementById('btnModalPstepMoveDown');
+  if (!group || !posText) return;
+
+  if (!stepId) {
+    group.style.display = 'none';
+    return;
+  }
+
+  const ctx = getActiveFmeaData();
+  const steps = (ctx && ctx.pfmea && ctx.pfmea.processSteps) ? ctx.pfmea.processSteps : [];
+  const idx = steps.findIndex(s => s.id === stepId);
+
+  if (idx === -1) {
+    group.style.display = 'none';
+    return;
+  }
+
+  group.style.display = 'block';
+  posText.textContent = `Position: Operation ${idx + 1} of ${steps.length}`;
+
+  if (btnUp) {
+    btnUp.disabled = (idx === 0);
+    btnUp.style.opacity = (idx === 0) ? '0.4' : '1';
+    btnUp.style.cursor = (idx === 0) ? 'not-allowed' : 'pointer';
+  }
+  if (btnDown) {
+    btnDown.disabled = (idx === steps.length - 1);
+    btnDown.style.opacity = (idx === steps.length - 1) ? '0.4' : '1';
+    btnDown.style.cursor = (idx === steps.length - 1) ? 'not-allowed' : 'pointer';
+  }
+}
+
+function openReorderProcessStepsModal() {
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.isPFMEA) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Reordering operations is only available in PFMEA mode. Please select or switch to a PFMEA first.', 'warning');
+    } else {
+      alert('Reordering operations is only available in PFMEA mode. Please select or switch to a PFMEA first.');
+    }
+    return;
+  }
+
+  renderReorderProcessStepsList();
+  openModal('reorderProcessStepsModal');
+}
+
+function renderReorderProcessStepsList() {
+  const container = document.getElementById('reorderProcessStepsListContainer');
+  const countBadge = document.getElementById('reorderPstepCountBadge');
+  if (!container) return;
+
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.isPFMEA || !ctx.pfmea) {
+    container.innerHTML = `<div style="padding:20px; text-align:center; color:#94a3b8;">Not in PFMEA mode. Open a PFMEA to reorder operations.</div>`;
+    return;
+  }
+
+  const steps = ctx.pfmea.processSteps || [];
+  if (countBadge) countBadge.textContent = `${steps.length} Operation${steps.length === 1 ? '' : 's'}`;
+
+  if (steps.length === 0) {
+    container.innerHTML = `
+      <div style="padding:40px 20px; text-align:center; color:var(--text-muted, #64748b);">
+        <div style="font-size:36px; margin-bottom:10px;">⚙️</div>
+        <div style="font-weight:700; font-size:15px; margin-bottom:6px; color:var(--text-primary, #0f172a);">No Operations Found</div>
+        <p style="font-size:12px; margin:0 auto 16px auto; max-width:380px;">Start building your PFMEA manufacturing sequence by adding the first process step or operation.</p>
+        <button type="button" class="btn btn-primary btn-sm" style="font-size:12px; font-weight:700; padding:6px 16px;" onclick="openAddProcessStepModalFromManager()">➕ Add First Operation</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = steps.map((step, idx) => {
+    const parentNode = step.dfmeaStructId ? getStructureNodeById(fmeaData.structure, step.dfmeaStructId) : null;
+    const parentLabel = parentNode ? `${parentNode.partNo ? parentNode.partNo + ' - ' : ''}${parentNode.name}` : 'Unassigned Component';
+    const isFirst = (idx === 0);
+    const isLast = (idx === steps.length - 1);
+
+    return `
+      <div class="reorder-pstep-card" draggable="true" data-step-id="${escapeHtml(step.id)}" data-index="${idx}"
+        style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; background:var(--bg-card, #f8fafc); border:1px solid var(--border-color, #cbd5e1); border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.04); transition:all 0.15s ease; cursor:grab;"
+        ondragstart="handlePstepDragStart(event, '${escapeHtml(step.id)}', ${idx})"
+        ondragover="handlePstepDragOver(event)"
+        ondragenter="handlePstepDragEnter(event)"
+        ondragleave="handlePstepDragLeave(event)"
+        ondrop="handlePstepDrop(event, ${idx})"
+      >
+        <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+          <span style="cursor:grab; font-size:16px; color:#94a3b8; user-select:none;" title="Drag to reorder">☰</span>
+          <span style="font-size:11px; font-weight:800; background:#0f172a; color:#f8fafc; padding:2px 7px; border-radius:4px; min-width:24px; text-align:center;">${idx + 1}</span>
+          <div style="min-width:0; flex:1;">
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <span class="badge" style="font-size:11px; font-weight:bold; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">⚙️ ${escapeHtml(step.stepNo || `Step ${idx + 1}`)}</span>
+              <strong style="font-size:13px; color:var(--text-primary, #0f172a);">${escapeHtml(step.name || 'Unnamed Operation')}</strong>
+              ${step.category ? `<span style="font-size:10px; color:#64748b; background:#f1f5f9; padding:1px 5px; border-radius:3px; border:1px solid #e2e8f0;">${escapeHtml(step.category)}</span>` : ''}
+            </div>
+            <div style="font-size:11px; color:var(--text-muted, #64748b); margin-top:2px; display:flex; gap:12px;">
+              <span>📦 Parent: <strong>${escapeHtml(parentLabel)}</strong></span>
+              ${step.description ? `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:320px;">📝 ${escapeHtml(step.description)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:4px; align-items:center; flex-shrink:0;">
+          <button type="button" class="btn btn-xs btn-outline" style="font-size:10.5px; padding:3px 7px; font-weight:600;" onclick="reorderProcessStepToPosition('${step.id}', 0)" title="Move to Top" ${isFirst ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:10.5px; padding:3px 7px;"' : ''}>⬆ Top</button>
+          <button type="button" class="btn btn-xs btn-outline" style="font-size:10.5px; padding:3px 7px; font-weight:700;" onclick="moveProcessStepOrder('${step.id}', -1); renderReorderProcessStepsList();" title="Move Up" ${isFirst ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:10.5px; padding:3px 7px;"' : ''}>▲ Up</button>
+          <button type="button" class="btn btn-xs btn-outline" style="font-size:10.5px; padding:3px 7px; font-weight:700;" onclick="moveProcessStepOrder('${step.id}', 1); renderReorderProcessStepsList();" title="Move Down" ${isLast ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:10.5px; padding:3px 7px;"' : ''}>▼ Down</button>
+          <button type="button" class="btn btn-xs btn-outline" style="font-size:10.5px; padding:3px 7px; font-weight:600;" onclick="reorderProcessStepToPosition('${step.id}', ${steps.length - 1})" title="Move to Bottom" ${isLast ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:10.5px; padding:3px 7px;"' : ''}>⬇ Bottom</button>
+          <button type="button" class="btn btn-xs btn-outline" style="font-size:10.5px; padding:3px 7px; font-weight:600;" onclick="openAddProcessStepModalFromManager('${step.dfmeaStructId || ''}', '${step.id}')" title="Edit Operation Details">✏️ Edit</button>
+          <button type="button" class="btn btn-xs btn-outline-danger" style="font-size:10.5px; padding:3px 7px; color:#ef4444; border-color:#fca5a5; font-weight:600;" onclick="deleteProcessStepDirect('${step.id}')" title="Delete Operation">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+let _draggedPstepId = null;
+let _draggedPstepIndex = -1;
+
+function handlePstepDragStart(e, stepId, index) {
+  _draggedPstepId = stepId;
+  _draggedPstepIndex = index;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', stepId);
+  e.currentTarget.style.opacity = '0.5';
+}
+
+function handlePstepDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function handlePstepDragEnter(e) {
+  e.preventDefault();
+  const card = e.currentTarget.closest('.reorder-pstep-card');
+  if (card) card.style.borderColor = '#0284c7';
+}
+
+function handlePstepDragLeave(e) {
+  const card = e.currentTarget.closest('.reorder-pstep-card');
+  if (card) card.style.borderColor = '';
+}
+
+function handlePstepDrop(e, targetIndex) {
+  e.preventDefault();
+  const card = e.currentTarget.closest('.reorder-pstep-card');
+  if (card) {
+    card.style.borderColor = '';
+    card.style.opacity = '1';
+  }
+  if (!_draggedPstepId || _draggedPstepIndex === -1 || _draggedPstepIndex === targetIndex) return;
+
+  reorderProcessStepToPosition(_draggedPstepId, targetIndex);
+  _draggedPstepId = null;
+  _draggedPstepIndex = -1;
 }
 
 function editPfmeaInstance(id) {
@@ -6538,6 +8304,16 @@ function loadParsedFMEAData(parsed) {
     if (parsed.systemUsers) systemUsers = parsed.systemUsers;
     if (parsed.loginAuditLogs) loginAuditLogs = parsed.loginAuditLogs;
 
+    // Ensure default user rights baseline
+    fmeaData.userRights = fmeaData.userRights || {};
+    if (!fmeaData.userRights['admin']) fmeaData.userRights['admin'] = 'Owner';
+    if (!fmeaData.userRights['readonly']) fmeaData.userRights['readonly'] = 'Viewer';
+    if (!fmeaData.userRights['*']) fmeaData.userRights['*'] = 'Viewer';
+    const fileCreator = fmeaData.createdBy || fmeaData.projectInfo?.creatorName || fmeaData.projectInfo?.author;
+    if (fileCreator && !fmeaData.userRights[fileCreator]) {
+      fmeaData.userRights[fileCreator] = 'Owner';
+    }
+
     // Restore saved AI Workbench progress so user can stop and resume after closing file
     if (typeof restoreWorkbenchStateFromProjectData === 'function') {
       restoreWorkbenchStateFromProjectData(fmeaData);
@@ -6547,7 +8323,7 @@ function loadParsedFMEAData(parsed) {
     renderFmeaContextDropdown();
     renderTreeSidebar();
 
-    // Auto-select structure node and render DFMEA table
+    // Auto-select structure node and render DFMEA table part by part
     const allStructNodes = getStructureNodesArray(fmeaData.structure);
     if (allStructNodes.length > 0) {
       if (!selectedStructureId || !allStructNodes.some(n => n.id === selectedStructureId)) {
@@ -6555,7 +8331,13 @@ function loadParsedFMEAData(parsed) {
       }
     }
 
-    renderFMEATable();
+    const firstNode = selectedStructureId ? getStructureNodeById(fmeaData.structure, selectedStructureId) : (allStructNodes[0] || null);
+    const firstNodeLabel = firstNode ? `${firstNode.partNo ? firstNode.partNo + ' - ' : ''}${firstNode.name}` : 'Root Element';
+    if (typeof renderFMEATableAsync === 'function') {
+      renderFMEATableAsync(firstNodeLabel);
+    } else {
+      renderFMEATable();
+    }
 
     closeModal('startupModal');
     processPostLoadRevisionCheck();
@@ -6711,12 +8493,26 @@ function processPostLoadRevisionCheck() {
   }
 }
 
-function renderVariantCheckboxList(containerId, prefix, selectedVariants = ['ALL']) {
+function renderVariantCheckboxList(containerId, prefix, selectedVariants = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const currentSelected = Array.isArray(selectedVariants) ? selectedVariants : [selectedVariants || 'ALL'];
-  const isAllChecked = currentSelected.includes('ALL');
+  ensureDefaultVariant(fmeaData);
+  const activeVariants = (fmeaData.variants || []).filter(v => v.active !== false);
+  const allActiveIds = activeVariants.map(v => v.id);
+
+  let currentSelected = [];
+  if (selectedVariants === null || selectedVariants === undefined || selectedVariants === 'ALL' || (Array.isArray(selectedVariants) && selectedVariants.includes('ALL'))) {
+    if (typeof selectedVariantFilter !== 'undefined' && selectedVariantFilter && selectedVariantFilter !== 'ALL') {
+      currentSelected = [selectedVariantFilter];
+    } else {
+      currentSelected = [...allActiveIds];
+    }
+  } else {
+    currentSelected = Array.isArray(selectedVariants) ? selectedVariants : [selectedVariants];
+  }
+
+  const isAllChecked = allActiveIds.length > 0 && allActiveIds.every(id => currentSelected.includes(id));
 
   let html = `
     <label style="display:flex; align-items:center; gap:6px; font-weight:bold; margin-bottom:4px; cursor:pointer;">
@@ -6726,7 +8522,7 @@ function renderVariantCheckboxList(containerId, prefix, selectedVariants = ['ALL
   `;
 
   (fmeaData.variants || []).forEach(v => {
-    const isChecked = isAllChecked || currentSelected.includes(v.id);
+    const isChecked = currentSelected.includes(v.id);
     html += `
       <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-bottom:3px; cursor:pointer;">
         <input type="checkbox" class="${prefix}_var_item" value="${v.id}" ${isChecked ? 'checked' : ''} ${!v.active ? 'disabled' : ''} onchange="handleIndividualVariantCheckboxToggle('${prefix}')">
@@ -6739,7 +8535,7 @@ function renderVariantCheckboxList(containerId, prefix, selectedVariants = ['ALL
 }
 
 function handleAllVariantCheckboxToggle(prefix, isChecked) {
-  const items = document.querySelectorAll(`.${prefix}_var_item`);
+  const items = document.querySelectorAll(`.${prefix}_var_item:not(:disabled)`);
   items.forEach(chk => {
     chk.checked = isChecked;
   });
@@ -6747,7 +8543,7 @@ function handleAllVariantCheckboxToggle(prefix, isChecked) {
 
 function handleIndividualVariantCheckboxToggle(prefix) {
   const allChk = document.getElementById(`${prefix}_var_ALL`);
-  const items = Array.from(document.querySelectorAll(`.${prefix}_var_item`));
+  const items = Array.from(document.querySelectorAll(`.${prefix}_var_item:not(:disabled)`));
   const allItemsChecked = items.length > 0 && items.every(c => c.checked);
   if (allChk) {
     allChk.checked = allItemsChecked;
@@ -6755,24 +8551,25 @@ function handleIndividualVariantCheckboxToggle(prefix) {
 }
 
 function getSelectedVariantsFromCheckboxes(prefix) {
-  const allChk = document.getElementById(`${prefix}_var_ALL`);
-  const items = Array.from(document.querySelectorAll(`.${prefix}_var_item`));
-  const checkedItems = items.filter(c => c.checked);
-
-  if (allChk && allChk.checked) return ['ALL'];
-  if (checkedItems.length === items.length && items.length > 0) return ['ALL'];
-
-  const selected = checkedItems.map(c => c.value);
-  return selected.length > 0 ? selected : ['ALL'];
+  const items = Array.from(document.querySelectorAll(`.${prefix}_var_item:checked`));
+  const selected = items.map(c => c.value);
+  if (selected.length > 0) {
+    return selected;
+  }
+  if (typeof selectedVariantFilter !== 'undefined' && selectedVariantFilter && selectedVariantFilter !== 'ALL') {
+    return [selectedVariantFilter];
+  }
+  return (fmeaData.variants || []).filter(v => v.active !== false).map(v => v.id);
 }
 
 function getSelectedCheckboxValues(itemClass, allId) {
-  const allChk = document.getElementById(allId);
-  if (allChk && allChk.checked) return ['ALL'];
-
   const items = document.querySelectorAll(`.${itemClass}:checked`);
   const selected = Array.from(items).map(c => c.value);
-  return selected.length > 0 ? selected : ['ALL'];
+  if (selected.length > 0) return selected;
+  if (typeof selectedVariantFilter !== 'undefined' && selectedVariantFilter && selectedVariantFilter !== 'ALL') {
+    return [selectedVariantFilter];
+  }
+  return (fmeaData.variants || []).filter(v => v.active !== false).map(v => v.id);
 }
 
 function renderVariantDropdowns() {
@@ -6798,9 +8595,16 @@ function renderVariantDropdowns() {
 }
 
 function getVariantNamesDisplay(variantVal) {
-  if (!variantVal || variantVal === 'ALL') return 'ALL';
+  if (!variantVal) return 'ALL';
   const valArray = Array.isArray(variantVal) ? variantVal : [variantVal];
-  if (valArray.includes('ALL')) return 'ALL';
+  if (valArray.length === 0) return '-';
+
+  if (valArray.includes('ALL')) {
+    const activeVars = (fmeaData.variants || []).filter(v => v.active !== false);
+    if (activeVars.length === 0) return 'ALL';
+    return activeVars.map(v => v.name).join(', ');
+  }
+
   const names = valArray.map(id => {
     const v = (fmeaData.variants || []).find(item => item.id === id);
     return v ? v.name : id;
@@ -6853,6 +8657,61 @@ function copyVariantDataBinding(item, baseVariantId, newVariantId) {
   }
 }
 
+function migrateLegacyAllVariants(variantIds) {
+  if (!fmeaData) return;
+  const fallbackIds = (variantIds && variantIds.length > 0)
+    ? variantIds
+    : (fmeaData.variants || []).map(v => v.id);
+  if (fallbackIds.length === 0) return;
+
+  function fixBinding(item) {
+    if (!item) return;
+    if (item.variants !== undefined) {
+      if (item.variants === 'ALL' || (Array.isArray(item.variants) && (item.variants.includes('ALL') || item.variants.length === 0))) {
+        item.variants = [...fallbackIds];
+      }
+    }
+    if (item.variantId !== undefined) {
+      if (item.variantId === 'ALL' || (Array.isArray(item.variantId) && (item.variantId.includes('ALL') || item.variantId.length === 0))) {
+        item.variantId = [...fallbackIds];
+      }
+    }
+  }
+
+  // 1. DFMEA Structure Tree
+  function traverseTree(node) {
+    if (!node) return;
+    fixBinding(node);
+    if (node.children) node.children.forEach(traverseTree);
+  }
+  if (fmeaData.structure) traverseTree(fmeaData.structure);
+
+  // 2. DFMEA Reqs, Function Lines, Functions
+  (fmeaData.requirements || []).forEach(fixBinding);
+  (fmeaData.functionLines || []).forEach(fixBinding);
+  (fmeaData.functions || []).forEach(fixBinding);
+
+  // 3. Libraries
+  if (fmeaData.libraries) {
+    (fmeaData.libraries.causes || []).forEach(fixBinding);
+    (fmeaData.libraries.controls || []).forEach(fixBinding);
+    (fmeaData.libraries.actions || []).forEach(fixBinding);
+    (fmeaData.libraries.masterCharacteristics || []).forEach(fixBinding);
+    (fmeaData.libraries.characteristics || []).forEach(fixBinding);
+    (fmeaData.libraries.failureModes || []).forEach(fixBinding);
+  }
+
+  // 4. PFMEA Instances
+  const pfmeas = fmeaData.pfmeaInstances ? fmeaData.pfmeaInstances : (fmeaData.pfmea ? [fmeaData.pfmea] : (fmeaData.pfmeas || []));
+  pfmeas.forEach(pfmea => {
+    if (pfmea.structure) traverseTree(pfmea.structure);
+    (pfmea.requirements || []).forEach(fixBinding);
+    (pfmea.processSteps || []).forEach(fixBinding);
+    (pfmea.functions || []).forEach(fixBinding);
+    (pfmea.functionLines || []).forEach(fixBinding);
+  });
+}
+
 function inheritBaseVariantDataLinks(baseVariantId, newVariantId) {
   if (!baseVariantId || !newVariantId) return;
 
@@ -6864,22 +8723,29 @@ function inheritBaseVariantDataLinks(baseVariantId, newVariantId) {
   }
   if (fmeaData.structure) traverseTree(fmeaData.structure);
 
-  // 2. Traverse DFMEA Reqs
+  // 2. Traverse DFMEA Reqs, Function Lines, Functions
   (fmeaData.requirements || []).forEach(r => copyVariantDataBinding(r, baseVariantId, newVariantId));
+  (fmeaData.functionLines || []).forEach(fl => copyVariantDataBinding(fl, baseVariantId, newVariantId));
+  (fmeaData.functions || []).forEach(f => copyVariantDataBinding(f, baseVariantId, newVariantId));
 
-  // 3. Traverse Libraries (Causes, Controls, Actions)
+  // 3. Traverse Libraries (Causes, Controls, Actions, Master Characteristics, Failure Modes)
   if (fmeaData.libraries) {
     (fmeaData.libraries.causes || []).forEach(c => copyVariantDataBinding(c, baseVariantId, newVariantId));
     (fmeaData.libraries.controls || []).forEach(ctrl => copyVariantDataBinding(ctrl, baseVariantId, newVariantId));
     (fmeaData.libraries.actions || []).forEach(act => copyVariantDataBinding(act, baseVariantId, newVariantId));
+    (fmeaData.libraries.masterCharacteristics || []).forEach(mc => copyVariantDataBinding(mc, baseVariantId, newVariantId));
+    (fmeaData.libraries.characteristics || []).forEach(ch => copyVariantDataBinding(ch, baseVariantId, newVariantId));
+    (fmeaData.libraries.failureModes || []).forEach(fm => copyVariantDataBinding(fm, baseVariantId, newVariantId));
   }
 
   // 4. Traverse PFMEA Instances
-  const pfmeas = fmeaData.pfmeaInstances ? fmeaData.pfmeaInstances : (fmeaData.pfmea ? [fmeaData.pfmea] : []);
+  const pfmeas = fmeaData.pfmeaInstances ? fmeaData.pfmeaInstances : (fmeaData.pfmea ? [fmeaData.pfmea] : (fmeaData.pfmeas || []));
   pfmeas.forEach(pfmea => {
     if (pfmea.structure) traverseTree(pfmea.structure);
     (pfmea.requirements || []).forEach(r => copyVariantDataBinding(r, baseVariantId, newVariantId));
     (pfmea.processSteps || []).forEach(ps => copyVariantDataBinding(ps, baseVariantId, newVariantId));
+    (pfmea.functions || []).forEach(f => copyVariantDataBinding(f, baseVariantId, newVariantId));
+    (pfmea.functionLines || []).forEach(fl => copyVariantDataBinding(fl, baseVariantId, newVariantId));
   });
 }
 
@@ -6986,6 +8852,12 @@ function saveVariant(e) {
       v.comments = comments;
     }
   } else {
+    // 1. Snapshot existing variant IDs before adding the new variant
+    const existingVariantIds = (fmeaData.variants || []).map(v => v.id);
+
+    // 2. Lock / migrate all existing elements with dynamic 'ALL' to the explicit list of existing variants
+    migrateLegacyAllVariants(existingVariantIds);
+
     const newVariantId = 'var-' + Date.now();
     const newVariant = {
       id: newVariantId,
@@ -6999,9 +8871,11 @@ function saveVariant(e) {
     };
     fmeaData.variants.push(newVariant);
 
+    // 3. If derived from base variant, inherit bindings from baseVariantId to newVariantId
     if (baseVariantId) {
       inheritBaseVariantDataLinks(baseVariantId, newVariantId);
     }
+    // If standalone (no baseVariantId), newly added variant is NOT linked to any existing element
   }
 
   resetVariantForm();
@@ -7276,16 +9150,11 @@ function buildTreeHTML(node, isEditableModal = false) {
 
   const editBtnHtml = isEditableModal ? `
     <div class="tree-node-actions">
-      <button type="button" class="tree-btn tree-btn-ai" onclick="event.stopPropagation(); openAiWorkbench2Modal('${node.id}')" title="AI Step-by-Step Analysis (AI Workbench 2)">
-        <span>✨ AI</span>
-      </button>
       <button type="button" class="tree-btn tree-btn-edit" onclick="event.stopPropagation(); editStructureNodeFromTree('${node.id}')" title="Edit element">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-        <span>Edit</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
       </button>
       <button type="button" class="tree-btn tree-btn-delete" onclick="event.stopPropagation(); deleteStructureElement('${node.id}')" title="Delete element and subtree">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-        <span>Delete</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
       </button>
     </div>
   ` : '';
@@ -7339,6 +9208,8 @@ function selectStructureNode(id, isEditableModal) {
     const btnSave = document.getElementById('btnSaveStruct');
     if (btnSave) btnSave.innerText = '➕ Create Node';
 
+    const btnCancel = document.getElementById('btnCancelStruct');
+    if (btnCancel) btnCancel.style.display = 'none';
     const btnDel = document.getElementById('btnDeleteStruct');
     if (btnDel) btnDel.style.display = 'none';
 
@@ -7355,15 +9226,23 @@ function selectStructureNode(id, isEditableModal) {
     const container = document.getElementById('modalTreeContainer');
     if (container) container.innerHTML = buildTreeHTML(ctx.structure, true);
   } else {
-    selectedStructureId = (selectedStructureId === id) ? null : id; // toggle focus
+    selectedStructureId = id; // Focus directly on clicked element for part-by-part loading
     // NOTE: Do NOT clear activeComparisonState here — comparison mode persists across
     // sidebar navigation. The diff highlights remain visible for whichever element is selected.
     // User exits compare mode explicitly via "Exit Comparison View" button in the banner.
     const node = getStructureNodeById(fmeaData.structure, selectedStructureId);
-    document.getElementById('focusedNodeName').innerText = node ? `${node.partNo} - ${node.name}` : 'None Selected (Showing All System Elements)';
+    const nodeLabel = node ? `${node.partNo ? node.partNo + ' - ' : ''}${node.name}` : 'Selected Element';
+    const focusedEl = document.getElementById('focusedNodeName');
+    if (focusedEl) focusedEl.innerText = node ? `${node.partNo} - ${node.name}` : 'None Selected (Showing All System Elements)';
     renderTreeSidebar();
-    renderFMEATable();
-    updateAiPackageGeneratorButtonVisibility();
+    if (typeof renderFMEATableAsync === 'function') {
+      renderFMEATableAsync(nodeLabel, () => {
+        updateAiPackageGeneratorButtonVisibility();
+      });
+    } else {
+      renderFMEATable();
+      updateAiPackageGeneratorButtonVisibility();
+    }
   }
 }
 
@@ -7382,8 +9261,10 @@ function editStructureNodeFromTree(id) {
   const btnSave = document.getElementById('btnSaveStruct');
   if (btnSave) btnSave.innerText = '💾 Update Node';
 
+  const btnCancel = document.getElementById('btnCancelStruct');
+  if (btnCancel) btnCancel.style.display = 'inline-block';
   const btnDel = document.getElementById('btnDeleteStruct');
-  if (btnDel) btnDel.style.display = 'inline-block';
+  if (btnDel) btnDel.style.display = 'none';
 
   const targetBadge = document.getElementById('targetRefNodeBadge');
   if (targetBadge) {
@@ -7409,9 +9290,52 @@ function editStructureNodeFromTree(id) {
   if (container) container.innerHTML = buildTreeHTML(ctx.structure, true);
 }
 
+function cancelStructureEdit() {
+  const ctx = getActiveFmeaData();
+  const form = document.getElementById('structureForm');
+  if (form) form.reset();
+  document.getElementById('structNodeId').value = '';
+  document.getElementById('structPartNo').value = '';
+  document.getElementById('structName').value = '';
+  document.getElementById('structDesc').value = '';
+
+  const btnSave = document.getElementById('btnSaveStruct');
+  if (btnSave) btnSave.innerText = '➕ Create Node';
+
+  const btnCancel = document.getElementById('btnCancelStruct');
+  if (btnCancel) btnCancel.style.display = 'none';
+  const btnDel = document.getElementById('btnDeleteStruct');
+  if (btnDel) btnDel.style.display = 'none';
+
+  const hActions = document.getElementById('nodeHierarchyActions');
+  if (hActions) hActions.style.display = 'none';
+
+  const targetBadge = document.getElementById('targetRefNodeBadge');
+  const refNode = getStructureNodeById(ctx.structure, selectedReferenceNodeId || ctx.structure.id);
+  if (targetBadge) {
+    targetBadge.innerHTML = refNode ? `🎯 Target Reference Node: <strong>${escapeHtml(refNode.partNo)} - ${escapeHtml(refNode.name)}</strong>` : '';
+  }
+
+  const title = document.getElementById('structFormTitle');
+  if (title) title.innerText = ctx.isPFMEA ? '+ Add Process Step' : '+ Add Structure Element';
+
+  renderVariantCheckboxList('structVariantCheckboxList', 'struct', ['ALL']);
+
+  const container = document.getElementById('modalTreeContainer');
+  if (container) container.innerHTML = buildTreeHTML(ctx.structure, true);
+}
+
 function openStructureModal() {
   if (!checkCanEditFMEA()) return;
   const ctx = getActiveFmeaData();
+  if (ctx && ctx.isPFMEA) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Structure Analysis is hidden in PFMEA mode. Use Manage Process for PFMEA operations.', 'warning');
+    } else {
+      alert('Structure Analysis is hidden in PFMEA mode. Use Manage Process for PFMEA operations.');
+    }
+    return;
+  }
   selectedReferenceNodeId = selectedStructureId || ctx.structure.id;
   const container = document.getElementById('modalTreeContainer');
   if (container) container.innerHTML = buildTreeHTML(ctx.structure, true);
@@ -7446,6 +9370,8 @@ function openStructureModal() {
     targetBadge.innerHTML = refNode ? `🎯 Target Reference Node: <strong>${escapeHtml(refNode.partNo)} - ${escapeHtml(refNode.name)}</strong>` : '';
   }
 
+  const btnCancel = document.getElementById('btnCancelStruct');
+  if (btnCancel) btnCancel.style.display = 'none';
   const btnDel = document.getElementById('btnDeleteStruct');
   if (btnDel) btnDel.style.display = 'none';
 
@@ -7653,6 +9579,12 @@ function saveStructureElement(e) {
   document.getElementById('structFormTitle').innerText = ctx.isPFMEA ? '+ Add Process Step' : '+ Add Structure Element';
   const btnSave = document.getElementById('btnSaveStruct');
   if (btnSave) btnSave.innerText = '➕ Create Node';
+  const btnCancel = document.getElementById('btnCancelStruct');
+  if (btnCancel) btnCancel.style.display = 'none';
+  const btnDel = document.getElementById('btnDeleteStruct');
+  if (btnDel) btnDel.style.display = 'none';
+  const hActions = document.getElementById('nodeHierarchyActions');
+  if (hActions) hActions.style.display = 'none';
 }
 
 function deleteStructureElement(targetNodeId = null) {
@@ -7850,8 +9782,12 @@ function deleteStructureElement(targetNodeId = null) {
   const form = document.getElementById('structureForm');
   if (form) form.reset();
   document.getElementById('structNodeId').value = '';
+  const btnCancel = document.getElementById('btnCancelStruct');
+  if (btnCancel) btnCancel.style.display = 'none';
   const btnDel = document.getElementById('btnDeleteStruct');
   if (btnDel) btnDel.style.display = 'none';
+  const hActions = document.getElementById('nodeHierarchyActions');
+  if (hActions) hActions.style.display = 'none';
 }
 
 // ----------------------------------------------------
@@ -7943,7 +9879,7 @@ function onFuncStructChange() {
     <div class="function-item-card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
       <div style="flex:1; display:flex; align-items:center; gap:6px;">
         <span style="font-size:14px; color:#3b82f6;">⚡</span>
-        <strong style="font-size:12px; color:#1e293b;">${escapeHtml(f.name)}</strong>
+        <strong style="font-size:12px;">${escapeHtml(f.name)}</strong>
       </div>
       ${isReadOnly ? '' : `<div class="card-actions" style="display:flex; gap:4px;">
         <button class="btn btn-sm btn-secondary" onclick="editFunction('${f.id}')">Edit</button>
@@ -8044,6 +9980,20 @@ function deleteFunction(funcId) {
   const targetFuncs = ctx.isPFMEA ? (ctx.pfmea.functions || []) : (fmeaData.functions || []);
   const f = targetFuncs.find(item => item.id === funcId);
 
+  if (f && f.referenceId && typeof getReferenceCountForFunction === 'function') {
+    const refCount = getReferenceCountForFunction(f);
+    if (refCount > 1) {
+      promptReferencedElementDeletion({
+        type: 'FUNCTION',
+        funcId: f.id,
+        refId: f.referenceId,
+        name: f.name,
+        referenceCount: refCount
+      });
+      return;
+    }
+  }
+
   if (f && (f.isInterfaceFunction || f.interfaceId)) {
     showCustomAlert(
       `🔒 Non-Deletable Interface Function\n\n` +
@@ -8065,6 +10015,7 @@ function deleteFunction(funcId) {
     fmeaData.functionLines = (fmeaData.functionLines || []).filter(fl => fl.funcId !== funcId);
   }
 
+  if (typeof cleanupOrphanedReferences === 'function') cleanupOrphanedReferences();
   onFuncStructChange();
   renderFMEATable();
 }
@@ -8089,6 +10040,9 @@ function saveNewFunctionToStructure(e) {
       const f = targetFuncs.find(item => item.id === editId);
       if (f) {
         f.name = funcName;
+        if (typeof syncReferencedFunctions === 'function') {
+          syncReferencedFunctions(f);
+        }
       }
     } else {
       const newFuncId = 'func-' + Date.now();
@@ -9333,7 +11287,7 @@ function renderEffectsLibraryList() {
     // In DFMEA mode, enforce strict ancestor chain (ancestorStructIds or main-effect-node)
     if (!ctx.isPFMEA) {
       if (eff.structId && eff.structId !== 'main-effect-node') {
-        if (!ancestorStructIds.includes(String(eff.structId))) {
+        if (!ancestorStructIds.includes(String(eff.structId)) && !(ctx.structure && (String(eff.structId) === String(ctx.structure.id) || String(eff.systemId) === String(ctx.structure.id)))) {
           return false;
         }
       }
@@ -9353,7 +11307,11 @@ function renderEffectsLibraryList() {
     const activeChainTab = window.activeEffChainFilter || 'ALL';
     if (activeChainTab !== 'ALL') {
       if (activeChainTab === 'main-effect-node') {
-        const isMain = (!eff.structId && !eff.dfmeaFmId) || (eff.systemId === 'main-effect-node') || (eff.structId === 'main-effect-node') || ((eff.systemName || '').includes('Main Effect') || (eff.systemName || '').includes('Global'));
+        const isMain = (!eff.structId && !eff.dfmeaFmId) ||
+                       (eff.systemId === 'main-effect-node') ||
+                       (eff.structId === 'main-effect-node') ||
+                       ((eff.systemName || '').includes('Main Effect') || (eff.systemName || '').includes('Global')) ||
+                       (ctx.structure && (String(eff.structId) === String(ctx.structure.id) || String(eff.systemId) === String(ctx.structure.id)));
         if (!isMain) return false;
       } else {
         if (String(eff.structId) !== String(activeChainTab) && String(eff.systemId) !== String(activeChainTab)) {
@@ -9508,13 +11466,15 @@ function renderEffectsLibraryList() {
       const sysTag = buildColoredHierarchyTag(eff.systemName, eff.functionName, eff.requirement);
       const sysFuncText = sysTag ? `<br>${sysTag}` : '';
 
-      const sevColor = (eff.severity >= 9) ? '#ef4444' : (eff.severity >= 7) ? '#f97316' : '#eab308';
+      const sNum = parseInt(eff.severity, 10) || 7;
+      const sevColor = (sNum >= 9) ? '#ef4444' : (sNum >= 7) ? '#f59e0b' : '#10b981';
+      const sevBg = (sNum >= 9) ? 'rgba(239,68,68,0.15)' : (sNum >= 7) ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)';
 
       groupHtml += `
         <div class="checkbox-card" style="padding:4px 8px; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; border: 1px solid ${isChecked ? '#0284c7' : '#334155'}; border-radius: 4px; transition: border-color 0.15s;">
           <label style="cursor:pointer; flex:1; margin-bottom:0; font-size:11px;">
             <input type="checkbox" id="chk_eff_${eff.id}" class="${grpClass}" ${isChecked ? 'checked' : ''} onchange="togglePendingEffectSelection('${eff.id}', this.checked)" style="accent-color:#0284c7; margin-right:4px;">
-            <span style="font-weight:800; color:${sevColor}; background:rgba(239,68,68,0.15); border:1px solid ${sevColor}; padding:0px 4px; border-radius:3px; font-size:10px;">Sev: ${eff.severity}</span> 
+            <span style="font-weight:800; color:${sevColor}; background:${sevBg}; border:1px solid ${sevColor}; padding:0px 4px; border-radius:3px; font-size:10px;">Sev: ${sNum}</span> 
             <strong>${escapeHtml(eff.desc)}</strong> ${originBadge}
             ${sysFuncText}
           </label>
@@ -9708,53 +11668,74 @@ function getHighestClassSymbolForCause(cause) {
 
 function syncAndStoreCauseCharacteristics(cause) {
   if (!cause) return;
+  if (cause._characteristicsExplicitlyUnlinked) return;
+  if (Array.isArray(cause.characteristicIds)) {
+    // Cause characteristics are already managed as an array.
+    // Never overwrite or re-populate from raw string!
+    return;
+  }
   if (!fmeaData.libraries) fmeaData.libraries = {};
   if (!fmeaData.libraries.characteristics) fmeaData.libraries.characteristics = [];
+
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : fmeaData;
+  if (ctx && ctx.libraries && !ctx.libraries.characteristics) {
+    ctx.libraries.characteristics = [];
+  }
 
   if (!cause.characteristicIds) {
     cause.characteristicIds = [];
   }
 
-  if (cause.characteristics && typeof cause.characteristics === 'string') {
-    const rawStr = cause.characteristics.trim();
-    if (rawStr && rawStr !== '-') {
-      const items = rawStr.split(/,|\n|;/).map(s => s.trim()).filter(s => s.length > 0 && s !== '-');
-      items.forEach(cName => {
-        let existing = fmeaData.libraries.characteristics.find(c => (c.name || '').trim().toLowerCase() === cName.toLowerCase());
-        if (!existing) {
-          existing = {
-            id: 'char-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-            name: cName,
-            spec: cause.spec || '',
-            classSymbol: cause.classSymbol || 'None',
-            structId: cause.structId || null,
-            variants: cause.variants || cause.variantId || ['ALL'],
-            applicability: 'ALL',
-            origin: cause.origin || 'Imported'
-          };
-          fmeaData.libraries.characteristics.push(existing);
+  const rawChar = (cause.characteristics || cause.characteristicName || '').trim();
+  if (rawChar && rawChar !== '-') {
+    const items = rawChar.split(/,|\n|;/).map(s => s.trim()).filter(s => s.length > 0 && s !== '-');
+    items.forEach(cName => {
+      let existing = fmeaData.libraries.characteristics.find(c =>
+        (c.name || '').trim().toLowerCase() === cName.toLowerCase() &&
+        (!cause.structId || !c.structId || String(c.structId) === String(cause.structId))
+      );
+      if (!existing) {
+        existing = {
+          id: 'char-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+          name: cName,
+          spec: cause.spec || '',
+          classSymbol: cause.classSymbol || 'None',
+          structId: cause.structId || null,
+          systemElement: cause.systemElement || '',
+          variants: cause.variants || cause.variantId || ['ALL'],
+          applicability: (cause.origin && String(cause.origin).includes('PFMEA')) ? 'PFMEA' : 'ALL',
+          origin: cause.origin || 'Imported'
+        };
+        fmeaData.libraries.characteristics.push(existing);
+        if (ctx && ctx.libraries && ctx.libraries.characteristics && !ctx.libraries.characteristics.some(x => x.id === existing.id)) {
+          ctx.libraries.characteristics.push(existing);
         }
-        if (existing && !cause.characteristicIds.includes(existing.id)) {
-          cause.characteristicIds.push(existing.id);
-        }
-      });
-    }
+      }
+      if (existing && !cause.characteristicIds.includes(existing.id)) {
+        cause.characteristicIds.push(existing.id);
+      }
+    });
   }
 
   if (Array.isArray(cause.characteristicIds) && cause.characteristicIds.length > 0) {
     cause.characteristicIds.forEach(charId => {
       const exists = fmeaData.libraries.characteristics.some(c => c.id === charId);
-      if (!exists && cause.characteristics && cause.characteristics !== '-') {
-        fmeaData.libraries.characteristics.push({
+      if (!exists && rawChar && rawChar !== '-') {
+        const newEntry = {
           id: charId,
-          name: cause.characteristics,
+          name: rawChar,
           spec: cause.spec || '',
           classSymbol: cause.classSymbol || 'None',
           structId: cause.structId || null,
+          systemElement: cause.systemElement || '',
           variants: cause.variants || cause.variantId || ['ALL'],
-          applicability: 'ALL',
+          applicability: (cause.origin && String(cause.origin).includes('PFMEA')) ? 'PFMEA' : 'ALL',
           origin: cause.origin || 'Imported'
-        });
+        };
+        fmeaData.libraries.characteristics.push(newEntry);
+        if (ctx && ctx.libraries && ctx.libraries.characteristics && !ctx.libraries.characteristics.some(x => x.id === newEntry.id)) {
+          ctx.libraries.characteristics.push(newEntry);
+        }
       }
     });
   }
@@ -9766,6 +11747,11 @@ function ensureAllCharacteristicsStoredAndLinked() {
 
   const causesList = fmeaData.libraries.causes || [];
   causesList.forEach(c => syncAndStoreCauseCharacteristics(c));
+
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : null;
+  if (ctx && ctx.libraries && Array.isArray(ctx.libraries.causes) && ctx !== fmeaData) {
+    ctx.libraries.causes.forEach(c => syncAndStoreCauseCharacteristics(c));
+  }
 
   if (fmeaData.pfmea && fmeaData.pfmea.libraries && Array.isArray(fmeaData.pfmea.libraries.causes)) {
     fmeaData.pfmea.libraries.causes.forEach(c => syncAndStoreCauseCharacteristics(c));
@@ -9787,11 +11773,18 @@ function getLinkedCharacteristicsForCause(cause) {
   syncAndStoreCauseCharacteristics(cause);
 
   let charList = [];
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : fmeaData;
+  const allChars = [
+    ...(fmeaData.libraries?.characteristics || []),
+    ...(ctx?.libraries?.characteristics || [])
+  ];
+
   if (cause.characteristicIds && Array.isArray(cause.characteristicIds) && cause.characteristicIds.length > 0) {
-    charList = cause.characteristicIds.map(id => fmeaData.libraries.characteristics.find(c => c.id === id)).filter(Boolean);
+    charList = cause.characteristicIds.map(id => allChars.find(c => String(c.id) === String(id))).filter(Boolean);
   }
 
-  if (charList.length === 0 && cause.characteristics && cause.characteristics !== '-') {
+  // Legacy fallback ONLY if characteristicIds was NEVER an array and not explicitly unlinked
+  if (charList.length === 0 && !cause._characteristicsExplicitlyUnlinked && (!cause.characteristicIds || !Array.isArray(cause.characteristicIds)) && cause.characteristics && cause.characteristics !== '-') {
     charList.push({
       id: 'legacy-' + (cause.id || Math.random()),
       name: cause.characteristics,
@@ -9813,12 +11806,17 @@ function getLinkedCharacteristicsForCause(cause) {
 }
 
 function formatCauseCharacteristicsCell(cause) {
+  if (!cause) return '-';
   const chars = getLinkedCharacteristicsForCause(cause);
   if (!chars || chars.length === 0) return typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA() ? '-' : '<span class="text-muted">Dbl-click to link</span>';
 
   return chars.map(ch => {
     const specStr = ch.spec ? `<span style="color:#0f766e; font-size:11px; font-weight:500;"> [Spec: ${escapeHtml(ch.spec)}]</span>` : '';
-    return `<div style="margin-bottom:2px; line-height:1.3;"><strong style="color:#0369a1;">${escapeHtml(ch.name || ch.details || '')}</strong>${specStr}</div>`;
+    const chName = ch.name || ch.details || '';
+
+    return `<div class="fmea-char-item" data-cause-id="${cause.id}" data-char-id="${ch.id}" data-char-name="${escapeHtml(chName)}" style="margin-bottom:2px; line-height:1.3;">
+      <strong style="color:#0369a1;">${escapeHtml(chName)}</strong>${specStr}
+    </div>`;
   }).join('');
 }
 
@@ -9870,7 +11868,8 @@ function openLinkCharacteristicsModalFromForm() {
 
 function openLinkCharacteristicsModal(causeId) {
   activeLinkingCauseId = causeId;
-  const cause = (fmeaData.libraries.causes || []).find(c => c.id === causeId);
+  const causes = (typeof findCauseObjectEverywhere === 'function') ? findCauseObjectEverywhere(causeId) : [];
+  const cause = causes[0] || (fmeaData.libraries?.causes || []).find(c => c.id === causeId);
   activeFormCharIds = cause ? [...(cause.characteristicIds || [])] : [];
 
   const title = document.getElementById('linkCharacteristicsModalTitle');
@@ -10145,10 +12144,38 @@ function saveCauseCharacteristicsLinkage() {
     if (hiddenInput) hiddenInput.value = activeFormCharIds.join(',');
     updateCauseFormLinkedCharsSummary(activeFormCharIds);
   } else if (activeLinkingCauseId) {
-    const cause = (fmeaData.libraries.causes || []).find(c => c.id === activeLinkingCauseId);
-    if (cause) {
+    const causes = (typeof findCauseObjectEverywhere === 'function')
+      ? findCauseObjectEverywhere(activeLinkingCauseId)
+      : [(fmeaData.libraries.causes || []).find(c => c.id === activeLinkingCauseId)].filter(Boolean);
+    const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : fmeaData;
+    const allChars = [
+      ...(fmeaData.libraries?.characteristics || []),
+      ...(ctx?.libraries?.characteristics || [])
+    ];
+    const linkedNames = activeFormCharIds.map(id => {
+      const found = allChars.find(x => String(x.id) === String(id));
+      return found ? (found.name || found.details || '') : '';
+    }).filter(Boolean);
+
+    causes.forEach(cause => {
       cause.characteristicIds = [...activeFormCharIds];
-      cause.classSymbol = getHighestClassSymbolForCause(cause);
+      if (activeFormCharIds.length === 0) {
+        cause.characteristics = '-';
+        cause.characteristicName = '-';
+        cause._characteristicsExplicitlyUnlinked = true;
+      } else {
+        cause.characteristics = linkedNames.join('; ');
+        cause.characteristicName = linkedNames.join('; ');
+        cause._characteristicsExplicitlyUnlinked = false;
+      }
+      cause.classSymbol = (typeof getHighestClassSymbolForCause === 'function') ? getHighestClassSymbolForCause(cause) : (cause.classSymbol || '-');
+    });
+
+    if (typeof saveProjectToLocalStorage === 'function') {
+      saveProjectToLocalStorage();
+    }
+    if (typeof performAutoSave === 'function') {
+      performAutoSave('Characteristics Linkage Updated');
     }
     renderCausesLibraryList();
     renderFMEATable();
@@ -10185,14 +12212,15 @@ function getVariantsForCauseLegacy(causeId) {
 
 function matchesVariantFilter(itemVars, targetVarFilter) {
   const filterVal = targetVarFilter !== undefined ? targetVarFilter : (typeof selectedVariantFilter !== 'undefined' ? selectedVariantFilter : 'ALL');
-  if (!filterVal) return true;
+  if (!filterVal || filterVal === 'ALL') return true;
 
   const targetArr = Array.isArray(filterVal) ? filterVal : [filterVal];
   if (targetArr.length === 0 || targetArr.includes('ALL')) return true;
 
-  if (!itemVars) return true; // By default applies to all variants
+  if (!itemVars) return false;
   const itemArr = Array.isArray(itemVars) ? itemVars : [itemVars];
-  if (itemArr.length === 0 || itemArr.includes('ALL')) return true;
+  if (itemArr.length === 0) return false;
+  if (itemArr.includes('ALL')) return true;
 
   return targetArr.some(v => itemArr.includes(v));
 }
@@ -11010,6 +13038,31 @@ function deleteFailureMode(flId, fmId, e) {
     return;
   }
 
+  // Check if failure mode has active references
+  let targetFmObj = null;
+  const allLines = (ctx.functionLines || []).concat(fmeaData.functionLines || []);
+  for (const line of allLines) {
+    if (line.failureModes) {
+      const found = line.failureModes.find(m => m.id === fmId);
+      if (found) { targetFmObj = found; break; }
+    }
+  }
+
+  if (targetFmObj && targetFmObj.referenceId && typeof getReferenceCountForFailureMode === 'function') {
+    const refCount = getReferenceCountForFailureMode(targetFmObj);
+    if (refCount > 1) {
+      promptReferencedElementDeletion({
+        type: 'FAILURE_MODE',
+        flId: flId,
+        fmId: fmId,
+        refId: targetFmObj.referenceId,
+        name: targetFmObj.name,
+        referenceCount: refCount
+      });
+      return;
+    }
+  }
+
   if (!confirm("Are you sure you want to delete this Failure Mode?\nAll linked Effects, Causes, and Action mappings associated with this Failure Mode will be unlinked/removed.")) {
     return;
   }
@@ -11044,6 +13097,7 @@ function deleteFailureMode(flId, fmId, e) {
   if (fmeaData.failureModeEffects) delete fmeaData.failureModeEffects[fmId];
   if (fmeaData.failureModeCauses) delete fmeaData.failureModeCauses[fmId];
 
+  if (typeof cleanupOrphanedReferences === 'function') cleanupOrphanedReferences();
   saveProjectToLocalStorage();
   renderFMEATable();
   renderExistingFmsForTargetFunction();
@@ -11784,7 +13838,11 @@ function toggleViewCompleteFmea(checked) {
       focusedNodeName.textContent = activeNode ? `${activeNode.partNo ? activeNode.partNo + ' - ' : ''}${activeNode.name}` : 'None Selected (Showing Full Tree)';
     }
   }
-  renderFMEATable();
+  if (typeof renderFMEATableAsync === 'function') {
+    renderFMEATableAsync(viewCompleteFmeaMode ? 'Complete FMEA (All System Elements)' : 'Active Component');
+  } else {
+    renderFMEATable();
+  }
 }
 
 function getColumnTitle(colKey) {
@@ -12434,7 +14492,7 @@ function renderCauseFormattedCell(cause, idx) {
   const sysTag = buildColoredHierarchyTag(cause.systemElement, cause.function, cause.requirement);
   const numLabel = (typeof idx === 'number') ? `${idx + 1}.` : '1.';
   const descText = cause.details || cause.desc || cause.name || cause.text || '';
-  return `<div style="text-align:left; margin-bottom:4px; display:flex;">
+  return `<div class="fmea-cause-item" data-cause-id="${cause.id || ''}" data-cause-text="${escapeHtml(descText)}" style="text-align:left; margin-bottom:4px; display:flex;">
     <div style="font-weight:bold; color:var(--text-secondary); font-size:11.5px; margin-bottom:2px;">${numLabel}</div>
     <div style="padding-left:4px;">
       ${sysTag}
@@ -12484,10 +14542,11 @@ function getRiskRatingStyle(sev, occ, det, isVDA) {
 }
 
 function getSeverityColorStyle(sev) {
-  const num = parseInt(sev);
+  const num = parseInt(sev, 10);
   if (isNaN(num)) return '';
-  if (num === 9 || num === 10) return 'background-color:#ef4444 !important; color:#ffffff !important; font-weight:800 !important;';
+  if (num >= 9) return 'background-color:#ef4444 !important; color:#ffffff !important; font-weight:800 !important;';
   if (num === 7 || num === 8) return 'background-color:#f59e0b !important; color:#0f172a !important; font-weight:800 !important;';
+  if (num >= 1 && num <= 6) return 'background-color:#10b981 !important; color:#ffffff !important; font-weight:800 !important;';
   return '';
 }
 
@@ -12500,13 +14559,14 @@ function getDetectionColorStyle(det) {
 }
 
 function getSeverityBadgeHtml(sev) {
-  const num = parseInt(sev);
+  const num = parseInt(sev, 10);
   if (isNaN(num) || num <= 0) return escapeHtml(String(sev || '-'));
   let colorStyle = getSeverityColorStyle(sev);
-  if (colorStyle) {
-    return `<span class="rating-badge" style="${colorStyle} padding:2px 8px; border-radius:4px; font-weight:800; display:inline-block;">${num}</span>`;
+  if (!colorStyle) {
+    colorStyle = 'background-color:#10b981 !important; color:#ffffff !important; font-weight:800 !important;';
   }
-  return `<span style="font-weight:700;">${num}</span>`;
+  const displayText = (typeof sev === 'string' && sev.includes('(')) ? sev : num;
+  return `<span class="rating-badge sev-badge-${num}" style="${colorStyle} padding:2px 8px; border-radius:4px; font-weight:800; display:inline-block; font-size:11px; vertical-align:middle; margin-left:4px; box-shadow:0 1px 2px rgba(0,0,0,0.2);">${escapeHtml(String(displayText))}</span>`;
 }
 
 window.getRiskRatingStyle = getRiskRatingStyle;
@@ -12515,9 +14575,2948 @@ window.getOccurrenceColorStyle = getOccurrenceColorStyle;
 window.getDetectionColorStyle = getDetectionColorStyle;
 window.getSeverityBadgeHtml = getSeverityBadgeHtml;
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// AIAG & VDA FMEA WORKBENCH — ADVANCED COPY & PASTE SYSTEM
+// Multi-Select Copy, Cross-FMEA Paste, 3 Paradigms & Bi-directional Sync
+// ══════════════════════════════════════════════════════════════════════════════
+
+var fmeaClipboard = null;
+var selectedFuncCopyIds = new Set(); // Set of flId
+var selectedFmCopyIds = new Set();   // Set of fmId
+var pendingPasteTargetType = null;     // 'FUNCTION' or 'FAILURE_MODE'
+var pendingPasteTargetId = null;       // target structId or flId
+
+// --- Utility & Artifact Sanitization Helpers ---------------------------------
+
+function stripBadgeArtifacts(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/🔗\s*Ref(\s*\(\d+\))?/gi, '')
+    .replace(/\bRef\s*\(\d+\)/gi, '')
+    .replace(/🔗\s*DFMEA/gi, '')
+    .replace(/[🔗📋📥📌🗑️❌✏️✂️]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeAllReferenceNames(targetData) {
+  const root = targetData || (typeof fmeaData !== 'undefined' ? fmeaData : null);
+  if (!root) return;
+
+  const scrub = (item) => {
+    if (!item || typeof item.name !== 'string') return;
+    const clean = stripBadgeArtifacts(item.name);
+    if (clean && clean !== item.name) {
+      item.name = clean;
+    }
+  };
+
+  if (Array.isArray(root.functions)) {
+    root.functions.forEach(scrub);
+  }
+  if (Array.isArray(root.functionLines)) {
+    root.functionLines.forEach(fl => {
+      if (Array.isArray(fl.failureModes)) fl.failureModes.forEach(scrub);
+    });
+  }
+  if (Array.isArray(root.pfmeas)) {
+    root.pfmeas.forEach(p => {
+      if (Array.isArray(p.functions)) p.functions.forEach(scrub);
+      if (Array.isArray(p.functionLines)) {
+        p.functionLines.forEach(fl => {
+          if (Array.isArray(fl.failureModes)) fl.failureModes.forEach(scrub);
+        });
+      }
+    });
+  }
+}
+
+function loadClipboardFromStorage() {
+  try {
+    const raw = localStorage.getItem('fmea_clipboard_v1');
+    if (raw) {
+      fmeaClipboard = JSON.parse(raw);
+    }
+  } catch (err) {
+    console.warn('[Clipboard] Error loading stored clipboard:', err);
+  }
+}
+
+function saveClipboardToStorage() {
+  try {
+    if (fmeaClipboard) {
+      localStorage.setItem('fmea_clipboard_v1', JSON.stringify(fmeaClipboard));
+    } else {
+      localStorage.removeItem('fmea_clipboard_v1');
+    }
+  } catch (err) {
+    console.warn('[Clipboard] Error saving clipboard to storage:', err);
+  }
+}
+
+// Initial load
+loadClipboardFromStorage();
+
+function toggleCopySelectFunction(flId, funcId, chk) {
+  if (chk && chk.checked) {
+    selectedFuncCopyIds.add(flId);
+  } else {
+    selectedFuncCopyIds.delete(flId);
+  }
+  updateCopyToolbarUI();
+}
+
+function toggleCopySelectFailureMode(flId, fmId, chk) {
+  if (chk && chk.checked) {
+    selectedFmCopyIds.add(fmId);
+  } else {
+    selectedFmCopyIds.delete(fmId);
+  }
+  updateCopyToolbarUI();
+}
+
+function clearCopySelections() {
+  selectedFuncCopyIds.clear();
+  selectedFmCopyIds.clear();
+  document.querySelectorAll('.copy-select-chk').forEach(c => { c.checked = false; });
+  updateCopyToolbarUI();
+}
+
+function updateCopyToolbarUI() {
+  const totalSelected = (typeof selectedFuncCopyIds !== 'undefined' ? selectedFuncCopyIds.size : 0) + (typeof selectedFmCopyIds !== 'undefined' ? selectedFmCopyIds.size : 0);
+  const countEl = document.getElementById('copySelectedCount');
+  if (countEl) countEl.textContent = String(totalSelected);
+
+  const clearBtn = document.getElementById('btnClearCopySelection');
+  if (clearBtn) clearBtn.style.display = totalSelected > 0 ? 'inline-flex' : 'none';
+
+  loadClipboardFromStorage();
+  const clipCountEl = document.getElementById('clipboardItemCount');
+  const clipCount = (fmeaClipboard && Array.isArray(fmeaClipboard.items)) ? fmeaClipboard.items.length : 0;
+  if (clipCountEl) clipCountEl.textContent = String(clipCount);
+
+  const pasteBtn = document.getElementById('btnPasteClipboard');
+  if (pasteBtn) {
+    pasteBtn.style.opacity = clipCount > 0 ? '1' : '0.6';
+    pasteBtn.title = clipCount > 0 ? ('Paste ' + clipCount + ' ' + (fmeaClipboard ? fmeaClipboard.type.toLowerCase() : 'item') + '(s) from clipboard') : 'Clipboard is empty';
+  }
+
+  const group = document.getElementById('copyPasteToolbarGroup');
+  if (group) {
+    if (totalSelected > 0 || clipCount > 0) {
+      group.style.display = 'inline-flex';
+      setCopyModeActive(true);
+    } else {
+      group.style.display = 'none';
+      setCopyModeActive(false);
+    }
+  }
+}
+
+function enableMultiSelectMode(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  closeFmeaContextMenu();
+  setCopyModeActive(true);
+  const group = document.getElementById('copyPasteToolbarGroup');
+  if (group) group.style.display = 'inline-flex';
+  showToast("Multi-select mode active. Select items via checkboxes, then right-click to Copy or Move (Press ESC to cancel).", "info");
+}
+
+function copySingleFunction(flId, funcId, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const ctx = getActiveFmeaData();
+  const item = buildFunctionClipboardData(flId, funcId, ctx);
+  if (!item) {
+    showToast("Unable to copy function.", "warning");
+    return;
+  }
+
+  fmeaClipboard = {
+    type: 'FUNCTION',
+    timestamp: Date.now(),
+    sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+    sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+    sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+    items: [item]
+  };
+  saveClipboardToStorage();
+  updateCopyToolbarUI();
+  applyPasteEligibilityHighlights();
+  renderFMEATable();
+  showToast('📋 Copied Function: "' + item.funcName + '" to clipboard.');
+}
+
+function copySingleFailureMode(flId, fmId, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const ctx = getActiveFmeaData();
+  const item = buildFailureModeClipboardData(flId, fmId, ctx);
+  if (!item) {
+    showToast("Unable to copy failure mode.", "warning");
+    return;
+  }
+
+  fmeaClipboard = {
+    type: 'FAILURE_MODE',
+    timestamp: Date.now(),
+    sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+    sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+    sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+    items: [item]
+  };
+  saveClipboardToStorage();
+  updateCopyToolbarUI();
+  applyPasteEligibilityHighlights();
+  renderFMEATable();
+  showToast('📋 Copied Failure Mode: "' + item.fmName + '" to clipboard.');
+}
+
+function copySelectedItems() {
+  const ctx = getActiveFmeaData();
+  const funcCount = selectedFuncCopyIds.size;
+  const fmCount = selectedFmCopyIds.size;
+
+  if (funcCount === 0 && fmCount === 0) {
+    showToast("Please select at least one Function or Failure Mode to copy using the checkboxes.", "info");
+    return;
+  }
+
+  if (funcCount > 0 && fmCount === 0) {
+    const items = [];
+    selectedFuncCopyIds.forEach(flId => {
+      const fl = (ctx.functionLines || []).find(l => l.id === flId);
+      if (fl) {
+        const d = buildFunctionClipboardData(fl.id, fl.funcId, ctx);
+        if (d) items.push(d);
+      }
+    });
+    fmeaClipboard = {
+      type: 'FUNCTION',
+      timestamp: Date.now(),
+      sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+      sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+      sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+      items: items
+    };
+  } else if (fmCount > 0 && funcCount === 0) {
+    const items = [];
+    selectedFmCopyIds.forEach(fmId => {
+      let foundFlId = null;
+      for (const fl of (ctx.functionLines || [])) {
+        if (fl.failureModes && fl.failureModes.some(m => m.id === fmId)) {
+          foundFlId = fl.id;
+          break;
+        }
+      }
+      if (foundFlId) {
+        const d = buildFailureModeClipboardData(foundFlId, fmId, ctx);
+        if (d) items.push(d);
+      }
+    });
+    fmeaClipboard = {
+      type: 'FAILURE_MODE',
+      timestamp: Date.now(),
+      sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+      sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+      sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+      items: items
+    };
+  } else {
+    // Both selected - copy functions as primary
+    const items = [];
+    selectedFuncCopyIds.forEach(flId => {
+      const fl = (ctx.functionLines || []).find(l => l.id === flId);
+      if (fl) {
+        const d = buildFunctionClipboardData(fl.id, fl.funcId, ctx);
+        if (d) items.push(d);
+      }
+    });
+    fmeaClipboard = {
+      type: 'FUNCTION',
+      timestamp: Date.now(),
+      sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+      sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+      sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+      items: items
+    };
+  }
+
+  saveClipboardToStorage();
+  updateCopyToolbarUI();
+  clearCopySelections();
+  renderFMEATable();
+  showToast('📋 Copied ' + fmeaClipboard.items.length + ' ' + fmeaClipboard.type.toLowerCase() + '(s) to clipboard.');
+}
+
+function buildFunctionClipboardData(flId, funcId, ctx) {
+  ctx = ctx || getActiveFmeaData();
+  const funcObj = (ctx.functions || []).find(f => f.id === funcId) || { id: funcId, name: 'Function' };
+  const fl = (ctx.functionLines || []).find(l => l.id === flId) || {};
+  const reqMap = ctx.functionRequirements || {};
+  const reqIds = reqMap[flId] || [];
+  const allReqs = typeof getActiveRequirementsList === 'function' ? getActiveRequirementsList(ctx) : (ctx.requirements || []);
+  const assignedReqs = allReqs.filter(r => reqIds.includes(r.id));
+
+  const failureModesData = (fl.failureModes || []).map(fm => {
+    return buildFailureModeDataFromObject(fm, flId, ctx);
+  });
+
+  return {
+    funcId: funcObj.id,
+    funcName: stripBadgeArtifacts(funcObj.name),
+    referenceId: funcObj.referenceId || null,
+    structId: funcObj.structId || fl.structId,
+    flId: flId,
+    requirements: assignedReqs.map(r => ({
+      id: r.id,
+      reqNo: r.reqNo,
+      text: r.text,
+      spec: r.spec,
+      classSymbol: r.classSymbol,
+      variantId: r.variantId,
+      variants: r.variants
+    })),
+    failureModes: failureModesData
+  };
+}
+
+function buildFailureModeClipboardData(flId, fmId, ctx) {
+  ctx = ctx || getActiveFmeaData();
+  const fl = (ctx.functionLines || []).find(l => l.id === flId);
+  const funcObj = fl ? (ctx.functions || []).find(f => f.id === fl.funcId) : null;
+  const fm = fl && fl.failureModes ? fl.failureModes.find(m => m.id === fmId) : null;
+  if (!fm) return null;
+
+  return {
+    ...buildFailureModeDataFromObject(fm, flId, ctx),
+    sourceFlId: flId,
+    sourceFuncName: funcObj ? funcObj.name : 'Parent Function'
+  };
+}
+
+function buildFailureModeDataFromObject(fm, flId, ctx) {
+  ctx = ctx || getActiveFmeaData();
+  const effMap = ctx.failureModeEffects || {};
+  const linkedEffIds = effMap[fm.id] || [];
+  const linkedEffects = (fmeaData.libraries && fmeaData.libraries.effects || []).filter(e => linkedEffIds.includes(e.id));
+
+  // Direct causes
+  const causeMap = ctx.failureModeCauses || {};
+  const linkedCauseIds = causeMap[fm.id] || [];
+  const linkedCauses = (fmeaData.libraries && fmeaData.libraries.causes || []).filter(c => linkedCauseIds.includes(c.id));
+
+  const causesData = linkedCauses.map(cause => {
+    const ctrlIds = (fmeaData.causeControls || {})[cause.id] || [];
+    const linkedCtrls = (fmeaData.libraries && fmeaData.libraries.controls || []).filter(c => ctrlIds.includes(c.id));
+    const actIds = (ctx.causeActions || {})[cause.id] || (fmeaData.causeActions || {})[cause.id] || [];
+    const linkedActions = (fmeaData.libraries && fmeaData.libraries.actions || []).filter(a => actIds.includes(a.id));
+
+    return {
+      id: cause.id,
+      details: cause.details,
+      occurrence: cause.occurrence,
+      detection: cause.detection,
+      classSymbol: cause.classSymbol || cause.class || '',
+      characteristics: cause.characteristics,
+      spec: cause.spec,
+      comments: cause.comments,
+      variants: cause.variants,
+      controls: linkedCtrls.map(c => ({ id: c.id, desc: c.desc, type: c.type, variant: c.variant })),
+      actions: linkedActions.map(a => ({
+        id: a.id,
+        detail: a.detail,
+        pd: a.pd,
+        responsible: a.responsible,
+        targetDate: a.targetDate,
+        actionTaken: a.actionTaken,
+        completionDate: a.completionDate,
+        s2: a.s2,
+        o2: a.o2,
+        d2: a.d2,
+        comments: a.comments
+      }))
+    };
+  });
+
+  // Lower-level network causes
+  const childLinks = (ctx.failureNetworkLinks || []).filter(l => l.targetFmId === fm.id && l.sourceFmId);
+  const lowerLevelCausesData = childLinks.map(l => {
+    const p = typeof findFailureModeObjById === 'function' ? findFailureModeObjById(l.sourceFmId) : null;
+    if (!p) return null;
+    return {
+      sourceFmId: p.fm.id,
+      structName: p.structName,
+      funcName: p.funcName,
+      details: p.structName + ': ' + p.fm.name,
+      occurrence: p.fm.occ || 5,
+      detection: p.fm.det || 5,
+      classSymbol: '',
+      controls: [],
+      actions: []
+    };
+  }).filter(Boolean);
+
+  return {
+    fmId: fm.id,
+    fmName: stripBadgeArtifacts(fm.name),
+    referenceId: fm.referenceId || null,
+    effects: linkedEffects.map(e => ({
+      id: e.id,
+      systemName: e.systemName,
+      functionName: e.functionName,
+      desc: e.desc,
+      severity: e.severity
+    })),
+    directCauses: causesData,
+    lowerLevelCauses: lowerLevelCausesData
+  };
+}
+
+function openPasteModal(targetType = null, targetId = null) {
+  if (!checkCanEditFMEA()) return;
+  loadClipboardFromStorage();
+  if (!fmeaClipboard || !Array.isArray(fmeaClipboard.items) || fmeaClipboard.items.length === 0) {
+    showCustomAlert("Clipboard is empty.\n\nPlease copy one or more Functions or Failure Modes first.", "Clipboard Empty", "info");
+    return;
+  }
+
+  pendingPasteTargetType = targetType || fmeaClipboard.type;
+  pendingPasteTargetId = targetId;
+
+  const typeBadge = document.getElementById('pasteClipboardTypeBadge');
+  const srcInfo = document.getElementById('pasteClipboardSourceInfo');
+  const countSpan = document.getElementById('pasteClipboardItemsCount');
+
+  const count = fmeaClipboard.items.length;
+  const isFunc = fmeaClipboard.type === 'FUNCTION';
+
+  if (typeBadge) {
+    typeBadge.textContent = count + ' ' + (isFunc ? 'Function(s)' : 'Failure Mode(s)');
+    typeBadge.style.background = isFunc ? '#0284c7' : '#d97706';
+  }
+  if (srcInfo) {
+    srcInfo.textContent = 'Origin: ' + (fmeaClipboard.sourcePfmeaName || fmeaClipboard.sourceFmeaType);
+  }
+  if (countSpan) {
+    const names = isFunc 
+      ? fmeaClipboard.items.map(i => i.funcName).join(', ')
+      : fmeaClipboard.items.map(i => i.fmName).join(', ');
+    countSpan.textContent = names.length > 50 ? names.slice(0, 48) + '...' : names;
+  }
+
+  populatePasteFmeaTargetSelect();
+  populatePasteDestinationSelect();
+
+  const reqSection = document.getElementById('pasteReqHandlingSection');
+  if (reqSection) {
+    reqSection.style.display = isFunc ? 'block' : 'none';
+  }
+
+  selectPasteMode('LINKAGE');
+  updatePastePreview();
+  openModal('pasteFmeaModal');
+}
+
+function populatePasteFmeaTargetSelect() {
+  const fmeaSel = document.getElementById('pasteTargetFmeaSelect');
+  if (!fmeaSel) return;
+
+  let opts = '<option value="DFMEA" ' + (fmeaData.activeFmeaType === 'DFMEA' ? 'selected' : '') + '>DFMEA (Design FMEA Master)</option>';
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      const isSel = (fmeaData.activeFmeaType === 'PFMEA' && String(fmeaData.activePfmeaId) === String(p.id));
+      opts += '<option value="PFMEA-' + p.id + '" ' + (isSel ? 'selected' : '') + '>PFMEA: ' + escapeHtml(p.name || 'Process Station') + '</option>';
+    });
+  }
+  fmeaSel.innerHTML = opts;
+}
+
+function getContextForFmeaSelection(val) {
+  if (!val || val === 'DFMEA') {
+    return {
+      isPFMEA: false,
+      pfmea: null,
+      structure: fmeaData.structure,
+      functions: fmeaData.functions || [],
+      requirements: fmeaData.requirements || [],
+      functionRequirements: fmeaData.functionRequirements || {},
+      functionLines: fmeaData.functionLines || [],
+      failureModeEffects: fmeaData.failureModeEffects || {},
+      failureModeCauses: fmeaData.failureModeCauses || {},
+      causeControls: fmeaData.causeControls || {},
+      causeActions: fmeaData.causeActions || {}
+    };
+  } else {
+    const pfId = val.replace('PFMEA-', '');
+    const p = (fmeaData.pfmeas || []).find(item => String(item.id) === String(pfId));
+    if (p) {
+      p.processSteps = p.processSteps || [];
+      p.functions = p.functions || [];
+      p.requirements = p.requirements || [];
+      p.functionRequirements = p.functionRequirements || {};
+      p.functionLines = p.functionLines || [];
+      p.failureModeEffects = p.failureModeEffects || {};
+      p.failureModeCauses = p.failureModeCauses || {};
+      p.causeControls = p.causeControls || {};
+      p.causeActions = p.causeActions || {};
+      return {
+        isPFMEA: true,
+        pfmea: p,
+        structure: fmeaData.structure,
+        processSteps: p.processSteps,
+        functions: p.functions,
+        requirements: p.requirements,
+        functionRequirements: p.functionRequirements,
+        functionLines: p.functionLines,
+        failureModeEffects: p.failureModeEffects,
+        failureModeCauses: p.failureModeCauses,
+        causeControls: p.causeControls,
+        causeActions: p.causeActions
+      };
+    }
+  }
+  return getActiveFmeaData();
+}
+
+function populatePasteDestinationSelect() {
+  const destSel = document.getElementById('pasteTargetDestinationSelect');
+  const destLbl = document.getElementById('pasteTargetDestLabel');
+  if (!destSel) return;
+
+  const fmeaSel = document.getElementById('pasteTargetFmeaSelect');
+  const targetFmeaVal = fmeaSel ? fmeaSel.value : 'DFMEA';
+  const targetCtx = getContextForFmeaSelection(targetFmeaVal);
+
+  const isFunc = fmeaClipboard && fmeaClipboard.type === 'FUNCTION';
+
+  let opts = '';
+  if (isFunc) {
+    if (destLbl) destLbl.textContent = targetCtx.isPFMEA ? 'Target Process Step / Operation *' : 'Target Structure Element (System/Component) *';
+
+    if (targetCtx.isPFMEA) {
+      const psteps = targetCtx.processSteps || (targetCtx.pfmea && targetCtx.pfmea.processSteps) || [];
+      if (psteps.length === 0) {
+        opts = '<option value="">(No Process Steps exist in this PFMEA)</option>';
+      } else {
+        psteps.forEach(ps => {
+          opts += '<option value="' + ps.id + '">⚙️ ' + (ps.stepNo ? ps.stepNo + ': ' : '') + escapeHtml(ps.name) + '</option>';
+        });
+      }
+    } else {
+      function addNodes(node, depth = 0) {
+        if (!node) return;
+        opts += '<option value="' + node.id + '">' + '--'.repeat(depth) + ' ' + (node.partNo ? node.partNo + ' - ' : '') + escapeHtml(node.name) + '</option>';
+        if (node.children) {
+          node.children.forEach(c => addNodes(c, depth + 1));
+        }
+      }
+      addNodes(targetCtx.structure || fmeaData.structure);
+    }
+  } else {
+    if (destLbl) destLbl.textContent = 'Target Function Line *';
+    const lines = targetCtx.functionLines || [];
+    if (lines.length === 0) {
+      opts = '<option value="">(No Functions available in this FMEA)</option>';
+    } else {
+      lines.forEach(fl => {
+        const funcObj = (targetCtx.functions || []).find(f => f.id === fl.funcId);
+        let elemName = 'Element';
+        if (targetCtx.isPFMEA) {
+          const ps = (targetCtx.processSteps || []).find(p => p.id === fl.structId);
+          if (ps) elemName = ps.name;
+        } else {
+          const node = getStructureNodeById(targetCtx.structure, fl.structId);
+          if (node) elemName = node.partNo ? (node.partNo + ' - ' + node.name) : node.name;
+        }
+        if (funcObj) {
+          opts += '<option value="' + fl.id + '">[' + escapeHtml(elemName) + '] ⚡ ' + escapeHtml(funcObj.name) + '</option>';
+        }
+      });
+    }
+  }
+
+  destSel.innerHTML = opts;
+
+  if (pendingPasteTargetId) {
+    destSel.value = pendingPasteTargetId;
+  }
+}
+
+function onPasteFmeaTargetChange() {
+  populatePasteDestinationSelect();
+  updatePastePreview();
+}
+
+function selectPasteMode(mode) {
+  const radio = document.querySelector('input[name="pasteModeOption"][value="' + mode + '"]');
+  if (radio) {
+    radio.checked = true;
+    onPasteOptionChange();
+  }
+}
+
+function onPasteOptionChange() {
+  const modeRadio = document.querySelector('input[name="pasteModeOption"]:checked');
+  const mode = modeRadio ? modeRadio.value : 'LINKAGE';
+
+  document.querySelectorAll('.paste-mode-card').forEach(card => card.classList.remove('selected'));
+  if (mode === 'REFERENCE') {
+    document.getElementById('cardModeReference')?.classList.add('selected');
+  } else if (mode === 'LINKAGE') {
+    document.getElementById('cardModeLinkage')?.classList.add('selected');
+  } else if (mode === 'NEW_CHAIN') {
+    document.getElementById('cardModeNewChain')?.classList.add('selected');
+  }
+
+  const effNewCopyLabel = document.getElementById('pasteEffNewCopyLabel');
+  const causeAllLabel = document.getElementById('pasteCauseAllLabel');
+  if (effNewCopyLabel) effNewCopyLabel.style.display = mode === 'NEW_CHAIN' ? 'inline-flex' : 'none';
+  if (causeAllLabel) causeAllLabel.style.display = mode === 'NEW_CHAIN' ? 'inline-flex' : 'none';
+
+  updatePastePreview();
+}
+
+function updatePastePreview() {
+  const previewBox = document.getElementById('pasteLivePreviewTree');
+  if (!previewBox) return;
+
+  if (!fmeaClipboard || !Array.isArray(fmeaClipboard.items) || fmeaClipboard.items.length === 0) {
+    previewBox.innerHTML = '<span style="color:#94a3b8;">(Clipboard is empty)</span>';
+    return;
+  }
+
+  const modeRadio = document.querySelector('input[name="pasteModeOption"]:checked');
+  const mode = modeRadio ? modeRadio.value : 'LINKAGE';
+
+  const effRadio = document.querySelector('input[name="pasteEffectHandling"]:checked');
+  const effHandling = effRadio ? effRadio.value : 'LINK_EXISTING';
+
+  const causeRadio = document.querySelector('input[name="pasteCauseHandling"]:checked');
+  const causeHandling = causeRadio ? causeRadio.value : 'DIRECT_ONLY';
+
+  const incReq = document.getElementById('pasteIncludeRequirements')?.checked ?? true;
+
+  const destSel = document.getElementById('pasteTargetDestinationSelect');
+  const destText = destSel && destSel.selectedOptions && destSel.selectedOptions[0] ? destSel.selectedOptions[0].textContent.trim() : 'Selected Element';
+
+  let tree = '📍 Destination: ' + destText + '\n';
+  tree += '   Mode: ' + (mode === 'REFERENCE' ? '🔗 Keep Reference (Bi-directional Sync)' : (mode === 'LINKAGE' ? '🧩 With Linkage (Shared Library Links)' : '⛓️ Create New Chain (Decoupled Instances)')) + '\n\n';
+
+  const isFunc = fmeaClipboard.type === 'FUNCTION';
+
+  if (isFunc) {
+    fmeaClipboard.items.forEach((item) => {
+      const funcTag = (mode === 'REFERENCE') 
+        ? '[🔗 Ref: Live Sync]' 
+        : '(New Instance)';
+      tree += ' ├── ⚡ Function: ' + item.funcName + ' ' + funcTag + '\n';
+
+      if (incReq && item.requirements && item.requirements.length > 0) {
+        item.requirements.forEach(r => {
+          const reqTag = (mode === 'REFERENCE') ? '[Linked]' : '(New Instance)';
+          tree += ' │    ├── 📌 Requirement: ' + (r.reqNo || 'REQ') + ': ' + (r.text || '') + ' ' + reqTag + '\n';
+        });
+      }
+
+      if (item.failureModes && item.failureModes.length > 0) {
+        item.failureModes.forEach(fm => {
+          const fmTag = (mode === 'REFERENCE') ? '[🔗 Ref: Live Sync]' : '(New Instance)';
+          tree += ' │    └── ⚠️ Failure Mode: ' + fm.fmName + ' ' + fmTag + '\n';
+
+          // Effects
+          if (effHandling === 'SKIP') {
+            tree += ' │         ├── 💥 Effects: [Skipped — derive top-level manually]\n';
+          } else if (effHandling === 'NEW_COPY') {
+            (fm.effects || []).forEach(e => {
+              tree += ' │         ├── 💥 Effect: ' + (e.desc || e.functionName) + ' [New Effect Copy - Sev: ' + (e.severity || 7) + ']\n';
+            });
+          } else {
+            (fm.effects || []).forEach(e => {
+              tree += ' │         ├── 💥 Effect: ' + (e.desc || e.functionName) + ' [Shared Library Link - Sev: ' + (e.severity || 7) + ']\n';
+            });
+          }
+
+          // Causes
+          if (causeHandling === 'SKIP') {
+            tree += ' │         └── 🔍 Causes: [Skipped — define clean causes later]\n';
+          } else {
+            const causesToPreview = fm.directCauses || [];
+            if (causesToPreview.length === 0) {
+              tree += ' │         └── 🔍 Causes: (None defined)\n';
+            } else {
+              causesToPreview.forEach((c) => {
+                const causeTag = (mode === 'NEW_CHAIN') 
+                  ? ('(New Instance - Occ: ' + (c.occurrence || 5) + ', Det: ' + (c.detection || 5) + ')')
+                  : ('[Shared Link - Occ: ' + (c.occurrence || 5) + ', Det: ' + (c.detection || 5) + ']');
+                tree += ' │         └── 🔍 Cause: ' + (c.details || 'Cause Details') + ' ' + causeTag + '\n';
+                (c.controls || []).forEach(ctrl => {
+                  tree += ' │              ├── 🛡️ [' + (ctrl.type || 'Ctrl') + ']: ' + (ctrl.desc || '') + '\n';
+                });
+                (c.actions || []).forEach(act => {
+                  tree += ' │              └── 🎯 [Action]: ' + (act.detail || '') + '\n';
+                });
+              });
+            }
+          }
+        });
+      }
+    });
+  } else {
+    // Failure Modes directly
+    fmeaClipboard.items.forEach(item => {
+      const fmTag = (mode === 'REFERENCE') ? '[🔗 Ref: Live Sync]' : '(New Instance)';
+      tree += ' ├── ⚠️ Failure Mode: ' + item.fmName + ' ' + fmTag + '\n';
+
+      if (effHandling === 'SKIP') {
+        tree += ' │    ├── 💥 Effects: [Skipped]\n';
+      } else {
+        (item.effects || []).forEach(e => {
+          tree += ' │    ├── 💥 Effect: ' + (e.desc || e.functionName) + ' [Sev: ' + (e.severity || 7) + ']\n';
+        });
+      }
+
+      if (causeHandling === 'SKIP') {
+        tree += ' │    └── 🔍 Causes: [Skipped]\n';
+      } else {
+        (item.directCauses || []).forEach(c => {
+          tree += ' │    └── 🔍 Cause: ' + (c.details || '') + ' (Occ: ' + (c.occurrence || 5) + ', Det: ' + (c.detection || 5) + ')\n';
+          (c.controls || []).forEach(ctrl => {
+            tree += ' │         ├── 🛡️ [' + (ctrl.type || 'Ctrl') + ']: ' + (ctrl.desc || '') + '\n';
+          });
+          (c.actions || []).forEach(act => {
+            tree += ' │         └── 🎯 [Action]: ' + (act.detail || '') + '\n';
+          });
+        });
+      }
+    });
+  }
+
+  previewBox.textContent = tree;
+}
+
+function executePaste() {
+  if (!checkCanEditFMEA()) return;
+  loadClipboardFromStorage();
+  if (!fmeaClipboard || !Array.isArray(fmeaClipboard.items) || fmeaClipboard.items.length === 0) {
+    showToast("Clipboard is empty.", "warning");
+    return;
+  }
+
+  const destSel = document.getElementById('pasteTargetDestinationSelect');
+  const targetDestId = destSel ? destSel.value : '';
+  if (!targetDestId) {
+    showCustomAlert("Please select a valid target destination element.", "Destination Required", "warning");
+    return;
+  }
+
+  const fmeaSel = document.getElementById('pasteTargetFmeaSelect');
+  const targetFmeaVal = fmeaSel ? fmeaSel.value : 'DFMEA';
+  const targetCtx = getContextForFmeaSelection(targetFmeaVal);
+
+  const modeRadio = document.querySelector('input[name="pasteModeOption"]:checked');
+  const pasteMode = modeRadio ? modeRadio.value : 'LINKAGE';
+
+  const effRadio = document.querySelector('input[name="pasteEffectHandling"]:checked');
+  const effectHandling = effRadio ? effRadio.value : 'LINK_EXISTING';
+
+  const causeRadio = document.querySelector('input[name="pasteCauseHandling"]:checked');
+  const causeHandling = causeRadio ? causeRadio.value : 'DIRECT_ONLY';
+
+  const includeRequirements = document.getElementById('pasteIncludeRequirements')?.checked ?? true;
+
+  const options = {
+    pasteMode,
+    effectHandling,
+    causeHandling,
+    includeRequirements
+  };
+
+  if (pasteMode === 'REFERENCE') {
+    executePasteAsReference(fmeaClipboard, targetCtx, targetDestId, options);
+  } else if (pasteMode === 'LINKAGE') {
+    executePasteWithLinkage(fmeaClipboard, targetCtx, targetDestId, options);
+  } else if (pasteMode === 'NEW_CHAIN') {
+    executePasteAsNewChain(fmeaClipboard, targetCtx, targetDestId, options);
+  }
+
+  closeModal('pasteFmeaModal');
+  saveProjectToLocalStorage();
+  markDataChanged('Paste Structure Elements');
+  renderFMEATable();
+
+  const count = fmeaClipboard.items.length;
+  showToast('✅ Successfully pasted ' + count + ' element(s) with ' + (pasteMode === 'REFERENCE' ? 'Keep Reference' : (pasteMode === 'LINKAGE' ? 'With Linkage' : 'Create New Chain')) + '!');
+}
+
+function executePasteAsReference(clipboard, targetCtx, targetDestId, options) {
+  const isFunc = clipboard.type === 'FUNCTION';
+
+  if (isFunc) {
+    clipboard.items.forEach(item => {
+      let sharedRefId = item.referenceId;
+      if (!sharedRefId) {
+        sharedRefId = 'ref-fn-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+        const origF = findFunctionEverywhere(item.funcId);
+        if (origF) origF.referenceId = sharedRefId;
+        item.referenceId = sharedRefId;
+      }
+
+      const newFuncId = 'func-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      const newFunc = {
+        id: newFuncId,
+        structId: targetDestId,
+        name: item.funcName,
+        referenceId: sharedRefId,
+        isConsidered: true
+      };
+      targetCtx.functions.push(newFunc);
+
+      const newFlId = 'fl-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      targetCtx.functionRequirements = targetCtx.functionRequirements || {};
+      if (options.includeRequirements && Array.isArray(item.requirements)) {
+        targetCtx.functionRequirements[newFlId] = item.requirements.map(r => r.id);
+      } else {
+        targetCtx.functionRequirements[newFlId] = [];
+      }
+
+      const newFmList = [];
+      (item.failureModes || []).forEach(fmItem => {
+        let sharedFmRefId = fmItem.referenceId;
+        if (!sharedFmRefId) {
+          sharedFmRefId = 'ref-fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+          const origFm = findFailureModeEverywhere(fmItem.fmId);
+          if (origFm) origFm.referenceId = sharedFmRefId;
+          fmItem.referenceId = sharedFmRefId;
+        }
+
+        const newFmId = 'fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+        newFmList.push({
+          id: newFmId,
+          name: fmItem.fmName,
+          referenceId: sharedFmRefId
+        });
+
+        targetCtx.failureModeEffects = targetCtx.failureModeEffects || {};
+        targetCtx.failureModeCauses = targetCtx.failureModeCauses || {};
+        targetCtx.failureModeEffects[newFmId] = (fmItem.effects || []).map(e => e.id);
+        targetCtx.failureModeCauses[newFmId] = (fmItem.directCauses || []).map(c => c.id);
+      });
+
+      targetCtx.functionLines.push({
+        id: newFlId,
+        structId: targetDestId,
+        funcId: newFuncId,
+        isConsidered: true,
+        failureModes: newFmList
+      });
+
+      syncReferencedFunctions(newFunc);
+    });
+  } else {
+    const targetFl = (targetCtx.functionLines || []).find(l => l.id === targetDestId);
+    if (!targetFl) return;
+    targetFl.failureModes = targetFl.failureModes || [];
+
+    clipboard.items.forEach(fmItem => {
+      let sharedFmRefId = fmItem.referenceId;
+      if (!sharedFmRefId) {
+        sharedFmRefId = 'ref-fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+        const origFm = findFailureModeEverywhere(fmItem.fmId);
+        if (origFm) origFm.referenceId = sharedFmRefId;
+        fmItem.referenceId = sharedFmRefId;
+      }
+
+      const newFmId = 'fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      const newFm = {
+        id: newFmId,
+        name: fmItem.fmName,
+        referenceId: sharedFmRefId
+      };
+      targetFl.failureModes.push(newFm);
+
+      targetCtx.failureModeEffects = targetCtx.failureModeEffects || {};
+      targetCtx.failureModeCauses = targetCtx.failureModeCauses || {};
+      targetCtx.failureModeEffects[newFmId] = (fmItem.effects || []).map(e => e.id);
+      targetCtx.failureModeCauses[newFmId] = (fmItem.directCauses || []).map(c => c.id);
+
+      syncReferencedFailureModes(newFm);
+    });
+  }
+}
+
+function executePasteWithLinkage(clipboard, targetCtx, targetDestId, options) {
+  const isFunc = clipboard.type === 'FUNCTION';
+
+  if (isFunc) {
+    clipboard.items.forEach(item => {
+      const newFuncId = 'func-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      const newFunc = {
+        id: newFuncId,
+        structId: targetDestId,
+        name: item.funcName,
+        isConsidered: true
+      };
+      targetCtx.functions.push(newFunc);
+
+      const newFlId = 'fl-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      targetCtx.functionRequirements = targetCtx.functionRequirements || {};
+
+      const newReqIds = [];
+      if (options.includeRequirements && Array.isArray(item.requirements)) {
+        item.requirements.forEach(r => {
+          const newRId = 'req-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+          targetCtx.requirements = targetCtx.requirements || [];
+          targetCtx.requirements.push({
+            id: newRId,
+            reqNo: r.reqNo,
+            text: r.text,
+            spec: r.spec,
+            classSymbol: r.classSymbol,
+            variantId: r.variantId || 'ALL',
+            variants: r.variants || []
+          });
+          newReqIds.push(newRId);
+        });
+      }
+      targetCtx.functionRequirements[newFlId] = newReqIds;
+
+      const newFmList = [];
+      (item.failureModes || []).forEach(fmItem => {
+        const newFmId = 'fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+        newFmList.push({
+          id: newFmId,
+          name: fmItem.fmName
+        });
+
+        targetCtx.failureModeEffects = targetCtx.failureModeEffects || {};
+        targetCtx.failureModeCauses = targetCtx.failureModeCauses || {};
+
+        if (options.effectHandling === 'SKIP') {
+          targetCtx.failureModeEffects[newFmId] = [];
+        } else {
+          targetCtx.failureModeEffects[newFmId] = (fmItem.effects || []).map(e => e.id);
+        }
+
+        targetCtx.failureModeCauses[newFmId] = (fmItem.directCauses || []).map(c => c.id);
+      });
+
+      targetCtx.functionLines.push({
+        id: newFlId,
+        structId: targetDestId,
+        funcId: newFuncId,
+        isConsidered: true,
+        failureModes: newFmList
+      });
+    });
+  } else {
+    const targetFl = (targetCtx.functionLines || []).find(l => l.id === targetDestId);
+    if (!targetFl) return;
+    targetFl.failureModes = targetFl.failureModes || [];
+
+    clipboard.items.forEach(fmItem => {
+      const newFmId = 'fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      targetFl.failureModes.push({
+        id: newFmId,
+        name: fmItem.fmName
+      });
+
+      targetCtx.failureModeEffects = targetCtx.failureModeEffects || {};
+      targetCtx.failureModeCauses = targetCtx.failureModeCauses || {};
+
+      if (options.effectHandling === 'SKIP') {
+        targetCtx.failureModeEffects[newFmId] = [];
+      } else {
+        targetCtx.failureModeEffects[newFmId] = (fmItem.effects || []).map(e => e.id);
+      }
+
+      targetCtx.failureModeCauses[newFmId] = (fmItem.directCauses || []).map(c => c.id);
+    });
+  }
+}
+
+function executePasteAsNewChain(clipboard, targetCtx, targetDestId, options) {
+  const isFunc = clipboard.type === 'FUNCTION';
+
+  if (!fmeaData.libraries) fmeaData.libraries = {};
+  if (!Array.isArray(fmeaData.libraries.effects)) fmeaData.libraries.effects = [];
+  if (!Array.isArray(fmeaData.libraries.causes)) fmeaData.libraries.causes = [];
+  if (!Array.isArray(fmeaData.libraries.controls)) fmeaData.libraries.controls = [];
+  if (!Array.isArray(fmeaData.libraries.actions)) fmeaData.libraries.actions = [];
+
+  function cloneEffectIfNeeded(eff) {
+    if (options.effectHandling === 'NEW_COPY') {
+      const newEffId = 'lib-eff-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      fmeaData.libraries.effects.push({
+        id: newEffId,
+        systemName: eff.systemName,
+        functionName: eff.functionName,
+        desc: eff.desc,
+        severity: eff.severity || 7
+      });
+      return newEffId;
+    }
+    return eff.id;
+  }
+
+  function cloneCauseAndItems(cause) {
+    const newCauseId = 'lib-cause-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+    const newCause = {
+      id: newCauseId,
+      details: cause.details,
+      occurrence: cause.occurrence || 5,
+      detection: cause.detection || 5,
+      classSymbol: cause.classSymbol || '',
+      characteristics: cause.characteristics || '',
+      spec: cause.spec || '',
+      comments: cause.comments || '',
+      variants: cause.variants || ['var-default']
+    };
+    fmeaData.libraries.causes.push(newCause);
+
+    const newCtrlIds = [];
+    (cause.controls || []).forEach(ctrl => {
+      const newCtrlId = 'lib-ctrl-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      fmeaData.libraries.controls.push({
+        id: newCtrlId,
+        desc: ctrl.desc,
+        type: ctrl.type || 'Prevention',
+        variant: ctrl.variant || 'ALL'
+      });
+      newCtrlIds.push(newCtrlId);
+    });
+    fmeaData.causeControls = fmeaData.causeControls || {};
+    fmeaData.causeControls[newCauseId] = newCtrlIds;
+    if (targetCtx.causeControls) targetCtx.causeControls[newCauseId] = newCtrlIds;
+
+    const newActIds = [];
+    (cause.actions || []).forEach(act => {
+      const newActId = 'lib-act-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      fmeaData.libraries.actions.push({
+        id: newActId,
+        detail: act.detail,
+        pd: act.pd || 'P',
+        responsible: act.responsible || '',
+        targetDate: act.targetDate || '',
+        actionTaken: act.actionTaken || '',
+        completionDate: act.completionDate || '',
+        s2: act.s2,
+        o2: act.o2,
+        d2: act.d2,
+        comments: act.comments || ''
+      });
+      newActIds.push(newActId);
+    });
+    targetCtx.causeActions = targetCtx.causeActions || {};
+    targetCtx.causeActions[newCauseId] = newActIds;
+    if (fmeaData.causeActions) fmeaData.causeActions[newCauseId] = newActIds;
+
+    return newCauseId;
+  }
+
+  if (isFunc) {
+    clipboard.items.forEach(item => {
+      const newFuncId = 'func-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+      const newFunc = {
+        id: newFuncId,
+        structId: targetDestId,
+        name: item.funcName,
+        isConsidered: true
+      };
+      targetCtx.functions.push(newFunc);
+
+      const newFlId = 'fl-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      targetCtx.functionRequirements = targetCtx.functionRequirements || {};
+
+      const newReqIds = [];
+      if (options.includeRequirements && Array.isArray(item.requirements)) {
+        item.requirements.forEach(r => {
+          const newRId = 'req-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+          targetCtx.requirements = targetCtx.requirements || [];
+          targetCtx.requirements.push({
+            id: newRId,
+            reqNo: r.reqNo,
+            text: r.text,
+            spec: r.spec,
+            classSymbol: r.classSymbol,
+            variantId: r.variantId || 'ALL',
+            variants: r.variants || []
+          });
+          newReqIds.push(newRId);
+        });
+      }
+      targetCtx.functionRequirements[newFlId] = newReqIds;
+
+      const newFmList = [];
+      (item.failureModes || []).forEach(fmItem => {
+        const newFmId = 'fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+        newFmList.push({
+          id: newFmId,
+          name: fmItem.fmName
+        });
+
+        targetCtx.failureModeEffects = targetCtx.failureModeEffects || {};
+        targetCtx.failureModeCauses = targetCtx.failureModeCauses || {};
+
+        if (options.effectHandling === 'SKIP') {
+          targetCtx.failureModeEffects[newFmId] = [];
+        } else {
+          targetCtx.failureModeEffects[newFmId] = (fmItem.effects || []).map(cloneEffectIfNeeded);
+        }
+
+        if (options.causeHandling === 'SKIP') {
+          targetCtx.failureModeCauses[newFmId] = [];
+        } else {
+          let causesList = fmItem.directCauses || [];
+          if (options.causeHandling === 'INCLUDE_ALL' && fmItem.lowerLevelCauses) {
+            causesList = causesList.concat(fmItem.lowerLevelCauses);
+          }
+          targetCtx.failureModeCauses[newFmId] = causesList.map(cloneCauseAndItems);
+        }
+      });
+
+      targetCtx.functionLines.push({
+        id: newFlId,
+        structId: targetDestId,
+        funcId: newFuncId,
+        isConsidered: true,
+        failureModes: newFmList
+      });
+    });
+  } else {
+    const targetFl = (targetCtx.functionLines || []).find(l => l.id === targetDestId);
+    if (!targetFl) return;
+    targetFl.failureModes = targetFl.failureModes || [];
+
+    clipboard.items.forEach(fmItem => {
+      const newFmId = 'fm-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      targetFl.failureModes.push({
+        id: newFmId,
+        name: fmItem.fmName
+      });
+
+      targetCtx.failureModeEffects = targetCtx.failureModeEffects || {};
+      targetCtx.failureModeCauses = targetCtx.failureModeCauses || {};
+
+      if (options.effectHandling === 'SKIP') {
+        targetCtx.failureModeEffects[newFmId] = [];
+      } else {
+        targetCtx.failureModeEffects[newFmId] = (fmItem.effects || []).map(cloneEffectIfNeeded);
+      }
+
+      if (options.causeHandling === 'SKIP') {
+        targetCtx.failureModeCauses[newFmId] = [];
+      } else {
+        let causesList = fmItem.directCauses || [];
+        if (options.causeHandling === 'INCLUDE_ALL' && fmItem.lowerLevelCauses) {
+          causesList = causesList.concat(fmItem.lowerLevelCauses);
+        }
+        targetCtx.failureModeCauses[newFmId] = causesList.map(cloneCauseAndItems);
+      }
+    });
+  }
+}
+
+// ─── Bi-directional Reference Synchronization Engine ─────────────────────────
+
+function syncReferencedFunctions(sourceFunc) {
+  if (!sourceFunc || !sourceFunc.referenceId) return;
+  const refId = sourceFunc.referenceId;
+  const newName = stripBadgeArtifacts(sourceFunc.name);
+  sourceFunc.name = newName;
+
+  if (Array.isArray(fmeaData.functions)) {
+    fmeaData.functions.forEach(f => {
+      if ((f.referenceId === refId || f.id === refId) && f.id !== sourceFunc.id) {
+        f.name = newName;
+      }
+    });
+  }
+
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      if (Array.isArray(p.functions)) {
+        p.functions.forEach(f => {
+          if ((f.referenceId === refId || f.id === refId) && f.id !== sourceFunc.id) {
+            f.name = newName;
+          }
+        });
+      }
+    });
+  }
+}
+
+function syncReferencedFailureModes(sourceFm) {
+  if (!sourceFm || !sourceFm.referenceId) return;
+  const refId = sourceFm.referenceId;
+  const newName = stripBadgeArtifacts(sourceFm.name);
+  sourceFm.name = newName;
+
+  if (Array.isArray(fmeaData.functionLines)) {
+    fmeaData.functionLines.forEach(fl => {
+      if (Array.isArray(fl.failureModes)) {
+        fl.failureModes.forEach(fm => {
+          if ((fm.referenceId === refId || fm.id === refId) && fm.id !== sourceFm.id) {
+            fm.name = newName;
+          }
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      if (Array.isArray(p.functionLines)) {
+        p.functionLines.forEach(fl => {
+          if (Array.isArray(fl.failureModes)) {
+            fl.failureModes.forEach(fm => {
+              if ((fm.referenceId === refId || fm.id === refId) && fm.id !== sourceFm.id) {
+                fm.name = newName;
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+}
+
+function findFunctionEverywhere(funcId) {
+  if (Array.isArray(fmeaData.functions)) {
+    const f = fmeaData.functions.find(item => item.id === funcId);
+    if (f) return f;
+  }
+  if (Array.isArray(fmeaData.pfmeas)) {
+    for (const p of fmeaData.pfmeas) {
+      if (Array.isArray(p.functions)) {
+        const f = p.functions.find(item => item.id === funcId);
+        if (f) return f;
+      }
+    }
+  }
+  return null;
+}
+
+function findFailureModeEverywhere(fmId) {
+  if (Array.isArray(fmeaData.functionLines)) {
+    for (const fl of fmeaData.functionLines) {
+      if (Array.isArray(fl.failureModes)) {
+        const fm = fl.failureModes.find(item => item.id === fmId);
+        if (fm) return fm;
+      }
+    }
+  }
+  if (Array.isArray(fmeaData.pfmeas)) {
+    for (const p of fmeaData.pfmeas) {
+      if (Array.isArray(p.functionLines)) {
+        for (const fl of p.functionLines) {
+          if (Array.isArray(fl.failureModes)) {
+            const fm = fl.failureModes.find(item => item.id === fmId);
+            if (fm) return fm;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function getReferenceCountForFunction(func) {
+  if (!func || !func.referenceId) return 0;
+  const refId = func.referenceId;
+  let count = 0;
+  if (Array.isArray(fmeaData.functions)) {
+    count += fmeaData.functions.filter(f => f.referenceId === refId || f.id === refId).length;
+  }
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      if (Array.isArray(p.functions)) {
+        count += p.functions.filter(f => f.referenceId === refId || f.id === refId).length;
+      }
+    });
+  }
+  return count;
+}
+
+function getReferenceCountForFailureMode(fm) {
+  if (!fm || !fm.referenceId) return 0;
+  const refId = fm.referenceId;
+  let count = 0;
+  if (Array.isArray(fmeaData.functionLines)) {
+    fmeaData.functionLines.forEach(fl => {
+      if (Array.isArray(fl.failureModes)) {
+        count += fl.failureModes.filter(m => m.referenceId === refId || m.id === refId).length;
+      }
+    });
+  }
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      if (Array.isArray(p.functionLines)) {
+        p.functionLines.forEach(fl => {
+          if (Array.isArray(fl.failureModes)) {
+            count += fl.failureModes.filter(m => m.referenceId === refId || m.id === refId).length;
+          }
+        });
+      }
+    });
+  }
+  return count;
+}
+
+// Global Keyboard Shortcut Listener for Ctrl+C / Ctrl+V
+document.addEventListener('keydown', function (e) {
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'C')) {
+    if (selectedFuncCopyIds.size > 0 || selectedFmCopyIds.size > 0) {
+      e.preventDefault();
+      copySelectedItems();
+    }
+  } else if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) {
+    loadClipboardFromStorage();
+    if (fmeaClipboard && Array.isArray(fmeaClipboard.items) && fmeaClipboard.items.length > 0) {
+      e.preventDefault();
+      openPasteModal();
+    }
+  }
+});
+
+// --- Move (Cut & Relocate) Engine -------------------------------------------
+
+function startMoveSingleFunction(flId, funcId, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const ctx = getActiveFmeaData();
+  const item = buildFunctionClipboardData(flId, funcId, ctx);
+  if (!item) {
+    showToast("Unable to prepare function for move.", "warning");
+    return;
+  }
+
+  fmeaClipboard = {
+    action: 'MOVE',
+    type: 'FUNCTION',
+    timestamp: Date.now(),
+    sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+    sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+    sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+    items: [item]
+  };
+  saveClipboardToStorage();
+  updateCopyToolbarUI();
+  applyPasteEligibilityHighlights();
+  renderFMEATable();
+  showToast('✂️ Function marked for move. Right-click target Structure and select "Move Here" (or press ESC to cancel).');
+}
+
+function startMoveSingleFailureMode(flId, fmId, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const ctx = getActiveFmeaData();
+  const item = buildFailureModeClipboardData(flId, fmId, ctx);
+  if (!item) {
+    showToast("Unable to prepare failure mode for move.", "warning");
+    return;
+  }
+
+  fmeaClipboard = {
+    action: 'MOVE',
+    type: 'FAILURE_MODE',
+    timestamp: Date.now(),
+    sourceFmeaType: ctx.isPFMEA ? 'PFMEA' : 'DFMEA',
+    sourcePfmeaId: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.id : null) : null,
+    sourcePfmeaName: ctx.isPFMEA ? (ctx.pfmea ? ctx.pfmea.name : 'Process FMEA') : 'DFMEA Master',
+    items: [item]
+  };
+  saveClipboardToStorage();
+  updateCopyToolbarUI();
+  applyPasteEligibilityHighlights();
+  renderFMEATable();
+  showToast('✂️ Failure Mode marked for move. Right-click target Function and select "Move Here" (or press ESC to cancel).');
+}
+
+function executeMoveFunction(sourceFuncId, targetStructId) {
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return false;
+  if (!sourceFuncId || !targetStructId) {
+    showToast("Invalid move parameters.", "warning");
+    return false;
+  }
+
+  const ctx = getActiveFmeaData();
+  const isTargetPFMEA = ctx.isPFMEA;
+  const targetFuncs = isTargetPFMEA ? (ctx.pfmea.functions || []) : (fmeaData.functions || []);
+  const targetLines = isTargetPFMEA ? (ctx.pfmea.functionLines || []) : (fmeaData.functionLines || []);
+
+  let funcObj = targetFuncs.find(f => f.id === sourceFuncId);
+  let sourceCtx = ctx;
+
+  if (!funcObj) {
+    if (isTargetPFMEA && Array.isArray(fmeaData.functions)) {
+      funcObj = fmeaData.functions.find(f => f.id === sourceFuncId);
+      if (funcObj) sourceCtx = { isPFMEA: false, functions: fmeaData.functions, functionLines: fmeaData.functionLines, functionRequirements: fmeaData.functionRequirements, failureModeEffects: fmeaData.failureModeEffects, failureModeCauses: fmeaData.failureModeCauses };
+    }
+    if (!funcObj && Array.isArray(fmeaData.pfmeas)) {
+      for (const p of fmeaData.pfmeas) {
+        if (Array.isArray(p.functions)) {
+          const f = p.functions.find(item => item.id === sourceFuncId);
+          if (f) {
+            funcObj = f;
+            sourceCtx = { isPFMEA: true, pfmea: p, functions: p.functions, functionLines: p.functionLines, functionRequirements: p.functionRequirements, failureModeEffects: p.failureModeEffects, failureModeCauses: p.failureModeCauses };
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (!funcObj) {
+    showToast("Function not found to move.", "error");
+    return false;
+  }
+
+  if (sourceCtx !== ctx) {
+    if (sourceCtx.functions) sourceCtx.functions = sourceCtx.functions.filter(f => f.id !== sourceFuncId);
+    funcObj.structId = targetStructId;
+    targetFuncs.push(funcObj);
+
+    const movingFlIds = [];
+    if (sourceCtx.functionLines) {
+      const movingLines = sourceCtx.functionLines.filter(fl => fl.funcId === sourceFuncId);
+      movingLines.forEach(fl => {
+        movingFlIds.push(fl.id);
+        fl.structId = targetStructId;
+        targetLines.push(fl);
+      });
+      sourceCtx.functionLines = sourceCtx.functionLines.filter(fl => fl.funcId !== sourceFuncId);
+    }
+
+    movingFlIds.forEach(flId => {
+      if (sourceCtx.functionRequirements && sourceCtx.functionRequirements[flId]) {
+        ctx.functionRequirements = ctx.functionRequirements || {};
+        ctx.functionRequirements[flId] = sourceCtx.functionRequirements[flId];
+        delete sourceCtx.functionRequirements[flId];
+      }
+    });
+  } else {
+    funcObj.structId = targetStructId;
+    targetLines.forEach(fl => {
+      if (fl.funcId === sourceFuncId) {
+        fl.structId = targetStructId;
+      }
+    });
+  }
+
+  funcObj.name = stripBadgeArtifacts(funcObj.name);
+
+  fmeaClipboard = null;
+  saveClipboardToStorage();
+  clearCopySelections();
+  clearPasteEligibilityHighlights();
+  updateCopyToolbarUI();
+  if (typeof markDataChanged === 'function') markDataChanged('Move Function');
+  renderFMEATable();
+  showToast('✅ Function moved successfully.');
+  return true;
+}
+
+function executeMoveFailureMode(sourceFmId, sourceFlId, targetFlId) {
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return false;
+  if (!sourceFmId || !targetFlId) {
+    showToast("Invalid move parameters for failure mode.", "warning");
+    return false;
+  }
+  if (sourceFlId === targetFlId) {
+    showToast("Target function line is the same as source.", "info");
+    return false;
+  }
+
+  const ctx = getActiveFmeaData();
+  const allLines = (ctx.functionLines || []).concat(fmeaData.functionLines || []);
+  const sourceFl = allLines.find(l => l.id === sourceFlId || (l.failureModes && l.failureModes.some(m => m.id === sourceFmId)));
+  const targetFl = allLines.find(l => l.id === targetFlId);
+
+  if (!sourceFl || !targetFl) {
+    showToast("Source or target function line not found.", "error");
+    return false;
+  }
+
+  const fmIdx = (sourceFl.failureModes || []).findIndex(m => m.id === sourceFmId);
+  if (fmIdx === -1) {
+    showToast("Failure mode not found in source function.", "error");
+    return false;
+  }
+
+  const [movingFm] = sourceFl.failureModes.splice(fmIdx, 1);
+  movingFm.name = stripBadgeArtifacts(movingFm.name);
+  targetFl.failureModes = targetFl.failureModes || [];
+  targetFl.failureModes.push(movingFm);
+
+  fmeaClipboard = null;
+  saveClipboardToStorage();
+  clearCopySelections();
+  clearPasteEligibilityHighlights();
+  updateCopyToolbarUI();
+  if (typeof markDataChanged === 'function') markDataChanged('Move Failure Mode');
+  renderFMEATable();
+  showToast('✅ Failure Mode moved successfully.');
+  return true;
+}
+
+// --- Visual Highlighting of Eligible Paste & Move Cells ----------------------
+
+function applyPasteEligibilityHighlights() {
+  clearPasteEligibilityHighlights();
+  if (!fmeaClipboard || !Array.isArray(fmeaClipboard.items) || fmeaClipboard.items.length === 0) return;
+
+  const isMove = fmeaClipboard.action === 'MOVE';
+  const sourceItem = fmeaClipboard.items[0];
+
+  if (fmeaClipboard.type === 'FUNCTION') {
+    const targetCells = document.querySelectorAll('td[data-cell-type="struct"], td[data-cell-type="func"]');
+    targetCells.forEach(el => {
+      const sId = el.getAttribute('data-struct-id');
+      if (isMove && sourceItem && sourceItem.structId && sId === sourceItem.structId) {
+        el.classList.add('move-source-pending');
+        return;
+      }
+      el.classList.add('paste-eligible-target');
+      el.setAttribute('title', isMove ? 'Click or right-click to move Function here' : 'Ready to paste Function here. Right-click to paste or press ESC to cancel.');
+    });
+  } else if (fmeaClipboard.type === 'FAILURE_MODE') {
+    const targetCells = document.querySelectorAll('td[data-cell-type="func"]');
+    targetCells.forEach(el => {
+      const flId = el.getAttribute('data-fl-id');
+      if (isMove && sourceItem && sourceItem.sourceFlId && flId === sourceItem.sourceFlId) {
+        el.classList.add('move-source-pending');
+        return;
+      }
+      el.classList.add('paste-eligible-target');
+      el.setAttribute('title', isMove ? 'Click or right-click to move Failure Mode here' : 'Ready to paste Failure Mode here. Right-click to paste or press ESC to cancel.');
+    });
+  }
+}
+
+function clearPasteEligibilityHighlights() {
+  document.querySelectorAll('.paste-eligible-target').forEach(el => {
+    el.classList.remove('paste-eligible-target');
+  });
+  document.querySelectorAll('.move-source-pending').forEach(el => {
+    el.classList.remove('move-source-pending');
+  });
+}
+
+function clearActiveCopyMode() {
+  closeFmeaContextMenu();
+  fmeaClipboard = null;
+  saveClipboardToStorage();
+  clearCopySelections();
+  clearPasteEligibilityHighlights();
+  updateCopyToolbarUI();
+  renderFMEATable();
+  showToast("Copy / Move mode cleared (Esc).", "info");
+}
+
+// --- Context Menu Controller ------------------------------------------------
+
+let activeContextTarget = null;
+
+
+/**
+ * Unlinks a specific failure effect from a failure mode after user confirmation.
+ */
+
+function findCauseObjectEverywhere(causeId) {
+  if (!causeId) return [];
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : fmeaData;
+  const targets = [];
+  if (ctx && ctx.libraries && Array.isArray(ctx.libraries.causes)) {
+    const c = ctx.libraries.causes.find(x => String(x.id) === String(causeId));
+    if (c) targets.push(c);
+  }
+  if (typeof fmeaData !== 'undefined' && fmeaData.libraries && Array.isArray(fmeaData.libraries.causes)) {
+    const c = fmeaData.libraries.causes.find(x => String(x.id) === String(causeId));
+    if (c && !targets.includes(c)) targets.push(c);
+  }
+  [ctx, (typeof fmeaData !== 'undefined' ? fmeaData : null)].filter(Boolean).forEach(root => {
+    (root.functionLines || []).forEach(fl => {
+      (fl.failureModes || []).forEach(fm => {
+        (fm.causes || []).forEach(c => {
+          if (String(c.id) === String(causeId) && !targets.includes(c)) targets.push(c);
+        });
+      });
+    });
+  });
+  return targets;
+}
+window.findCauseObjectEverywhere = findCauseObjectEverywhere;
+
+/**
+ * Asks for confirmation and unlinks a specific characteristic (or all) from a cause.
+ */
+async function confirmAndUnlinkCharacteristicFromCause(causeId, charId = null, charName = '') {
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
+  const causes = (typeof findCauseObjectEverywhere === 'function') ? findCauseObjectEverywhere(causeId) : [];
+  const cause = causes[0];
+  const causeDetails = cause ? (cause.details || cause.name || 'Cause') : 'Cause';
+  const label = charName || (charId ? 'this characteristic' : 'all characteristics');
+
+  const confirmMsg = `Are you sure you want to unlink Characteristic:\n"${label}"\n\nfrom Cause:\n"${causeDetails}"?`;
+  const isConfirmed = await confirm(confirmMsg, 'Unlink Characteristic', 'warning');
+  if (!isConfirmed) return;
+
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : fmeaData;
+  const allChars = [
+    ...(fmeaData.libraries?.characteristics || []),
+    ...(ctx?.libraries?.characteristics || [])
+  ];
+
+  causes.forEach(c => {
+    if (charId) {
+      c.characteristicIds = (c.characteristicIds || []).filter(id => String(id) !== String(charId));
+    } else {
+      c.characteristicIds = [];
+    }
+
+    if (c.characteristicIds.length === 0) {
+      c.characteristics = '-';
+      c.characteristicName = '-';
+      c._characteristicsExplicitlyUnlinked = true;
+    } else {
+      const remainingNames = c.characteristicIds.map(id => {
+        const found = allChars.find(x => String(x.id) === String(id));
+        return found ? (found.name || found.details || '') : '';
+      }).filter(Boolean);
+      c.characteristics = remainingNames.join('; ');
+      c.characteristicName = remainingNames.join('; ');
+      c._characteristicsExplicitlyUnlinked = false;
+    }
+    c.classSymbol = (typeof getHighestClassSymbolForCause === 'function') ? getHighestClassSymbolForCause(c) : (c.classSymbol || '-');
+  });
+
+  if (typeof saveProjectToLocalStorage === 'function') {
+    saveProjectToLocalStorage();
+  }
+  if (typeof performAutoSave === 'function') {
+    performAutoSave('Characteristic Unlinked');
+  }
+
+  showToast(`🔗 Unlinked characteristic "${label}" from cause.`, 'info');
+  if (typeof renderCausesLibraryList === 'function') renderCausesLibraryList();
+  if (typeof renderFMEATable === 'function') renderFMEATable();
+}
+window.confirmAndUnlinkCharacteristicFromCause = confirmAndUnlinkCharacteristicFromCause;
+
+async function confirmAndUnlinkEffectItem(fmId, effectId, effectType, effectText, targetFmId) {
+  if (!checkCanEditFMEA()) return;
+  const ctx = getActiveFmeaData();
+  const fmObj = (typeof findFailureModeObjById === 'function') ? findFailureModeObjById(fmId) : null;
+  const fmName = fmObj?.fm?.name || 'Failure Mode';
+  const effLabel = effectText || 'this effect';
+
+  const msg = `Are you sure you want to unlink Failure Effect:\n"${effLabel}"\n\nfrom Failure Mode:\n"${fmName}"?`;
+  const isConfirmed = await confirm(msg, 'Unlink Failure Effect', 'warning');
+  if (!isConfirmed) return;
+
+  let unlinked = false;
+
+  // 1. Remove from ctx.failureModeEffects
+  if (ctx.failureModeEffects && ctx.failureModeEffects[fmId]) {
+    if (effectId) {
+      const beforeLen = ctx.failureModeEffects[fmId].length;
+      ctx.failureModeEffects[fmId] = ctx.failureModeEffects[fmId].filter(id => String(id) !== String(effectId));
+      if (ctx.failureModeEffects[fmId].length < beforeLen) unlinked = true;
+    } else if (!targetFmId && !effectType) {
+      ctx.failureModeEffects[fmId] = [];
+      unlinked = true;
+    }
+  }
+
+  // 2. Remove from ctx.failureNetworkLinks
+  if (Array.isArray(ctx.failureNetworkLinks)) {
+    const beforeLen = ctx.failureNetworkLinks.length;
+    ctx.failureNetworkLinks = ctx.failureNetworkLinks.filter(l => {
+      if (effectId && l.sourceFmId === fmId && String(l.targetEffectId) === String(effectId)) return false;
+      if (targetFmId && l.sourceFmId === fmId && String(l.targetFmId) === String(targetFmId)) return false;
+      if (!effectId && !targetFmId && l.sourceFmId === fmId && (l.targetEffectId || l.targetFmId)) return false;
+      return true;
+    });
+    if (ctx.failureNetworkLinks.length < beforeLen) unlinked = true;
+  }
+
+  // 3. Clean up fm.effects array if stored directly on FM
+  if (fmObj && fmObj.fm && Array.isArray(fmObj.fm.effects)) {
+    if (effectId) {
+      fmObj.fm.effects = fmObj.fm.effects.filter(e => String(e.id) !== String(effectId));
+    } else {
+      fmObj.fm.effects = [];
+    }
+    unlinked = true;
+  }
+
+  if (typeof saveProjectToLocalStorage === 'function') {
+    saveProjectToLocalStorage();
+  }
+
+  showToast(`🔗 Unlinked effect from "${fmName}".`, 'info');
+  if (typeof renderFMEATable === 'function') {
+    renderFMEATable();
+  }
+  if (typeof refreshActiveFailureNetworkIfOpen === 'function') {
+    refreshActiveFailureNetworkIfOpen();
+  }
+}
+window.confirmAndUnlinkEffectItem = confirmAndUnlinkEffectItem;
+
+/**
+ * Unlinks a specific failure cause from a failure mode after user confirmation.
+ */
+async function confirmAndUnlinkCauseItem(fmId, causeId, causeText) {
+  if (!checkCanEditFMEA()) return;
+  const ctx = getActiveFmeaData();
+  const fmObj = (typeof findFailureModeObjById === 'function') ? findFailureModeObjById(fmId) : null;
+  const fmName = fmObj?.fm?.name || 'Failure Mode';
+  const causeLabel = causeText || 'this cause';
+
+  const msg = `Are you sure you want to unlink Failure Cause:\n"${causeLabel}"\n\nfrom Failure Mode:\n"${fmName}"?`;
+  const isConfirmed = await confirm(msg, 'Unlink Failure Cause', 'warning');
+  if (!isConfirmed) return;
+
+  let unlinked = false;
+
+  // 1. Remove from ctx.failureModeCauses
+  if (ctx.failureModeCauses && ctx.failureModeCauses[fmId]) {
+    if (causeId) {
+      const beforeLen = ctx.failureModeCauses[fmId].length;
+      ctx.failureModeCauses[fmId] = ctx.failureModeCauses[fmId].filter(id => String(id) !== String(causeId));
+      if (ctx.failureModeCauses[fmId].length < beforeLen) unlinked = true;
+    } else {
+      ctx.failureModeCauses[fmId] = [];
+      unlinked = true;
+    }
+  }
+
+  // 2. Remove from ctx.failureNetworkLinks (where cause was linked as lower-level FM)
+  if (Array.isArray(ctx.failureNetworkLinks)) {
+    const beforeLen = ctx.failureNetworkLinks.length;
+    ctx.failureNetworkLinks = ctx.failureNetworkLinks.filter(l => {
+      if (causeId && l.targetFmId === fmId && String(l.sourceFmId) === String(causeId)) return false;
+      if (!causeId && l.targetFmId === fmId && l.sourceFmId) return false;
+      return true;
+    });
+    if (ctx.failureNetworkLinks.length < beforeLen) unlinked = true;
+  }
+
+  // 3. Remove from fm.causes array if stored directly on FM
+  if (fmObj && fmObj.fm && Array.isArray(fmObj.fm.causes)) {
+    if (causeId) {
+      fmObj.fm.causes = fmObj.fm.causes.filter(c => String(c.id) !== String(causeId));
+    } else {
+      fmObj.fm.causes = [];
+    }
+    unlinked = true;
+  }
+
+  if (typeof saveProjectToLocalStorage === 'function') {
+    saveProjectToLocalStorage();
+  }
+
+  showToast(`🔗 Unlinked cause from "${fmName}".`, 'info');
+  if (typeof renderFMEATable === 'function') {
+    renderFMEATable();
+  }
+  if (typeof refreshActiveFailureNetworkIfOpen === 'function') {
+    refreshActiveFailureNetworkIfOpen();
+  }
+}
+window.confirmAndUnlinkCauseItem = confirmAndUnlinkCauseItem;
+
+/**
+ * Handles click on Unlink in the custom context menu.
+ */
+async function onContextUnlinkClick(event) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  closeFmeaContextMenu();
+  if (!activeContextTarget) return;
+
+  const { cellType, fmId, causeId, causeText, charId, charName, effectId, targetFmId, effectType, effectText } = activeContextTarget;
+
+  if (cellType === 'effect') {
+    await confirmAndUnlinkEffectItem(fmId, effectId, effectType, effectText, targetFmId);
+  } else if (cellType === 'cause') {
+    await confirmAndUnlinkCauseItem(fmId, causeId, causeText);
+  } else if (cellType === 'char') {
+    await confirmAndUnlinkCharacteristicFromCause(causeId, charId, charName);
+  }
+}
+window.onContextUnlinkClick = onContextUnlinkClick;
+
+function initFmeaContextMenu() {
+  if (window._fmeaContextMenuInitialized) return;
+  window._fmeaContextMenuInitialized = true;
+
+  document.addEventListener('contextmenu', function(e) {
+    const table = document.getElementById('fmeaTable');
+    if (!table || !table.contains(e.target)) {
+      closeFmeaContextMenu();
+      return;
+    }
+
+    const td = e.target.closest('td');
+    if (!td) return;
+
+    const cellType = td.getAttribute('data-cell-type');
+    if (!cellType) return;
+
+    const flId = td.getAttribute('data-fl-id');
+    const funcId = td.getAttribute('data-func-id');
+    const fmId = td.getAttribute('data-fm-id');
+    const structId = td.getAttribute('data-struct-id');
+
+    const effectItem = e.target.closest('.fmea-effect-item') || td.querySelector('.fmea-effect-item');
+    const causeItem = e.target.closest('.fmea-cause-item') || td.querySelector('.fmea-cause-item');
+    const charItem = e.target.closest('.fmea-char-item') || td.querySelector('.fmea-char-item');
+    const causeId = (causeItem && causeItem.getAttribute('data-cause-id')) || (charItem && charItem.getAttribute('data-cause-id')) || td.getAttribute('data-cause-id');
+    const causeText = (causeItem && causeItem.getAttribute('data-cause-text')) || (td.innerText || '').trim();
+    const charId = charItem ? charItem.getAttribute('data-char-id') : null;
+    const charName = (charItem && charItem.getAttribute('data-char-name')) || (td.innerText || '').trim();
+    const effectId = effectItem ? effectItem.getAttribute('data-effect-id') : null;
+    const targetFmId = effectItem ? effectItem.getAttribute('data-target-fm-id') : null;
+    const effectType = effectItem ? effectItem.getAttribute('data-effect-type') : null;
+    const effectText = effectItem ? effectItem.getAttribute('data-effect-text') : (td.innerText || '').trim();
+
+    activeContextTarget = {
+      td, cellType, flId, funcId, fmId, structId,
+      effectItem, causeItem, charItem, causeId, causeText,
+      charId, charName,
+      effectId, targetFmId, effectType, effectText
+    };
+
+    const menu = document.getElementById('fmeaCustomContextMenu');
+    if (!menu) return;
+
+    const copyItem = document.getElementById('fmeaCtxCopy');
+    const moveItem = document.getElementById('fmeaCtxMove');
+    const pasteItem = document.getElementById('fmeaCtxPaste');
+    const headerItem = document.getElementById('fmeaCtxHeader');
+    const divider1 = document.getElementById('fmeaCtxDivider1');
+
+    let canCopy = false;
+    let canMove = false;
+    let canPaste = false;
+    let canUnlink = false;
+    let copyText = 'Copy';
+    let moveText = 'Move';
+    let pasteText = 'Paste';
+    let unlinkText = 'Unlink';
+    let headerText = 'Actions';
+    const unlinkItem = document.getElementById('fmeaCtxUnlink');
+    const unlinkDivider = document.getElementById('fmeaCtxDividerUnlink');
+    const unlinkLabel = document.getElementById('fmeaCtxUnlinkLabel');
+
+    if (cellType === 'func') {
+      canCopy = true;
+      canMove = true;
+      headerText = 'Function Actions';
+      copyText = 'Copy Function';
+      moveText = 'Move Function';
+    } else if (cellType === 'fm') {
+      canCopy = true;
+      canMove = true;
+      headerText = 'Failure Mode Actions';
+      copyText = 'Copy Failure Mode';
+      moveText = 'Move Failure Mode';
+    } else if (cellType === 'effect' && fmId && effectText && effectText !== '-' && !effectText.toLowerCase().includes('double-click')) {
+      canUnlink = true;
+      headerText = 'Failure Effect Actions';
+      const effSnippet = effectText ? (effectText.length > 25 ? effectText.substring(0, 22) + '...' : effectText) : 'Effect';
+      unlinkText = `🔗 Unlink Effect: "${effSnippet}"`;
+    } else if (cellType === 'cause' && fmId && causeText && causeText !== '-' && !causeText.toLowerCase().includes('double-click')) {
+      canUnlink = true;
+      headerText = 'Failure Cause Actions';
+      const causeSnippet = causeText ? (causeText.length > 25 ? causeText.substring(0, 22) + '...' : causeText) : 'Cause';
+      unlinkText = `🔗 Unlink Cause: "${causeSnippet}"`;
+    } else if (cellType === 'char' && causeId && charName && charName !== '-' && !charName.toLowerCase().includes('dbl-click')) {
+      canUnlink = true;
+      headerText = 'Characteristic Actions';
+      const charSnippet = charName ? (charName.length > 25 ? charName.substring(0, 22) + '...' : charName) : 'Characteristic';
+      unlinkText = `🔗 Unlink Characteristic: "${charSnippet}"`;
+    }
+
+    // Determine Paste / Move Here - visible only for eligible cells
+    if (fmeaClipboard && Array.isArray(fmeaClipboard.items) && fmeaClipboard.items.length > 0) {
+      const isMoveMode = fmeaClipboard.action === 'MOVE';
+      if (fmeaClipboard.type === 'FUNCTION') {
+        if (cellType === 'struct' || cellType === 'func') {
+          const srcStruct = fmeaClipboard.items[0] && fmeaClipboard.items[0].structId;
+          if (!isMoveMode || srcStruct !== structId) {
+            canPaste = true;
+            pasteText = isMoveMode ? '📍 Move Function Here' : `📥 Paste ${fmeaClipboard.items.length} Function${fmeaClipboard.items.length > 1 ? 's' : ''}`;
+            if (cellType === 'struct') headerText = 'Structure / Process Step';
+          }
+        }
+      } else if (fmeaClipboard.type === 'FAILURE_MODE') {
+        if (cellType === 'func' || cellType === 'fm') {
+          const srcFl = fmeaClipboard.items[0] && fmeaClipboard.items[0].sourceFlId;
+          if (!isMoveMode || srcFl !== flId) {
+            canPaste = true;
+            pasteText = isMoveMode ? '📍 Move Failure Mode Here' : `📥 Paste ${fmeaClipboard.items.length} Failure Mode${fmeaClipboard.items.length > 1 ? 's' : ''}`;
+          }
+        }
+      }
+    }
+
+    if (!canCopy && !canMove && !canPaste && !canUnlink) {
+      closeFmeaContextMenu();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (headerItem) headerItem.textContent = headerText;
+
+    if (copyItem) {
+      copyItem.style.display = canCopy ? 'flex' : 'none';
+      const copyLabel = document.getElementById('fmeaCtxCopyLabel');
+      if (copyLabel) copyLabel.textContent = copyText;
+    }
+
+    if (moveItem) {
+      moveItem.style.display = canMove ? 'flex' : 'none';
+      const moveLabel = document.getElementById('fmeaCtxMoveLabel');
+      if (moveLabel) moveLabel.textContent = moveText;
+    }
+
+    if (pasteItem) {
+      pasteItem.style.display = canPaste ? 'flex' : 'none';
+      const pasteLabel = document.getElementById('fmeaCtxPasteLabel');
+      if (pasteLabel) pasteLabel.textContent = pasteText;
+    }
+
+    if (divider1) divider1.style.display = (canCopy || canMove) && canPaste ? 'block' : 'none';
+    if (unlinkItem) {
+      unlinkItem.style.display = canUnlink ? 'flex' : 'none';
+      if (unlinkLabel) unlinkLabel.textContent = unlinkText;
+    }
+    if (unlinkDivider) {
+      unlinkDivider.style.display = canUnlink && (canCopy || canMove || canPaste) ? 'block' : 'none';
+    }
+
+    menu.style.display = 'block';
+    menu.style.visibility = 'hidden';
+    const menuWidth = menu.offsetWidth || 220;
+    const menuHeight = menu.offsetHeight || 140;
+
+    let posX = e.clientX;
+    let posY = e.clientY;
+
+    if (posX + menuWidth > window.innerWidth) posX = window.innerWidth - menuWidth - 10;
+    if (posY + menuHeight > window.innerHeight) posY = window.innerHeight - menuHeight - 10;
+
+    menu.style.left = Math.max(10, posX) + 'px';
+    menu.style.top = Math.max(10, posY) + 'px';
+    menu.style.visibility = 'visible';
+  });
+
+  // Auto-hide context menu if clicked or pointerdown anywhere in page outside menu (capture phase ensures no stopPropagation can block it)
+  window.addEventListener('click', function(e) {
+    const menu = document.getElementById('fmeaCustomContextMenu');
+    if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+      closeFmeaContextMenu();
+    }
+  }, true);
+
+  window.addEventListener('pointerdown', function(e) {
+    const menu = document.getElementById('fmeaCustomContextMenu');
+    if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+      closeFmeaContextMenu();
+    }
+  }, true);
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      const menu = document.getElementById('fmeaCustomContextMenu');
+      const isMenuOpen = menu && menu.style.display !== 'none';
+      const hasClipboard = fmeaClipboard && Array.isArray(fmeaClipboard.items) && fmeaClipboard.items.length > 0;
+      const hasSelections = (typeof selectedFuncCopyIds !== 'undefined' && selectedFuncCopyIds.size > 0) ||
+                            (typeof selectedFmCopyIds !== 'undefined' && selectedFmCopyIds.size > 0);
+
+      if (isMenuOpen || hasClipboard || hasSelections) {
+        clearActiveCopyMode();
+      }
+    }
+  });
+}
+
+function closeFmeaContextMenu() {
+  const menu = document.getElementById('fmeaCustomContextMenu');
+  if (menu) menu.style.display = 'none';
+}
+
+function onContextCopyClick(e) {
+  if (e) e.stopPropagation();
+  closeFmeaContextMenu();
+  if (!activeContextTarget) return;
+
+  const { cellType, flId, funcId, fmId } = activeContextTarget;
+  if (cellType === 'func') {
+    if (typeof selectedFuncCopyIds !== 'undefined' && selectedFuncCopyIds.has(flId) && selectedFuncCopyIds.size > 1) {
+      copySelectedItems();
+    } else {
+      copySingleFunction(flId, funcId);
+    }
+  } else if (cellType === 'fm') {
+    if (typeof selectedFmCopyIds !== 'undefined' && selectedFmCopyIds.has(fmId) && selectedFmCopyIds.size > 1) {
+      copySelectedItems();
+    } else {
+      copySingleFailureMode(flId, fmId);
+    }
+  }
+}
+
+function onContextMoveClick(e) {
+  if (e) e.stopPropagation();
+  closeFmeaContextMenu();
+  if (!activeContextTarget) return;
+
+  const { cellType, flId, funcId, fmId } = activeContextTarget;
+  if (cellType === 'func') {
+    startMoveSingleFunction(flId, funcId);
+  } else if (cellType === 'fm') {
+    startMoveSingleFailureMode(flId, fmId);
+  }
+}
+
+function onContextPasteClick(e) {
+  if (e) e.stopPropagation();
+  closeFmeaContextMenu();
+  if (!activeContextTarget || !fmeaClipboard) return;
+
+  const { cellType, flId, structId } = activeContextTarget;
+  const isMove = fmeaClipboard.action === 'MOVE';
+
+  if (fmeaClipboard.type === 'FUNCTION') {
+    const targetDest = structId || (activeContextTarget.td ? activeContextTarget.td.getAttribute('data-struct-id') : null);
+    if (isMove) {
+      const sourceFuncId = fmeaClipboard.items[0].funcId;
+      executeMoveFunction(sourceFuncId, targetDest);
+    } else {
+      openPasteModal('FUNCTION', targetDest);
+    }
+  } else if (fmeaClipboard.type === 'FAILURE_MODE') {
+    if (isMove) {
+      const sourceFmId = fmeaClipboard.items[0].fmId;
+      const sourceFlId = fmeaClipboard.items[0].sourceFlId;
+      executeMoveFailureMode(sourceFmId, sourceFlId, flId);
+    } else {
+      openPasteModal('FAILURE_MODE', flId);
+    }
+  }
+}
+
+// --- Copy Mode Active State Helper -------------------------------------------
+
+function setCopyModeActive(active) {
+  if (typeof document !== 'undefined' && document.body) {
+    if (active) {
+      document.body.classList.add('copy-mode-active');
+    } else {
+      document.body.classList.remove('copy-mode-active');
+    }
+  }
+}
+
+// Ensure copy mode active is set when items in clipboard
+if (fmeaClipboard && Array.isArray(fmeaClipboard.items) && fmeaClipboard.items.length > 0) {
+  setCopyModeActive(true);
+}
+
+// --- Quick Field Edit Engine (Ctrl + Double Click) ---------------------------
+
+function initCtrlDblClickListeners() {
+  if (window._fmeaCtrlDblClickInitialized) return;
+  window._fmeaCtrlDblClickInitialized = true;
+
+  document.addEventListener('dblclick', function(e) {
+    if (!e.ctrlKey && !e.metaKey) return;
+    const table = document.getElementById('fmeaTable');
+    if (!table || !table.contains(e.target)) return;
+
+    const td = e.target.closest('td');
+    if (!td) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    handleCtrlDblClickFMEACell(e, td);
+  }, true);
+}
+
+function handleCtrlDblClickFMEACell(e, td) {
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
+
+  const reqContainer = e.target.closest('[data-cell-type="req"], .cell-dbl-click-hint[title*="requirement"], .cell-dbl-click-hint[title*="characteristic"]');
+  if (reqContainer) {
+    const flId = reqContainer.getAttribute('data-fl-id') || td.getAttribute('data-fl-id');
+    openQuickFieldEditModal('REQUIREMENT', { flId, td });
+    return;
+  }
+
+  const cellType = td.getAttribute('data-cell-type') || '';
+  const flId = td.getAttribute('data-fl-id');
+  const funcId = td.getAttribute('data-func-id');
+  const fmId = td.getAttribute('data-fm-id');
+  const structId = td.getAttribute('data-struct-id');
+  const causeId = td.getAttribute('data-cause-id');
+  const actId = td.getAttribute('data-act-id');
+
+  if (cellType === 'struct') {
+    openQuickFieldEditModal('STRUCTURE', { structId, td });
+  } else if (cellType === 'func') {
+    openQuickFieldEditModal('FUNCTION', { flId, funcId, td });
+  } else if (cellType === 'fm') {
+    openQuickFieldEditModal('FAILURE_MODE', { flId, fmId, td });
+  } else if (cellType === 'effect') {
+    openQuickFieldEditModal('EFFECT', { fmId, td });
+  } else if (cellType === 'severity') {
+    openQuickFieldEditModal('EFFECT', { fmId, td });
+  } else if (cellType === 'cause') {
+    openQuickFieldEditModal('CAUSE', { fmId, causeId, td });
+  } else if (cellType === 'char') {
+    openQuickFieldEditModal('CHARACTERISTIC', { causeId, td });
+  } else if (cellType === 'prev_ctrl') {
+    openQuickFieldEditModal('PREVENTION_CONTROL', { causeId, td });
+  } else if (cellType === 'occurrence') {
+    openQuickFieldEditModal('CAUSE', { fmId, causeId, td });
+  } else if (cellType === 'det_ctrl') {
+    openQuickFieldEditModal('DETECTION_CONTROL', { causeId, td });
+  } else if (cellType === 'detection') {
+    openQuickFieldEditModal('DETECTION_CONTROL', { causeId, td });
+  } else if (cellType === 'action') {
+    openQuickFieldEditModal('ACTION', { causeId, actId, td });
+  } else {
+    if (td.cellIndex === 0) openQuickFieldEditModal('STRUCTURE', { structId, td });
+    else if (td.cellIndex === 1) openQuickFieldEditModal('FUNCTION', { flId, funcId, td });
+    else if (td.cellIndex === 2) openQuickFieldEditModal('FAILURE_MODE', { flId, fmId, td });
+    else if (td.cellIndex === 3) openQuickFieldEditModal('EFFECT', { fmId, td });
+  }
+}
+
+function openQuickFieldEditModal(type, params) {
+  const ctx = getActiveFmeaData();
+  const modal = document.getElementById('quickFieldEditModal');
+  if (!modal) return;
+
+  const titleText = document.getElementById('quickFieldEditTitleText');
+  const breadcrumb = document.getElementById('quickFieldEditBreadcrumb');
+  const container = document.getElementById('quickFieldEditFieldsContainer');
+  const typeInput = document.getElementById('quickEditFieldType');
+  const entityInput = document.getElementById('quickEditEntityId');
+  const parentInput = document.getElementById('quickEditParentId');
+  const subInput = document.getElementById('quickEditSubId');
+
+  typeInput.value = type;
+  entityInput.value = '';
+  parentInput.value = '';
+  subInput.value = '';
+  container.innerHTML = '';
+
+  if (type === 'STRUCTURE') {
+    titleText.textContent = ctx.isPFMEA ? 'Quick Edit: Process Step' : 'Quick Edit: Structure Element';
+    let structNode = null;
+    if (params.structId) {
+      structNode = getStructureNodeById(ctx.structure, params.structId);
+      if (!structNode && ctx.isPFMEA && ctx.processSteps) {
+        structNode = ctx.processSteps.find(p => p.id === params.structId);
+      }
+    }
+    const currentName = structNode ? (structNode.name || '') : '';
+    const currentNo = structNode ? (structNode.partNo || structNode.opNo || '') : '';
+    entityInput.value = params.structId || '';
+
+    breadcrumb.textContent = `Target Element: ${currentName || 'Structure Element'} (${currentNo || 'No ID'})`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">${ctx.isPFMEA ? 'Process Step / Operation Name:' : 'Element / System Name:'}</label>
+        <input type="text" id="quickEditStructName" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(currentName)}" required>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">${ctx.isPFMEA ? 'Operation No. (e.g. OP-10):' : 'Part / Drawing No.:'}</label>
+        <input type="text" id="quickEditStructPartNo" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(currentNo)}">
+      </div>
+    `;
+  } else if (type === 'FUNCTION') {
+    titleText.textContent = ctx.isPFMEA ? 'Quick Edit: Process Function' : 'Quick Edit: Function';
+    let funcObj = null;
+    const allFuncs = (ctx.functions || []).concat(fmeaData.functions || []);
+    if (params.funcId) funcObj = allFuncs.find(f => f.id === params.funcId);
+    if (!funcObj && params.flId) {
+      const fl = (ctx.functionLines || []).find(l => l.id === params.flId);
+      if (fl) funcObj = allFuncs.find(f => f.id === fl.funcId);
+    }
+    const currentName = funcObj ? stripBadgeArtifacts(funcObj.name) : '';
+    entityInput.value = funcObj ? funcObj.id : (params.funcId || '');
+    parentInput.value = params.flId || '';
+
+    breadcrumb.textContent = `Function Line ID: ${params.flId || 'Active'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Function Name / Intended Purpose:</label>
+        <textarea id="quickEditFuncName" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(currentName)}</textarea>
+      </div>
+    `;
+  } else if (type === 'REQUIREMENT') {
+    titleText.textContent = ctx.isPFMEA ? 'Quick Edit: Product / Process Characteristic' : 'Quick Edit: Requirement';
+    const flId = params.flId;
+    parentInput.value = flId || '';
+
+    const reqMap = ctx.functionRequirements || {};
+    const reqIds = reqMap[flId] || [];
+    const allReqs = typeof getActiveRequirementsList === 'function' ? getActiveRequirementsList(ctx) : (ctx.requirements || []);
+    const reqObj = allReqs.find(r => reqIds.includes(r.id)) || { reqNo: 'REQ-01', text: '', spec: '', classSymbol: 'None' };
+    entityInput.value = reqObj.id || '';
+
+    breadcrumb.textContent = `Linked Requirement: ${reqObj.reqNo || 'New'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Requirement / Characteristic No.:</label>
+        <input type="text" id="quickEditReqNo" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(reqObj.reqNo || '')}">
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Requirement Description / Parameter:</label>
+        <textarea id="quickEditReqText" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(reqObj.text || '')}</textarea>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Specification / Tolerance:</label>
+          <input type="text" id="quickEditReqSpec" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(reqObj.spec || '')}">
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Special Classification:</label>
+          <select id="quickEditReqClass" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;">
+            <option value="None" ${reqObj.classSymbol === 'None' || !reqObj.classSymbol ? 'selected' : ''}>None</option>
+            <option value="[CC]" ${reqObj.classSymbol === '[CC]' || reqObj.classSymbol === 'CC' ? 'selected' : ''}>[CC] Critical Characteristic</option>
+            <option value="[SC]" ${reqObj.classSymbol === '[SC]' || reqObj.classSymbol === 'SC' ? 'selected' : ''}>[SC] Significant Characteristic</option>
+            <option value="[HI]" ${reqObj.classSymbol === '[HI]' || reqObj.classSymbol === 'HI' ? 'selected' : ''}>[HI] High Impact</option>
+          </select>
+        </div>
+      </div>
+    `;
+  } else if (type === 'FAILURE_MODE') {
+    titleText.textContent = 'Quick Edit: Failure Mode';
+    let fmObj = null;
+    const allLines = (ctx.functionLines || []).concat(fmeaData.functionLines || []);
+    for (const fl of allLines) {
+      if (fl.failureModes) {
+        const found = fl.failureModes.find(m => m.id === params.fmId);
+        if (found) { fmObj = found; parentInput.value = fl.id; break; }
+      }
+    }
+    const currentName = fmObj ? stripBadgeArtifacts(fmObj.name) : '';
+    entityInput.value = params.fmId || '';
+
+    breadcrumb.textContent = `Failure Mode ID: ${params.fmId || 'Active'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Failure Mode Description:</label>
+        <textarea id="quickEditFmName" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(currentName)}</textarea>
+      </div>
+    `;
+  } else if (type === 'EFFECT') {
+    titleText.textContent = 'Quick Edit: Failure Effect & Severity';
+    const fmId = params.fmId;
+    entityInput.value = fmId || '';
+
+    const effMap = ctx.failureModeEffects || {};
+    const linkedEffIds = effMap[fmId] || [];
+    const allEffs = (fmeaData.libraries && fmeaData.libraries.effects) ? fmeaData.libraries.effects : [];
+    let effObj = allEffs.find(e => linkedEffIds.includes(e.id));
+    if (!effObj && linkedEffIds.length > 0) effObj = { id: linkedEffIds[0], desc: 'Failure Effect', severity: 7 };
+    if (!effObj) effObj = { id: '', desc: '', severity: 7 };
+
+    subInput.value = effObj.id || '';
+    const currentDesc = effObj.desc || effObj.details || effObj.name || '';
+    const currentSev = effObj.severity || 7;
+
+    breadcrumb.textContent = `Linked to Failure Mode: ${fmId || 'Current'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Failure Effect Description:</label>
+        <textarea id="quickEditEffectDesc" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(currentDesc)}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Severity Rating (1 to 10):</label>
+        <select id="quickEditEffectSev" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;">
+          ${[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(v => `<option value="${v}" ${v === Number(currentSev) ? 'selected' : ''}>${v} - ${v >= 9 ? 'Safety / Regulatory Hazard' : (v >= 7 ? 'Major Function Loss' : (v >= 4 ? 'Moderate Performance Loss' : 'Minor / Annoyance'))}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  } else if (type === 'CAUSE') {
+    titleText.textContent = 'Quick Edit: Failure Cause & Occurrence';
+    const causeId = params.causeId;
+    entityInput.value = causeId || '';
+    parentInput.value = params.fmId || '';
+
+    const allCauses = (fmeaData.libraries && fmeaData.libraries.causes) ? fmeaData.libraries.causes : [];
+    const causeObj = allCauses.find(c => c.id === causeId) || { details: '', occurrence: 5 };
+    const currentDetails = causeObj.details || causeObj.desc || '';
+    const currentOcc = causeObj.occurrence || 5;
+
+    breadcrumb.textContent = `Cause ID: ${causeId || 'Current'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Failure Cause Description:</label>
+        <textarea id="quickEditCauseDetails" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(currentDetails)}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Occurrence Rating (1 to 10):</label>
+        <select id="quickEditCauseOcc" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;">
+          ${[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(v => `<option value="${v}" ${v === Number(currentOcc) ? 'selected' : ''}>${v} - ${v >= 9 ? 'Extremely High (>=100 per thousand)' : (v >= 7 ? 'High Frequency' : (v >= 4 ? 'Moderate / Occasional' : 'Low / Highly Unlikely'))}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  } else if (type === 'CHARACTERISTIC') {
+    titleText.textContent = 'Quick Edit: Special Characteristic';
+    const causeId = params.causeId;
+    entityInput.value = causeId || '';
+
+    const allCauses = (fmeaData.libraries && fmeaData.libraries.causes) ? fmeaData.libraries.causes : [];
+    const causeObj = allCauses.find(c => c.id === causeId) || {};
+    const currentChar = causeObj.characteristics || '';
+    const currentSpec = causeObj.spec || '';
+
+    breadcrumb.textContent = `Associated Cause: ${causeId || 'Current'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Special Characteristic Name:</label>
+        <input type="text" id="quickEditCharName" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(currentChar)}">
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Specification / Tolerance Limit:</label>
+        <input type="text" id="quickEditCharSpec" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(currentSpec)}">
+      </div>
+    `;
+  } else if (type === 'PREVENTION_CONTROL') {
+    titleText.textContent = 'Quick Edit: Prevention Control';
+    const causeId = params.causeId;
+    entityInput.value = causeId || '';
+
+    const ctrlMap = ctx.causeControls || {};
+    const ctrlIds = ctrlMap[causeId] || [];
+    const allCtrls = (fmeaData.libraries && fmeaData.libraries.controls) ? fmeaData.libraries.controls : [];
+    let ctrlObj = allCtrls.find(c => ctrlIds.includes(c.id) && c.type === 'Prevention');
+    if (!ctrlObj) ctrlObj = allCtrls.find(c => ctrlIds.includes(c.id));
+    if (!ctrlObj) ctrlObj = { id: '', desc: '' };
+    subInput.value = ctrlObj.id || '';
+
+    breadcrumb.textContent = `Cause ID: ${causeId || 'Current'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Current Prevention Control (PC) Description:</label>
+        <textarea id="quickEditPrevDesc" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(ctrlObj.desc || '')}</textarea>
+      </div>
+    `;
+  } else if (type === 'DETECTION_CONTROL') {
+    titleText.textContent = 'Quick Edit: Detection Control & Detection Rating';
+    const causeId = params.causeId;
+    entityInput.value = causeId || '';
+
+    const ctrlMap = ctx.causeControls || {};
+    const ctrlIds = ctrlMap[causeId] || [];
+    const allCtrls = (fmeaData.libraries && fmeaData.libraries.controls) ? fmeaData.libraries.controls : [];
+    let ctrlObj = allCtrls.find(c => ctrlIds.includes(c.id) && c.type === 'Detection');
+    if (!ctrlObj) ctrlObj = { id: '', desc: '' };
+    subInput.value = ctrlObj.id || '';
+
+    const allCauses = (fmeaData.libraries && fmeaData.libraries.causes) ? fmeaData.libraries.causes : [];
+    const causeObj = allCauses.find(c => c.id === causeId) || { detection: 5 };
+    const currentDet = causeObj.detection || 5;
+
+    breadcrumb.textContent = `Cause ID: ${causeId || 'Current'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Current Detection Control (DC) Description:</label>
+        <textarea id="quickEditDetDesc" rows="3" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(ctrlObj.desc || '')}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Detection Rating (1 to 10):</label>
+        <select id="quickEditDetRating" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;">
+          ${[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(v => `<option value="${v}" ${v === Number(currentDet) ? 'selected' : ''}>${v} - ${v >= 9 ? 'Almost Impossible to Detect' : (v >= 7 ? 'Low Detection Capability' : (v >= 4 ? 'Moderate / Visual Inspection' : 'High / Poka-Yoke Automated 100%'))}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  } else if (type === 'ACTION') {
+    titleText.textContent = 'Quick Edit: Optimization Action';
+    const causeId = params.causeId;
+    const actId = params.actId;
+    entityInput.value = causeId || '';
+    subInput.value = actId || '';
+
+    const actMap = ctx.causeActions || {};
+    const actIds = actMap[causeId] || [];
+    const allActs = (fmeaData.libraries && fmeaData.libraries.actions) ? fmeaData.libraries.actions : [];
+    let actObj = allActs.find(a => a.id === actId);
+    if (!actObj) actObj = allActs.find(a => actIds.includes(a.id));
+    if (!actObj) actObj = { id: '', detail: '', responsible: '', targetDate: '', status: 'In Progress', actionTaken: '' };
+
+    breadcrumb.textContent = `Action ID: ${actObj.id || 'New'}`;
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Action Description / Plan:</label>
+        <textarea id="quickEditActDetail" rows="2" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;" required>${escapeHtml(actObj.detail || '')}</textarea>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Responsible Person:</label>
+          <input type="text" id="quickEditActResp" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(actObj.responsible || '')}">
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Target Completion Date:</label>
+          <input type="date" id="quickEditActDate" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc;" value="${escapeHtml(actObj.targetDate || '')}">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="display:block; font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:5px;">Status / Action Taken:</label>
+        <textarea id="quickEditActTaken" rows="2" class="form-control" style="width:100%; padding:8px 10px; font-size:13px; border-radius:5px; background:#0f172a; border:1px solid #334155; color:#f8fafc; resize:vertical;">${escapeHtml(actObj.actionTaken || '')}</textarea>
+      </div>
+    `;
+  }
+
+  if (typeof openModal === 'function') {
+    openModal('quickFieldEditModal');
+  } else {
+    modal.style.display = 'flex';
+  }
+}
+
+function saveQuickFieldEdit(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return false;
+
+  const ctx = getActiveFmeaData();
+  const type = document.getElementById('quickEditFieldType').value;
+  const entityId = document.getElementById('quickEditEntityId').value;
+  const parentId = document.getElementById('quickEditParentId').value;
+  const subId = document.getElementById('quickEditSubId').value;
+
+  if (type === 'STRUCTURE') {
+    const newName = stripBadgeArtifacts(document.getElementById('quickEditStructName').value);
+    const newNo = document.getElementById('quickEditStructPartNo').value.trim();
+    if (entityId) {
+      let node = getStructureNodeById(ctx.structure, entityId);
+      if (!node && ctx.isPFMEA && ctx.processSteps) {
+        node = ctx.processSteps.find(p => p.id === entityId);
+      }
+      if (node) {
+        if (newName) node.name = newName;
+        if (node.partNo !== undefined) node.partNo = newNo;
+        if (node.opNo !== undefined) node.opNo = newNo;
+      }
+    }
+    showToast('Updated Structure Element.');
+  } else if (type === 'FUNCTION') {
+    const newName = stripBadgeArtifacts(document.getElementById('quickEditFuncName').value);
+    if (newName && entityId) {
+      const allFuncs = (ctx.functions || []).concat(fmeaData.functions || []);
+      const f = allFuncs.find(item => item.id === entityId);
+      if (f) {
+        f.name = newName;
+        if (typeof syncReferencedFunctions === 'function') {
+          syncReferencedFunctions(f);
+        }
+      }
+    }
+    showToast('Updated Function.');
+  } else if (type === 'REQUIREMENT') {
+    const reqNo = document.getElementById('quickEditReqNo').value.trim();
+    const text = document.getElementById('quickEditReqText').value.trim();
+    const spec = document.getElementById('quickEditReqSpec').value.trim();
+    const classSymbol = document.getElementById('quickEditReqClass').value;
+
+    const allReqs = typeof getActiveRequirementsList === 'function' ? getActiveRequirementsList(ctx) : (ctx.requirements || []);
+    let reqObj = allReqs.find(r => r.id === entityId);
+    if (!reqObj && parentId) {
+      const newReqId = 'req-' + Date.now();
+      reqObj = { id: newReqId, reqNo, text, spec, classSymbol };
+      ctx.requirements = ctx.requirements || [];
+      ctx.requirements.push(reqObj);
+      ctx.functionRequirements = ctx.functionRequirements || {};
+      ctx.functionRequirements[parentId] = ctx.functionRequirements[parentId] || [];
+      ctx.functionRequirements[parentId].push(newReqId);
+    } else if (reqObj) {
+      if (reqNo) reqObj.reqNo = reqNo;
+      reqObj.text = text;
+      reqObj.spec = spec;
+      reqObj.classSymbol = classSymbol;
+    }
+    showToast('Updated Requirement / Characteristic.');
+  } else if (type === 'FAILURE_MODE') {
+    const newName = stripBadgeArtifacts(document.getElementById('quickEditFmName').value);
+    if (newName && entityId) {
+      const allLines = (ctx.functionLines || []).concat(fmeaData.functionLines || []);
+      for (const fl of allLines) {
+        if (fl.failureModes) {
+          const fm = fl.failureModes.find(m => m.id === entityId);
+          if (fm) {
+            fm.name = newName;
+            if (typeof syncReferencedFailureModes === 'function') {
+              syncReferencedFailureModes(fm);
+            }
+            break;
+          }
+        }
+      }
+    }
+    showToast('Updated Failure Mode.');
+  } else if (type === 'EFFECT') {
+    const newDesc = document.getElementById('quickEditEffectDesc').value.trim();
+    const newSev = parseInt(document.getElementById('quickEditEffectSev').value) || 7;
+    const allEffs = (fmeaData.libraries && fmeaData.libraries.effects) ? fmeaData.libraries.effects : [];
+    let effObj = allEffs.find(e => e.id === subId);
+    if (!effObj && entityId) {
+      const newEffId = 'eff-' + Date.now();
+      effObj = { id: newEffId, desc: newDesc, severity: newSev };
+      fmeaData.libraries = fmeaData.libraries || {};
+      fmeaData.libraries.effects = fmeaData.libraries.effects || [];
+      fmeaData.libraries.effects.push(effObj);
+      ctx.failureModeEffects = ctx.failureModeEffects || {};
+      ctx.failureModeEffects[entityId] = ctx.failureModeEffects[entityId] || [];
+      ctx.failureModeEffects[entityId].push(newEffId);
+    } else if (effObj) {
+      effObj.desc = newDesc;
+      effObj.severity = newSev;
+    }
+    showToast('Updated Failure Effect & Severity.');
+  } else if (type === 'CAUSE') {
+    const newDetails = document.getElementById('quickEditCauseDetails').value.trim();
+    const newOcc = parseInt(document.getElementById('quickEditCauseOcc').value) || 5;
+    const allCauses = (fmeaData.libraries && fmeaData.libraries.causes) ? fmeaData.libraries.causes : [];
+    let causeObj = allCauses.find(c => c.id === entityId);
+    if (causeObj) {
+      causeObj.details = newDetails;
+      causeObj.occurrence = newOcc;
+    }
+    showToast('Updated Failure Cause & Occurrence.');
+  } else if (type === 'CHARACTERISTIC') {
+    const newChar = document.getElementById('quickEditCharName').value.trim();
+    const newSpec = document.getElementById('quickEditCharSpec').value.trim();
+    const allCauses = (fmeaData.libraries && fmeaData.libraries.causes) ? fmeaData.libraries.causes : [];
+    const causeObj = allCauses.find(c => c.id === entityId);
+    if (causeObj) {
+      causeObj.characteristics = newChar;
+      causeObj.spec = newSpec;
+    }
+    showToast('Updated Special Characteristic.');
+  } else if (type === 'PREVENTION_CONTROL') {
+    const newDesc = document.getElementById('quickEditPrevDesc').value.trim();
+    const allCtrls = (fmeaData.libraries && fmeaData.libraries.controls) ? fmeaData.libraries.controls : [];
+    let ctrlObj = allCtrls.find(c => c.id === subId);
+    if (!ctrlObj && entityId) {
+      const newCtrlId = 'ctrl-' + Date.now();
+      ctrlObj = { id: newCtrlId, desc: newDesc, type: 'Prevention' };
+      fmeaData.libraries = fmeaData.libraries || {};
+      fmeaData.libraries.controls = fmeaData.libraries.controls || [];
+      fmeaData.libraries.controls.push(ctrlObj);
+      ctx.causeControls = ctx.causeControls || {};
+      ctx.causeControls[entityId] = ctx.causeControls[entityId] || [];
+      ctx.causeControls[entityId].push(newCtrlId);
+    } else if (ctrlObj) {
+      ctrlObj.desc = newDesc;
+    }
+    showToast('Updated Prevention Control.');
+  } else if (type === 'DETECTION_CONTROL') {
+    const newDesc = document.getElementById('quickEditDetDesc').value.trim();
+    const newDet = parseInt(document.getElementById('quickEditDetRating').value) || 5;
+    const allCtrls = (fmeaData.libraries && fmeaData.libraries.controls) ? fmeaData.libraries.controls : [];
+    let ctrlObj = allCtrls.find(c => c.id === subId);
+    if (!ctrlObj && entityId) {
+      const newCtrlId = 'ctrl-' + Date.now();
+      ctrlObj = { id: newCtrlId, desc: newDesc, type: 'Detection' };
+      fmeaData.libraries = fmeaData.libraries || {};
+      fmeaData.libraries.controls = fmeaData.libraries.controls || [];
+      fmeaData.libraries.controls.push(ctrlObj);
+      ctx.causeControls = ctx.causeControls || {};
+      ctx.causeControls[entityId] = ctx.causeControls[entityId] || [];
+      ctx.causeControls[entityId].push(newCtrlId);
+    } else if (ctrlObj) {
+      ctrlObj.desc = newDesc;
+    }
+    const allCauses = (fmeaData.libraries && fmeaData.libraries.causes) ? fmeaData.libraries.causes : [];
+    const causeObj = allCauses.find(c => c.id === entityId);
+    if (causeObj) causeObj.detection = newDet;
+    showToast('Updated Detection Control & Detection Rating.');
+  } else if (type === 'ACTION') {
+    const detail = document.getElementById('quickEditActDetail').value.trim();
+    const responsible = document.getElementById('quickEditActResp').value.trim();
+    const targetDate = document.getElementById('quickEditActDate').value;
+    const actionTaken = document.getElementById('quickEditActTaken').value.trim();
+
+    const allActs = (fmeaData.libraries && fmeaData.libraries.actions) ? fmeaData.libraries.actions : [];
+    let actObj = allActs.find(a => a.id === subId);
+    if (!actObj && entityId) {
+      const newActId = 'act-' + Date.now();
+      actObj = { id: newActId, detail, responsible, targetDate, actionTaken, status: 'In Progress' };
+      fmeaData.libraries = fmeaData.libraries || {};
+      fmeaData.libraries.actions = fmeaData.libraries.actions || [];
+      fmeaData.libraries.actions.push(actObj);
+      ctx.causeActions = ctx.causeActions || {};
+      ctx.causeActions[entityId] = ctx.causeActions[entityId] || [];
+      ctx.causeActions[entityId].push(newActId);
+    } else if (actObj) {
+      actObj.detail = detail;
+      actObj.responsible = responsible;
+      actObj.targetDate = targetDate;
+      actObj.actionTaken = actionTaken;
+    }
+    showToast('Updated Optimization Action.');
+  }
+
+  if (typeof closeModal === 'function') {
+    closeModal('quickFieldEditModal');
+  } else {
+    document.getElementById('quickFieldEditModal').style.display = 'none';
+  }
+
+  if (typeof markDataChanged === 'function') markDataChanged('Quick Field Edit');
+  if (typeof renderFMEATable === 'function') renderFMEATable();
+  return false;
+}
+
+// --- Referenced Element Lifecycle & Orphan Cleanup ----------------------------
+
+function cleanupOrphanedReferences() {
+  if (typeof fmeaData === 'undefined' || !fmeaData) return;
+
+  // 1. Clean functions with <= 1 instance
+  const allFuncs = [];
+  if (Array.isArray(fmeaData.functions)) allFuncs.push(...fmeaData.functions);
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      if (Array.isArray(p.functions)) allFuncs.push(...p.functions);
+    });
+  }
+
+  const funcRefMap = new Map();
+  allFuncs.forEach(f => {
+    if (f && f.referenceId) {
+      if (!funcRefMap.has(f.referenceId)) funcRefMap.set(f.referenceId, []);
+      funcRefMap.get(f.referenceId).push(f);
+    }
+  });
+
+  funcRefMap.forEach((instances, refId) => {
+    if (instances.length <= 1) {
+      instances.forEach(f => {
+        delete f.referenceId;
+      });
+    }
+  });
+
+  // 2. Clean failure modes with <= 1 instance
+  const allFms = [];
+  if (Array.isArray(fmeaData.functionLines)) {
+    fmeaData.functionLines.forEach(fl => {
+      if (Array.isArray(fl.failureModes)) allFms.push(...fl.failureModes);
+    });
+  }
+  if (Array.isArray(fmeaData.pfmeas)) {
+    fmeaData.pfmeas.forEach(p => {
+      if (Array.isArray(p.functionLines)) {
+        p.functionLines.forEach(fl => {
+          if (Array.isArray(fl.failureModes)) allFms.push(...fl.failureModes);
+        });
+      }
+    });
+  }
+
+  const fmRefMap = new Map();
+  allFms.forEach(fm => {
+    if (fm && fm.referenceId) {
+      if (!fmRefMap.has(fm.referenceId)) fmRefMap.set(fm.referenceId, []);
+      fmRefMap.get(fm.referenceId).push(fm);
+    }
+  });
+
+  fmRefMap.forEach((instances, refId) => {
+    if (instances.length <= 1) {
+      instances.forEach(fm => {
+        delete fm.referenceId;
+      });
+    }
+  });
+}
+
+let pendingDeleteReferenceContext = null;
+
+function promptReferencedElementDeletion(context) {
+  pendingDeleteReferenceContext = context;
+  const modal = document.getElementById('deleteReferenceModal');
+  if (!modal) {
+    if (confirm("This item has active live references. Delete all references also?\n\nOK: Delete All References\nCancel: Delete From Here Only")) {
+      confirmDeleteReferenceChoice('DELETE_ALL');
+    } else {
+      confirmDeleteReferenceChoice('DELETE_LOCAL_ONLY');
+    }
+    return;
+  }
+
+  const countEl = document.getElementById('deleteRefModalCount');
+  if (countEl) countEl.textContent = String(context.referenceCount || 2);
+
+  const nameEl = document.getElementById('deleteRefModalItemName');
+  if (nameEl) nameEl.textContent = stripBadgeArtifacts(context.name || 'Item');
+
+  if (typeof openModal === 'function') {
+    openModal('deleteReferenceModal');
+  } else {
+    modal.style.display = 'flex';
+  }
+}
+
+function confirmDeleteReferenceChoice(choice) {
+  if (typeof closeModal === 'function') {
+    closeModal('deleteReferenceModal');
+  } else {
+    const m = document.getElementById('deleteReferenceModal');
+    if (m) m.style.display = 'none';
+  }
+
+  if (!pendingDeleteReferenceContext) return;
+  const ctx = pendingDeleteReferenceContext;
+  pendingDeleteReferenceContext = null;
+
+  if (ctx.type === 'FUNCTION') {
+    executeDeleteFunctionWithChoice(ctx.funcId, ctx.refId, choice);
+  } else if (ctx.type === 'FAILURE_MODE') {
+    executeDeleteFailureModeWithChoice(ctx.flId, ctx.fmId, ctx.refId, choice);
+  }
+}
+
+function executeDeleteFunctionWithChoice(funcId, refId, choice) {
+  const activeCtx = getActiveFmeaData();
+
+  if (choice === 'DELETE_ALL') {
+    if (Array.isArray(fmeaData.functions)) {
+      fmeaData.functions = fmeaData.functions.filter(f => f.referenceId !== refId && f.id !== funcId && f.id !== refId);
+    }
+    if (Array.isArray(fmeaData.functionLines)) {
+      fmeaData.functionLines = fmeaData.functionLines.filter(fl => {
+        return fl.funcId !== funcId && !fmeaData.functions.some(f => f.id === fl.funcId && f.referenceId === refId);
+      });
+    }
+    if (Array.isArray(fmeaData.pfmeas)) {
+      fmeaData.pfmeas.forEach(p => {
+        if (Array.isArray(p.functions)) {
+          p.functions = p.functions.filter(f => f.referenceId !== refId && f.id !== funcId && f.id !== refId);
+        }
+        if (Array.isArray(p.functionLines)) {
+          p.functionLines = p.functionLines.filter(fl => {
+            return fl.funcId !== funcId && !(p.functions || []).some(f => f.id === fl.funcId && f.referenceId === refId);
+          });
+        }
+      });
+    }
+    showToast('Deleted function and all its referenced instances across all FMEAs.');
+  } else {
+    if (activeCtx.isPFMEA && activeCtx.pfmea) {
+      activeCtx.pfmea.functions = (activeCtx.pfmea.functions || []).filter(f => f.id !== funcId);
+      activeCtx.pfmea.functionLines = (activeCtx.pfmea.functionLines || []).filter(fl => fl.funcId !== funcId);
+    } else {
+      fmeaData.functions = (fmeaData.functions || []).filter(f => f.id !== funcId);
+      fmeaData.functionLines = (fmeaData.functionLines || []).filter(fl => fl.funcId !== funcId);
+    }
+    cleanupOrphanedReferences();
+    showToast('Deleted function from current location. Remaining references kept.');
+  }
+
+  cleanupOrphanedReferences();
+  if (typeof onFuncStructChange === 'function') onFuncStructChange();
+  if (typeof markDataChanged === 'function') markDataChanged('Delete Function');
+  if (typeof renderFMEATable === 'function') renderFMEATable();
+}
+
+function executeDeleteFailureModeWithChoice(flId, fmId, refId, choice) {
+  const activeCtx = getActiveFmeaData();
+
+  if (choice === 'DELETE_ALL') {
+    if (Array.isArray(fmeaData.functionLines)) {
+      fmeaData.functionLines.forEach(fl => {
+        if (Array.isArray(fl.failureModes)) {
+          fl.failureModes = fl.failureModes.filter(m => m.referenceId !== refId && m.id !== fmId && m.id !== refId);
+        }
+      });
+    }
+    if (Array.isArray(fmeaData.pfmeas)) {
+      fmeaData.pfmeas.forEach(p => {
+        if (Array.isArray(p.functionLines)) {
+          p.functionLines.forEach(fl => {
+            if (Array.isArray(fl.failureModes)) {
+              fl.failureModes = fl.failureModes.filter(m => m.referenceId !== refId && m.id !== fmId && m.id !== refId);
+            }
+          });
+        }
+      });
+    }
+    showToast('Deleted Failure Mode and all its referenced instances across all FMEAs.');
+  } else {
+    let targetFl = (activeCtx.functionLines || []).find(l => l.id === flId);
+    if (!targetFl) {
+      for (const line of (activeCtx.functionLines || [])) {
+        if (line.failureModes && line.failureModes.some(m => m.id === fmId)) {
+          targetFl = line;
+          break;
+        }
+      }
+    }
+    if (targetFl && targetFl.failureModes) {
+      targetFl.failureModes = targetFl.failureModes.filter(m => m.id !== fmId);
+    }
+    if (fmeaData.functionLines) {
+      fmeaData.functionLines.forEach(line => {
+        if (line.id === flId && line.failureModes) {
+          line.failureModes = line.failureModes.filter(m => m.id !== fmId);
+        }
+      });
+    }
+    cleanupOrphanedReferences();
+    showToast('Deleted Failure Mode from current location. Remaining references kept.');
+  }
+
+  cleanupOrphanedReferences();
+  if (typeof markDataChanged === 'function') markDataChanged('Delete Failure Mode');
+  if (typeof renderFMEATable === 'function') renderFMEATable();
+}
+
+// Window Exports
+window.fmeaClipboard = fmeaClipboard;
+window.copySingleFunction = copySingleFunction;
+window.copySingleFailureMode = copySingleFailureMode;
+window.copySelectedItems = copySelectedItems;
+window.clearCopySelections = clearCopySelections;
+window.toggleCopySelectFunction = toggleCopySelectFunction;
+window.toggleCopySelectFailureMode = toggleCopySelectFailureMode;
+window.openPasteModal = openPasteModal;
+window.onPasteFmeaTargetChange = onPasteFmeaTargetChange;
+window.selectPasteMode = selectPasteMode;
+window.onPasteOptionChange = onPasteOptionChange;
+window.updatePastePreview = updatePastePreview;
+window.executePaste = executePaste;
+window.syncReferencedFunctions = syncReferencedFunctions;
+window.syncReferencedFailureModes = syncReferencedFailureModes;
+window.getReferenceCountForFunction = getReferenceCountForFunction;
+window.getReferenceCountForFailureMode = getReferenceCountForFailureMode;
+window.stripBadgeArtifacts = stripBadgeArtifacts;
+window.sanitizeAllReferenceNames = sanitizeAllReferenceNames;
+window.startMoveSingleFunction = startMoveSingleFunction;
+window.startMoveSingleFailureMode = startMoveSingleFailureMode;
+window.executeMoveFunction = executeMoveFunction;
+window.executeMoveFailureMode = executeMoveFailureMode;
+window.applyPasteEligibilityHighlights = applyPasteEligibilityHighlights;
+window.clearPasteEligibilityHighlights = clearPasteEligibilityHighlights;
+window.clearActiveCopyMode = clearActiveCopyMode;
+window.initFmeaContextMenu = initFmeaContextMenu;
+window.closeFmeaContextMenu = closeFmeaContextMenu;
+window.onContextCopyClick = onContextCopyClick;
+window.onContextMoveClick = onContextMoveClick;
+window.onContextPasteClick = onContextPasteClick;
+window.setCopyModeActive = setCopyModeActive;
+window.initCtrlDblClickListeners = initCtrlDblClickListeners;
+window.handleCtrlDblClickFMEACell = handleCtrlDblClickFMEACell;
+window.openQuickFieldEditModal = openQuickFieldEditModal;
+window.saveQuickFieldEdit = saveQuickFieldEdit;
+window.enableMultiSelectMode = enableMultiSelectMode;
+window.cleanupOrphanedReferences = cleanupOrphanedReferences;
+window.promptReferencedElementDeletion = promptReferencedElementDeletion;
+window.confirmDeleteReferenceChoice = confirmDeleteReferenceChoice;
+window.executeDeleteFunctionWithChoice = executeDeleteFunctionWithChoice;
+window.executeDeleteFailureModeWithChoice = executeDeleteFailureModeWithChoice;
+
+let activeFmeaRenderJobId = 0;
+window.activeFmeaRenderJobId = activeFmeaRenderJobId;
+
+/**
+ * Renders an animated loading spinner in the FMEA table body while data is being prepared/rendered.
+ */
+function showFmeaTableLoadingState(elementName = 'System Element') {
+  let overlay = document.getElementById('fmeaLoadingOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'fmeaLoadingOverlay';
+    overlay.className = 'fmea-loading-overlay';
+    overlay.innerHTML = `
+      <div class="fmea-loading-backdrop"></div>
+      <div class="fmea-loading-container">
+        <div class="fmea-loading-spinner"></div>
+        <div class="fmea-loading-title">Loading FMEA Data...</div>
+        <div class="fmea-loading-subtitle">Rendering component: <strong id="fmeaLoadingElementLabel">${typeof escapeHtml === 'function' ? escapeHtml(elementName || 'System Element') : (elementName || 'System Element')}</strong></div>
+        <span class="fmea-loading-badge">AIAG &amp; VDA Synchronized</span>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  const labelEl = document.getElementById('fmeaLoadingElementLabel');
+  if (labelEl) {
+    labelEl.textContent = elementName || 'System Element';
+  }
+  overlay.style.display = 'flex';
+  overlay.classList.add('active');
+}
+window.showFmeaTableLoadingState = showFmeaTableLoadingState;
+
+/**
+ * Hides the centered full-screen loading overlay once rendering is complete.
+ */
+function hideFmeaTableLoadingState() {
+  const overlay = document.getElementById('fmeaLoadingOverlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.style.display = 'none';
+  }
+}
+window.hideFmeaTableLoadingState = hideFmeaTableLoadingState;
+
+/**
+ * Asynchronously renders the FMEA table with an instant loading symbol yield.
+ * Prevents UI freeze, renders part-by-part, and discards stale overlapping requests.
+ */
+function renderFMEATableAsync(targetElementName = null, onComplete = null) {
+  const jobId = ++activeFmeaRenderJobId;
+  window.activeFmeaRenderJobId = activeFmeaRenderJobId;
+
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : (typeof fmeaData !== 'undefined' ? fmeaData : null);
+  const targetStruct = (ctx && ctx.structure) ? ctx.structure : (typeof fmeaData !== 'undefined' ? fmeaData.structure : null);
+  const focusedNode = (selectedStructureId && targetStruct) ? getStructureNodeById(targetStruct, selectedStructureId) : null;
+  const label = targetElementName || (focusedNode ? `${focusedNode.partNo ? focusedNode.partNo + ' - ' : ''}${focusedNode.name}` : 'Active Component');
+
+  showFmeaTableLoadingState(label);
+
+  // Yield execution to the browser so the loading spinner paints immediately
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      // Discard stale job if user clicked another element rapidly
+      if (jobId !== activeFmeaRenderJobId) return;
+
+      // Reset global severity memoization cache for fresh pass
+      window._fmeaRenderSeverityCache = new Map();
+
+      // Render the table data
+      renderFMEATable();
+
+      hideFmeaTableLoadingState();
+
+      if (typeof onComplete === 'function') onComplete();
+    }, 20);
+  });
+}
+window.renderFMEATableAsync = renderFMEATableAsync;
+
 function renderFMEATable() {
+  if (typeof sanitizeAllReferenceNames === "function") sanitizeAllReferenceNames();
+  if (typeof cleanupOrphanedReferences === "function") cleanupOrphanedReferences();
   updateAdminMenuVisibility();
   syncLiveDfmeaDataToPfmeas();
+  if (typeof updateCopyToolbarUI === 'function') updateCopyToolbarUI();
   const tbody = document.getElementById('fmeaTableBody');
 
   const cmpBanner = document.getElementById('fmeaComparisonBanner');
@@ -12589,6 +17588,15 @@ function renderFMEATable() {
   const isVDA = (fmeaData.methodologyMode === 'AIAG-VDA');
   const isPFMEA = ctx.isPFMEA;
 
+  // ── Performance: memoize getEffectiveSeverityForFailureMode per-render ──
+  const _fmSevCache = new Map();
+  const _getChainSev = (fmId) => {
+    if (_fmSevCache.has(fmId)) return _fmSevCache.get(fmId);
+    const s = (typeof getEffectiveSeverityForFailureMode === 'function') ? getEffectiveSeverityForFailureMode(fmId) : 1;
+    _fmSevCache.set(fmId, s);
+    return s;
+  };
+
   const dis = isReadOnly ? 'disabled style="opacity:0.6; cursor:not-allowed;"' : '';
   const dblReq = (flId) => isReadOnly ? '' : `ondblclick="openRequirementModal('${flId}')"`;
   const dblEff = (fmId) => isReadOnly ? '' : `ondblclick="openEffectModal('${fmId}')"`;
@@ -12654,8 +17662,13 @@ function renderFMEATable() {
   }
 
   let allNodes = getFlatStructureNodes(fmeaData.structure);
-  if (selectedStructureId && !viewCompleteFmeaMode) {
-    allNodes = allNodes.filter(n => n.id === selectedStructureId);
+  if (!viewCompleteFmeaMode) {
+    if (!selectedStructureId && allNodes.length > 0) {
+      selectedStructureId = allNodes[0].id;
+    }
+    if (selectedStructureId) {
+      allNodes = allNodes.filter(n => n.id === selectedStructureId);
+    }
   }
 
   let processedFlIds = new Set();
@@ -12671,10 +17684,12 @@ function renderFMEATable() {
 
     let nodeLines = (ctx.functionLines || []).filter(fl => fl.structId === structNode.id);
 
+    const hasFuncInClip = (typeof fmeaClipboard !== 'undefined' && fmeaClipboard && fmeaClipboard.type === 'FUNCTION' && fmeaClipboard.items && fmeaClipboard.items.length > 0);
     const col1Html = `
       <div>${structBadge}${displayLabelHtml}</div>
-      ${isReadOnly ? '' : `<div style="margin-top:4px;">
+      ${isReadOnly ? '' : `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-xs btn-outline-primary" style="font-size:10px; padding:1px 6px; border-radius:4px; font-weight:600;" onclick="openFunctionModal('${structNode.id}')" title="Add Function to this element">${isPFMEA ? '+ Process Function' : '+ Function'}</button>
+        
       </div>`}
     `;
 
@@ -12789,8 +17804,11 @@ function renderFMEATable() {
         const parentLinks = (ctx.failureNetworkLinks || []).filter(l => l.sourceFmId === fm.id && l.targetFmId);
         const parentEffectObjs = parentLinks.map(l => findFailureModeObjById(l.targetFmId)).filter(Boolean);
 
-        const hasValidEffect = validEffects.length > 0 || catalogEffects.length > 0 || parentEffectObjs.length > 0;
-        const maxSeverity = hasValidEffect ? getEffectiveSeverityForFailureMode(fm.id) : '-';
+        const effSevFromChain = _getChainSev(fm.id);
+        const inherentSev = parseInt(fm.sev || fm.severity, 10) || null;
+        const maxSevVal = Math.max(effSevFromChain || 1, inherentSev || 1);
+        const hasValidEffect = validEffects.length > 0 || catalogEffects.length > 0 || parentEffectObjs.length > 0 || effSevFromChain > 1 || inherentSev > 1;
+        const maxSeverity = hasValidEffect ? maxSevVal : (inherentSev ? inherentSev : '-');
 
         const childLinks = (ctx.failureNetworkLinks || []).filter(l => l.targetFmId === fm.id && l.sourceFmId);
         const childCauseObjs = childLinks.map(l => findFailureModeObjById(l.sourceFmId)).filter(Boolean);
@@ -12807,22 +17825,23 @@ function renderFMEATable() {
           effectsStr = linkedEffects.map((e, idx) => {
             const sysTag = buildColoredHierarchyTag(e.systemName, e.functionName, e.requirement);
             const numPrefix = `${idx + 1}.`;
-            return `<div style="text-align:left; margin-bottom:6px;">
+            const desc = e.desc || e.details || e.name || '';
+            return `<div class="fmea-effect-item" data-fm-id="${fm.id}" data-effect-id="${e.id}" data-effect-type="library" data-effect-text="${escapeHtml(desc)}" style="text-align:left; margin-bottom:6px;">
               <div style="font-weight:bold; color:var(--text-secondary); font-size:11.5px; margin-bottom:2px;">${numPrefix}</div>
               <div style="padding-left:10px;">
                 ${sysTag}
-                <div style="font-weight:600; color:var(--text-primary); margin-top:2px;">${escapeHtml(e.desc)} ${getSeverityBadgeHtml(e.severity)}</div>
+                <div style="font-weight:600; color:var(--text-primary); margin-top:2px;">${escapeHtml(desc)} ${getSeverityBadgeHtml(e.severity)}</div>
               </div>
             </div>`;
           }).join('');
         }
         if (catalogEffects.length > 0) {
           effectsStr += catalogEffects.map(fe => `
-            <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3); border-radius:4px; padding:2px 8px; font-size:11px; margin:2px 0;">
+            <div class="fmea-effect-item" data-fm-id="${fm.id}" data-effect-id="${fe.id}" data-effect-type="catalog" data-effect-text="${escapeHtml(fe.effectText || '')}" style="display:inline-flex; align-items:center; gap:6px; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3); border-radius:4px; padding:2px 8px; font-size:11px; margin:2px 0;">
               <span style="color:#38bdf8; font-weight:700;">🔗 [FE Catalog]</span>
               <span style="color:var(--text-primary); font-weight:600;">${escapeHtml(fe.effectText)}</span>
               ${getSeverityBadgeHtml(fe.severity)}
-              ${isReadOnly ? '' : `<button type="button" style="background:none; border:none; color:#ef4444; font-weight:bold; cursor:pointer; padding:0 2px;" onclick="unlinkRowEffect('${fm.id}'); renderFMEATable();" title="Unlink effect">&times;</button>`}
+              ${isReadOnly ? '' : `<button type="button" style="background:none; border:none; color:#ef4444; font-weight:bold; cursor:pointer; padding:0 2px;" onclick="confirmAndUnlinkEffectItem('${fm.id}', '${fe.id}', 'catalog', '${escapeHtml(fe.effectText || '')}');" title="Unlink effect">&times;</button>`}
             </div>
           `).join('');
         }
@@ -12831,11 +17850,12 @@ function renderFMEATable() {
             const sysTag = buildColoredHierarchyTag(p.structName, p.funcName, p.reqText);
             const numPrefix = `${idx + 1 + linkedEffects.length}.`;
             const sevVal = p.fm.sev || 7;
-            return `<div style="text-align:left; margin-bottom:6px;">
+            const pFmName = p.fm.name || '';
+            return `<div class="fmea-effect-item" data-fm-id="${fm.id}" data-target-fm-id="${p.fm.id}" data-effect-type="parent_fm" data-effect-text="${escapeHtml(pFmName)}" style="text-align:left; margin-bottom:6px;">
               <div style="font-weight:bold; color:var(--text-secondary); font-size:11.5px; margin-bottom:2px;">${numPrefix}</div>
               <div style="padding-left:4px;">
                 ${sysTag}
-                <div style="font-weight:600; color:var(--text-primary); margin-top:2px;">${escapeHtml(p.fm.name)} ${getSeverityBadgeHtml(sevVal)}</div>
+                <div style="font-weight:600; color:var(--text-primary); margin-top:2px;">${escapeHtml(pFmName)} ${getSeverityBadgeHtml(sevVal)}</div>
               </div>
             </div>`;
           }).join('');
@@ -13019,19 +18039,26 @@ function renderFMEATable() {
   matchingRows.forEach((r, rIdx) => {
     html += `<tr id="fmea-row-${r.fmId || ''}" data-fm-id="${r.fmId || ''}">`;
     if (r.isFirstRowForStruct) {
-      html += `<td rowspan="${r.structRowspan}" title="Variants: ${escapeHtml(r.structVarNames)}">${r.col1Html}</td>`;
+      html += `<td data-struct-id="${r.structNode.id}" data-cell-type="struct" rowspan="${r.structRowspan}" title="Variants: ${escapeHtml(r.structVarNames)}">${r.col1Html}</td>`;
     }
 
     // Col 2: Function & Requirement
     if (r.isFirstRowForFunc) {
       html += `
-        <td title="Variants: ${escapeHtml(r.funcVarNames)}" ${r.funcAttr} rowspan="${r.funcRowspan}">
+        <td data-struct-id="${r.structNode.id}" data-fl-id="${r.flId}" data-func-id="${r.funcId}" data-cell-type="func" title="Variants: ${escapeHtml(r.funcVarNames)}" ${r.funcAttr} rowspan="${r.funcRowspan}">
           <div class="func-cell-container" style="display:flex; justify-content:space-between; align-items:flex-start; width:100%;">
-            <div>
-              <div style="font-weight:600; color:var(--text-primary);">${r.funcBadge}${escapeHtml(r.funcObj.name)}</div>
-              ${(r.reqTextStr && r.reqTextStr !== '-') ? `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:4px; padding-top:3px; border-top:1px dashed rgba(2,132,199,0.3); color:#0284c7; font-size:11px; font-weight:600; text-align:left;" title="Double-click to link/edit requirements">📌 ${r.reqBadge}${r.reqTextStr}</div>` : `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:3px; color:#64748b; font-size:10px; font-style:italic; cursor:pointer;" title="Double-click to link requirements from catalogue">+ Link Requirement...</div>`}
+            <div style="display:flex; align-items:flex-start; gap:4px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                  <span class="func-name-text" style="font-weight:600; color:var(--text-primary); cursor:pointer;" ${isReadOnly ? '' : `ondblclick="editInlineCell(event, this, '${r.flId}', '${r.funcId}', 'funcName')"`} title="${isReadOnly ? '' : 'Double-click to edit Function name'}">${r.funcBadge}${escapeHtml(stripBadgeArtifacts(r.funcObj.name))}</span>
+                  ${r.funcObj.referenceId ? `<span class="badge-ref-sync" onclick="event.stopPropagation()" title="Bi-directional live reference (ID: ${r.funcObj.referenceId}). Synced across ${getReferenceCountForFunction(r.funcObj)} instances.">🔗 Ref${getReferenceCountForFunction(r.funcObj) > 1 ? ` (${getReferenceCountForFunction(r.funcObj)})` : ''}</span>` : ''}
+                </div>
+                ${(r.reqTextStr && r.reqTextStr !== '-') ? `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:4px; padding-top:3px; border-top:1px dashed rgba(2,132,199,0.3); color:#0284c7; font-size:11px; font-weight:600; text-align:left;" title="Double-click to link/edit requirements">📌 ${r.reqBadge}${r.reqTextStr}</div>` : `<div class="cell-dbl-click-hint" ${dblReq(r.flId)} style="margin-top:3px; color:#64748b; font-size:10px; font-style:italic; cursor:pointer;" title="Double-click to link requirements from catalogue">+ Link Requirement...</div>`}
+              </div>
             </div>
             <div style="display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
+              
+              
               <button type="button" class="func-link-req-btn" style="font-size:10px; padding:1px 5px; background:rgba(2,132,199,0.15); color:#0284c7; border:1px solid rgba(2,132,199,0.4); border-radius:3px; cursor:pointer; font-weight:700;" onclick="openRequirementModal('${r.flId}')" title="Link / Manage Requirements for this Function">📌 Req</button>
               ${netFnBtnHtml(r.flId, r.funcId)}
               ${addFmBtnHtml(r.flId)}
@@ -13046,17 +18073,21 @@ function renderFMEATable() {
         const rpnSevStyle = getSeverityColorStyle(r.maxSeverity);
         const rpnSevBadge = getSeverityBadgeHtml(r.maxSeverity);
         html += `
-          <td id="fmea-cell-fm-${r.fmId}" title="Variants: ${escapeHtml(r.structVarNames)}" ${r.fmAttr} rowspan="${r.fmRowspan}" class="editable-cell" ${clickCell(r.flId, r.fmId, 'fmName')}>
+          <td id="fmea-cell-fm-${r.fmId}" data-struct-id="${r.structNode.id}" data-fl-id="${r.flId}" data-fm-id="${r.fmId}" data-cell-type="fm" title="Variants: ${escapeHtml(r.structVarNames)}" ${r.fmAttr} rowspan="${r.fmRowspan}" class="editable-cell" ${clickCell(r.flId, r.fmId, 'fmName')}>
             <div style="display:flex; justify-content:space-between; align-items:center; width:100%; gap:4px;">
-              <span>${r.fmBadge}${escapeHtml(r.fm.name)}${r.fmSyncBadge}</span>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <span class="fm-name-text" style="font-weight:600; color:var(--text-primary);">${r.fmBadge}${escapeHtml(stripBadgeArtifacts(r.fm.name))}${r.fmSyncBadge}</span>
+                ${r.fm && r.fm.referenceId ? `<span class="badge-ref-sync" onclick="event.stopPropagation()" title="Bi-directional live reference (ID: ${r.fm.referenceId}). Synced across ${getReferenceCountForFailureMode(r.fm)} instances.">🔗 Ref${getReferenceCountForFailureMode(r.fm) > 1 ? ` (${getReferenceCountForFailureMode(r.fm)})` : ''}</span>` : ''}
+              </div>
               <div style="display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">
+                
                 ${netFmBtnHtml(r.fmId)}
                 ${delFmBtnHtml(r.flId, r.fmId)}
               </div>
             </div>
           </td>
-          <td title="Variants: ${escapeHtml(r.effectVarNames)}" ${r.effAttr} rowspan="${r.fmRowspan}" class="cell-dbl-click-hint" ${dblEff(r.fmId)}>${r.effBadge}${r.effectsStr}</td>
-          <td title="Variants: ${escapeHtml(r.structVarNames)}" ${r.effDiff && r.effDiff.type === 'SEVERITY_CHANGED' ? r.effAttr : ''} rowspan="${r.fmRowspan}" class="rpn-cell" style="${rpnSevStyle}">${r.effDiff && r.effDiff.type === 'SEVERITY_CHANGED' ? r.effBadge : ''}${rpnSevBadge}</td>`;
+          <td data-cell-type="effect" data-fm-id="${r.fmId}" title="Variants: ${escapeHtml(r.effectVarNames)}" ${r.effAttr} rowspan="${r.fmRowspan}" class="cell-dbl-click-hint" ${dblEff(r.fmId)}>${r.effBadge}${r.effectsStr}</td>
+          <td data-cell-type="severity" data-fm-id="${r.fmId}" title="Variants: ${escapeHtml(r.structVarNames)}" ${r.effDiff && r.effDiff.type === 'SEVERITY_CHANGED' ? r.effAttr : ''} rowspan="${r.fmRowspan}" class="rpn-cell" style="${rpnSevStyle}">${r.effDiff && r.effDiff.type === 'SEVERITY_CHANGED' ? r.effBadge : ''}${rpnSevBadge}</td>`;
       } else {
         html += `
           <td title="Variants: ${escapeHtml(r.structVarNames)}" class="text-muted" ${isReadOnly ? '' : `onclick="quickAddFmToFunction('${r.flId}', event)"`}>${isReadOnly ? '-' : '+ Click to add Failure Mode'}</td>
@@ -13071,11 +18102,11 @@ function renderFMEATable() {
         const rpnOccStyle = getOccurrenceColorStyle(r.cause.occurrence);
         const rpnDetStyle = getDetectionColorStyle(r.cause.detection);
         html += `
-          <td title="Variants: ${escapeHtml(r.causeVarNames)}" ${r.causeAttr} rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${dblCause(r.fmId)}>${r.causeBadge}${renderCauseFormattedCell(r.cause, r.cIdx)}</td>
-          <td title="Double-click to link/manage characteristics (Variants: ${escapeHtml(r.causeVarNames)})" rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${r.dblChar}>${formatCauseCharacteristicsCell(r.cause)}</td>
+          <td data-cell-type="cause" data-fm-id="${r.fmId}" data-cause-id="${r.cause ? r.cause.id : ''}" title="Variants: ${escapeHtml(r.causeVarNames)}" ${r.causeAttr} rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${dblCause(r.fmId)}>${r.causeBadge}${renderCauseFormattedCell(r.cause, r.cIdx)}</td>
+          <td data-cell-type="char" data-cause-id="${r.cause ? r.cause.id : ''}" title="Double-click to link/manage characteristics (Variants: ${escapeHtml(r.causeVarNames)})" rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${r.dblChar}>${formatCauseCharacteristicsCell(r.cause)}</td>
           <td title="Variants: ${escapeHtml(r.causeVarNames)}" rowspan="${r.causeRowspan}"><span class="badge-class">${escapeHtml(r.highestClass)}</span></td>
           <td title="Variants: ${escapeHtml(r.causeVarNames)}" rowspan="${r.causeRowspan}">${escapeHtml(r.causeVarNames)}</td>
-          <td title="Variants: ${escapeHtml(r.prevVarNames)}" rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${dblCtrl(r.cause.id, 'Prevention')}>${r.prevCtrlStr}</td>
+          <td data-cell-type="prev_ctrl" data-cause-id="${r.cause ? r.cause.id : ''}" title="Variants: ${escapeHtml(r.prevVarNames)}" rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${dblCtrl(r.cause.id, 'Prevention')}>${r.prevCtrlStr}</td>
           <td title="Variants: ${escapeHtml(r.causeVarNames)}" ${r.causeDiff && r.causeDiff.type === 'RATING_CHANGED' ? r.causeAttr : ''} rowspan="${r.causeRowspan}" class="fmea-select-cell" style="${rpnOccStyle}">
             ${r.causeDiff && r.causeDiff.type === 'RATING_CHANGED' ? r.causeBadge : ''}
             ${r.hasValidCause ? `
@@ -13083,7 +18114,7 @@ function renderFMEATable() {
               ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(val => `<option value="${val}" style="${getOccurrenceColorStyle(val)}" ${val === (parseInt(r.cause.occurrence) || 10) ? 'selected' : ''}>${val}</option>`).join('')}
             </select>` : '<span style="color: var(--text-muted, #94a3b8); font-weight: bold;">-</span>'}
           </td>
-          <td title="Variants: ${escapeHtml(r.detVarNames)}" rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${dblCtrl(r.cause.id, 'Detection')}>${r.detCtrlStr}</td>
+          <td data-cell-type="det_ctrl" data-cause-id="${r.cause ? r.cause.id : ''}" title="Variants: ${escapeHtml(r.detVarNames)}" rowspan="${r.causeRowspan}" class="cell-dbl-click-hint" ${dblCtrl(r.cause.id, 'Detection')}>${r.detCtrlStr}</td>
           <td title="Variants: ${escapeHtml(r.causeVarNames)}" ${r.causeDiff && r.causeDiff.type === 'RATING_CHANGED' ? r.causeAttr : ''} rowspan="${r.causeRowspan}" class="fmea-select-cell" style="${rpnDetStyle}">
             ${r.causeDiff && r.causeDiff.type === 'RATING_CHANGED' ? r.causeBadge : ''}
             ${r.hasValidCause ? `
@@ -13109,7 +18140,7 @@ function renderFMEATable() {
     // Col 16 to 20: Actions, PD, Resp, Target Date, Action Taken
     if (r.act) {
       html += `
-        <td title="Variants: ${escapeHtml(r.actVarNames)}" ${r.actAttr} class="cell-dbl-click-hint" ${dblAct(r.cause.id)}>${r.actBadge}${r.actDetail}</td>
+        <td data-cell-type="action" data-cause-id="${r.cause ? r.cause.id : ''}" data-act-id="${r.act ? r.act.id : ''}" title="Variants: ${escapeHtml(r.actVarNames)}" ${r.actAttr} class="cell-dbl-click-hint" ${dblAct(r.cause.id)}>${r.actBadge}${r.actDetail}</td>
         <td title="Variants: ${escapeHtml(r.actVarNames)}">${r.act.pd || '-'}</td>
         <td title="Variants: ${escapeHtml(r.actVarNames)}">${escapeHtml(r.act.responsible || '-')}</td>
         <td title="Variants: ${escapeHtml(r.actVarNames)}">${r.act.targetDate || '-'}</td>
@@ -13174,14 +18205,84 @@ function renderFMEATable() {
       renderSingleNodeRows(structNode, displayLabelHtml);
     });
   } else {
-    let renderedPstepIds = new Set();
+    const allPsteps = ctx.pfmea.processSteps || [];
 
-    allNodes.forEach(dfmeaNode => {
-      if (!dfmeaNode || !matchesVariantFilter(dfmeaNode.variantId)) return;
-      const dfmeaVarNames = getVariantNamesDisplay(dfmeaNode.variantId || 'ALL');
-      const psteps = (ctx.pfmea.processSteps || []).filter(ps => String(ps.dfmeaStructId) === String(dfmeaNode.id));
+    if (viewCompleteFmeaMode || !selectedStructureId) {
+      if (allPsteps.length > 0) {
+        allPsteps.forEach((pstep, pstepIdx) => {
+          if (!pstep || !matchesVariantFilter(pstep.variantId)) return;
+          const parentNode = pstep.dfmeaStructId ? getStructureNodeById(fmeaData.structure, pstep.dfmeaStructId) : null;
+          const parentLabel = parentNode ? `${parentNode.partNo ? parentNode.partNo + ' - ' : ''}${parentNode.name}` : '';
+          const parentTag = parentLabel ? `<div style="margin-bottom:2px;"><span style="color:#475569; font-size:11px; font-weight:600;">📦 ${escapeHtml(parentLabel)}</span></div>` : '';
 
-      if (psteps.length === 0) {
+          const isFirst = (pstepIdx === 0);
+          const isLast = (pstepIdx === allPsteps.length - 1);
+
+          const reorderBtns = isReadOnly ? '' : `
+            <button type="button" class="btn btn-sm btn-outline btn-reorder-pstep" style="font-size:9px; padding:0 4px; font-weight:bold; line-height:1.2;" onclick="event.stopPropagation(); moveProcessStepOrder('${pstep.id}', -1)" title="Move Operation Up" ${isFirst ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:9px; padding:0 4px;"' : ''}>▲</button>
+            <button type="button" class="btn btn-sm btn-outline btn-reorder-pstep" style="font-size:9px; padding:0 4px; font-weight:bold; line-height:1.2;" onclick="event.stopPropagation(); moveProcessStepOrder('${pstep.id}', 1)" title="Move Operation Down" ${isLast ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:9px; padding:0 4px;"' : ''}>▼</button>
+          `;
+
+          const pstepLabelHtml = `
+            ${parentTag}
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:4px; flex-wrap:wrap;">
+              <span style="color:#0284c7; font-size:11px; font-weight:bold;">⚙️ ${escapeHtml(pstep.stepNo)}: ${escapeHtml(pstep.name)}</span>
+              ${isReadOnly ? '' : `
+                <div style="display:inline-flex; gap:2px; align-items:center;">
+                  ${reorderBtns}
+                  <button type="button" class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px;" onclick="event.stopPropagation(); openAddProcessStepModal('${pstep.dfmeaStructId || ''}', '${pstep.id}')" title="Edit Process Step">✏️</button>
+                  <button type="button" class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px; color:#ef4444;" onclick="event.stopPropagation(); deleteProcessStepDirect('${pstep.id}')" title="Delete Process Step and All Associated Data">🗑️</button>
+                </div>
+              `}
+            </div>
+          `;
+          renderSingleNodeRows(pstep, pstepLabelHtml);
+        });
+      } else {
+        allNodes.forEach(dfmeaNode => {
+          if (!dfmeaNode || !matchesVariantFilter(dfmeaNode.variantId)) return;
+          const dfmeaVarNames = getVariantNamesDisplay(dfmeaNode.variantId || 'ALL');
+          html += `
+            <tr>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}"><strong>${escapeHtml(dfmeaNode.partNo)} - ${escapeHtml(dfmeaNode.name)}</strong></td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">
+                <div class="func-cell-container">
+                  <span class="text-muted">No Process Steps added</span>
+                  ${isReadOnly ? '' : `<button class="func-add-fm-btn" title="Add Process Step under this DFMEA Element" onclick="openAddProcessStepModal('${dfmeaNode.id}')">+ Add Step</button>`}
+                </div>
+              </td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="cell-dbl-click-hint"><span class="text-muted">${isReadOnly ? '-' : 'Double-click to link characteristics'}</span></td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="text-muted" ${isReadOnly ? '' : `onclick="openAddProcessStepModal('${dfmeaNode.id}')"`}>${isReadOnly ? '-' : '+ Click to add Process Step'}</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">ALL</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">1</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">1</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="rpn-cell">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="rpn-cell">-</td>
+              <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="${isReadOnly ? '' : 'editable-cell'}" ${isReadOnly ? '' : `onclick="editLineComment(this, null, null, null)"`}>${isReadOnly ? '-' : 'Click to add comments'}</td>
+            </tr>`;
+        });
+      }
+    } else {
+      const dfmeaNode = getStructureNodeById(fmeaData.structure, selectedStructureId);
+      const dfmeaVarNames = dfmeaNode ? getVariantNamesDisplay(dfmeaNode.variantId || 'ALL') : 'ALL';
+      const psteps = allPsteps.filter(ps => String(ps.dfmeaStructId) === String(selectedStructureId));
+
+      if (psteps.length === 0 && dfmeaNode) {
         html += `
           <tr>
             <td title="Variants: ${escapeHtml(dfmeaVarNames)}"><strong>${escapeHtml(dfmeaNode.partNo)} - ${escapeHtml(dfmeaNode.name)}</strong></td>
@@ -13215,26 +18316,33 @@ function renderFMEATable() {
             <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="rpn-cell">-</td>
             <td title="Variants: ${escapeHtml(dfmeaVarNames)}" class="${isReadOnly ? '' : 'editable-cell'}" ${isReadOnly ? '' : `onclick="editLineComment(this, null, null, null)"`}>${isReadOnly ? '-' : 'Click to add comments'}</td>
           </tr>`;
-        return;
+      } else {
+        psteps.forEach((pstep, pstepIdx) => {
+          const dfmeaLabel = dfmeaNode ? `${dfmeaNode.partNo ? dfmeaNode.partNo + ' - ' : ''}${dfmeaNode.name}` : '';
+          const isFirst = (pstepIdx === 0);
+          const isLast = (pstepIdx === psteps.length - 1);
+
+          const reorderBtns = isReadOnly ? '' : `
+            <button type="button" class="btn btn-sm btn-outline btn-reorder-pstep" style="font-size:9px; padding:0 4px; font-weight:bold; line-height:1.2;" onclick="event.stopPropagation(); moveProcessStepOrder('${pstep.id}', -1)" title="Move Operation Up" ${isFirst ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:9px; padding:0 4px;"' : ''}>▲</button>
+            <button type="button" class="btn btn-sm btn-outline btn-reorder-pstep" style="font-size:9px; padding:0 4px; font-weight:bold; line-height:1.2;" onclick="event.stopPropagation(); moveProcessStepOrder('${pstep.id}', 1)" title="Move Operation Down" ${isLast ? 'disabled style="opacity:0.3; cursor:not-allowed; font-size:9px; padding:0 4px;"' : ''}>▼</button>
+          `;
+
+          const pstepLabelHtml = `
+            <div style="margin-bottom:2px;"><span style="color:#475569; font-size:11px; font-weight:600;">📦 ${escapeHtml(dfmeaLabel)}</span></div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:4px; flex-wrap:wrap;">
+              <span style="color:#0284c7; font-size:11px; font-weight:bold;">⚙️ ${escapeHtml(pstep.stepNo)}: ${escapeHtml(pstep.name)}</span>
+              ${isReadOnly ? '' : `
+                <div style="display:inline-flex; gap:2px; align-items:center;">
+                  ${reorderBtns}
+                  <button type="button" class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px;" onclick="event.stopPropagation(); openAddProcessStepModal('${dfmeaNode ? dfmeaNode.id : ''}', '${pstep.id}')" title="Edit Process Step">✏️</button>
+                  <button type="button" class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px; color:#ef4444;" onclick="event.stopPropagation(); deleteProcessStepDirect('${pstep.id}')" title="Delete Process Step and All Associated Data">🗑️</button>
+                </div>
+              `}
+            </div>
+          `;
+          renderSingleNodeRows(pstep, pstepLabelHtml);
+        });
       }
-
-      psteps.forEach(pstep => {
-        renderedPstepIds.add(pstep.id);
-        const dfmeaLabel = dfmeaNode ? `${dfmeaNode.partNo ? dfmeaNode.partNo + ' - ' : ''}${dfmeaNode.name}` : '';
-        const pstepLabelHtml = `<div style="margin-bottom:2px;"><span style="color:#475569; font-size:11px; font-weight:600;">📦 ${escapeHtml(dfmeaLabel)}</span></div><span style="color:#0284c7; font-size:11px; font-weight:bold;">⚙️ ${escapeHtml(pstep.stepNo)}: ${escapeHtml(pstep.name)}</span> ${isReadOnly ? '' : `<button class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px;" onclick="openAddProcessStepModal('${dfmeaNode.id}', '${pstep.id}')" title="Edit Process Step">✏️</button> <button class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px; color:#ef4444;" onclick="deleteProcessStepDirect('${pstep.id}')" title="Delete Process Step and All Associated Data">🗑️</button>`}`;
-        renderSingleNodeRows(pstep, pstepLabelHtml);
-      });
-    });
-
-    if (viewCompleteFmeaMode || !selectedStructureId) {
-      const unassignedPsteps = (ctx.pfmea.processSteps || []).filter(ps => !renderedPstepIds.has(ps.id));
-      unassignedPsteps.forEach(pstep => {
-        const parentNode = pstep.dfmeaStructId ? getStructureNodeById(fmeaData.structure, pstep.dfmeaStructId) : null;
-        const parentLabel = parentNode ? `${parentNode.partNo ? parentNode.partNo + ' - ' : ''}${parentNode.name}` : '';
-        const parentTag = parentLabel ? `<div style="margin-bottom:2px;"><span style="color:#475569; font-size:11px; font-weight:600;">📦 ${escapeHtml(parentLabel)}</span></div>` : '';
-        const pstepLabelHtml = `${parentTag}<span style="color:#0284c7; font-size:11px; font-weight:bold;">⚙️ ${escapeHtml(pstep.stepNo)}: ${escapeHtml(pstep.name)}</span> ${isReadOnly ? '' : `<button class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px;" onclick="openAddProcessStepModal('${pstep.dfmeaStructId || ''}', '${pstep.id}')" title="Edit Process Step">✏️</button> <button class="btn btn-sm btn-outline" style="font-size:9px; padding:0 3px; color:#ef4444;" onclick="deleteProcessStepDirect('${pstep.id}')" title="Delete Process Step and All Associated Data">🗑️</button>`}`;
-        renderSingleNodeRows(pstep, pstepLabelHtml);
-      });
     }
   }
 
@@ -13324,6 +18432,7 @@ function renderFMEATable() {
 
   tbody.innerHTML = html;
   updateHeaderFilterButtonsUI();
+  hideFmeaTableLoadingState();
 }
 
 function updateCauseRating(causeId, field, val) {
@@ -13543,7 +18652,7 @@ function editInlineCell(eventOrTd, tdOrFlId, flIdOrFmId, fmIdOrField, fieldOrNul
     try { window.getSelection().removeAllRanges(); } catch (err) { }
   }
 
-  if (!checkCanEditFMEA()) return;
+  if (typeof checkCanEditFMEA === 'function' && !checkCanEditFMEA()) return;
   if (fmeaData.currentRevision && fmeaData.currentRevision.status === 'Frozen') {
     showToast("Editing is disabled. Current revision is FROZEN.", "warning");
     return;
@@ -13552,19 +18661,40 @@ function editInlineCell(eventOrTd, tdOrFlId, flIdOrFmId, fmIdOrField, fieldOrNul
   if (!td || td.querySelector('input')) return;
 
   const ctx = getActiveFmeaData();
-  const fls = ctx.functionLines || fmeaData.functionLines || [];
-  const fl = fls.find(l => l.id === flId);
   let currentVal = '';
-  if (fl && fl.failureModes) {
-    const fm = fl.failureModes.find(m => m.id === fmId);
-    if (fm) currentVal = fm.name || '';
+  const isEditingFunc = (field === 'funcName' || fmId === 'funcName');
+
+  if (isEditingFunc) {
+    const funcId = (field === 'funcName') ? fmId : (flIdOrFmId || tdOrFlId);
+    const allFuncs = (ctx.functions || []).concat(fmeaData.functions || []);
+    let funcObj = allFuncs.find(f => f && f.id === funcId);
+    if (!funcObj) {
+      const fls = (ctx.functionLines || []).concat(fmeaData.functionLines || []);
+      const fl = fls.find(l => l && l.id === flId);
+      if (fl) funcObj = allFuncs.find(f => f && f.id === fl.funcId);
+    }
+    if (funcObj && funcObj.name) {
+      currentVal = funcObj.name;
+    }
+  } else {
+    const fls = (ctx.functionLines || []).concat(fmeaData.functionLines || []);
+    const fl = fls.find(l => l && l.id === flId);
+    if (fl && fl.failureModes) {
+      const fm = fl.failureModes.find(m => m && m.id === fmId);
+      if (fm && fm.name) {
+        currentVal = fm.name;
+      }
+    }
   }
 
   if (!currentVal) {
-    const span = td.querySelector('span');
-    currentVal = span ? span.innerText : td.innerText;
-    currentVal = currentVal.replace(/🔗\s*DFMEA/gi, '').replace(/🗑️/g, '').trim();
+    let clone = td.cloneNode(true);
+    const removeBadges = clone.querySelectorAll('.badge-ref-sync, .btn-copy-inline, .copy-select-chk, .cell-dbl-click-hint, button, input, .rpn-cell');
+    removeBadges.forEach(b => b.remove());
+    currentVal = clone.innerText || td.innerText || '';
   }
+
+  currentVal = typeof stripBadgeArtifacts === 'function' ? stripBadgeArtifacts(currentVal) : currentVal.replace(/🔗\s*Ref(\s*\(\d+\))?/gi, '').replace(/\bRef\s*\(\d+\)/gi, '').replace(/🔗\s*DFMEA/gi, '').replace(/🗑️/g, '').trim();
 
   const input = document.createElement('input');
   input.type = 'text';
@@ -13577,97 +18707,70 @@ function editInlineCell(eventOrTd, tdOrFlId, flIdOrFmId, fmIdOrField, fieldOrNul
   input.style.border = '2px solid #0284c7';
   input.style.outline = 'none';
 
-  input.onblur = function () {
-    const newVal = input.value.trim();
-    if (newVal) {
-      const _ctx2 = getActiveFmeaData();
-      const _fls2 = _ctx2.functionLines || fmeaData.functionLines || [];
-      const flItem = _fls2.find(l => l.id === flId);
-      if (flItem && flItem.failureModes) {
-        const fmItem = flItem.failureModes.find(m => m.id === fmId);
-        if (fmItem) fmItem.name = newVal;
+  let hasFinished = false;
+  const finishEdit = (save) => {
+    if (hasFinished) return;
+    hasFinished = true;
+    if (save) {
+      const rawVal = input.value;
+      const newVal = typeof stripBadgeArtifacts === 'function' ? stripBadgeArtifacts(rawVal) : rawVal.trim();
+      if (newVal) {
+        const _ctx2 = getActiveFmeaData();
+        if (isEditingFunc) {
+          const funcId = (field === 'funcName') ? fmId : (flIdOrFmId || tdOrFlId);
+          const allFuncs = (_ctx2.functions || []).concat(fmeaData.functions || []);
+          let funcItem = allFuncs.find(f => f && f.id === funcId);
+          if (!funcItem) {
+            const _fls2 = (_ctx2.functionLines || []).concat(fmeaData.functionLines || []);
+            const flItem = _fls2.find(l => l && l.id === flId);
+            if (flItem) funcItem = allFuncs.find(f => f && f.id === flItem.funcId);
+          }
+          if (funcItem) {
+            funcItem.name = newVal;
+            if (typeof syncReferencedFunctions === 'function') {
+              syncReferencedFunctions(funcItem);
+            }
+          }
+        } else {
+          const _fls2 = (_ctx2.functionLines || []).concat(fmeaData.functionLines || []);
+          const flItem = _fls2.find(l => l && l.id === flId);
+          if (flItem && flItem.failureModes) {
+            const fmItem = flItem.failureModes.find(m => m && m.id === fmId);
+            if (fmItem) {
+              fmItem.name = newVal;
+              if (typeof syncReferencedFailureModes === 'function') {
+                syncReferencedFailureModes(fmItem);
+              }
+            }
+          }
+        }
+        if (typeof markDataChanged === 'function') markDataChanged('Inline Cell Edit');
       }
     }
-    markDataChanged('Inline Cell Edit');
     renderFMEATable();
   };
 
+  input.onblur = function () {
+    finishEdit(true);
+  };
+
   input.onkeydown = function (evt) {
-    if (evt.key === 'Enter') input.blur();
-    if (evt.key === 'Escape') renderFMEATable();
+    if (evt.key === 'Enter') {
+      evt.preventDefault();
+      finishEdit(true);
+    } else if (evt.key === 'Escape') {
+      evt.preventDefault();
+      evt.stopPropagation();
+      finishEdit(false);
+    }
   };
 
   td.innerHTML = '';
   td.appendChild(input);
-
-  setTimeout(() => {
-    input.focus();
-    input.select();
-  }, 20);
+  input.focus();
+  input.select();
 }
 
-// ----------------------------------------------------
-// 24. Revision & Meeting Management Workflow Implementation
-// ----------------------------------------------------
-const DEFAULT_INPUT_CHECKLIST = [
-  "Boundary Diagram / Block Diagram complete and reviewed",
-  "Interface Matrix & Parameter Diagram (P-Diagram) available",
-  "Customer requirements & Engineering specifications finalized",
-  "Cross-functional team members identified and assigned"
-];
-
-const OFFICIAL_39_CHECKPOINTS = [
-  { id: 1, text: "Is the customer name correct?" },
-  { id: 2, text: "Are the customer model/variant details correct?" },
-  { id: 3, text: "Is a customer-specific standard used if mandated by the customer?" },
-  { id: 4, text: "Is the program number correctly mentioned?" },
-  { id: 5, text: "Is the part number correctly mentioned?" },
-  { id: 6, text: "Is the part name correctly mentioned?" },
-  { id: 7, text: "Is the design/process responsible person's name correct?" },
-  { id: 8, text: "Is the reference mentioned correctly?" },
-  { id: 9, text: "Is the FMEA number mentioned?" },
-  { id: 10, text: "Is the FMEA start date mentioned?" },
-  { id: 11, text: "Has lesson learned or warranty data from a similar program been considered?" },
-  { id: 12, text: "Are all system or process element FMEAs conducted as mentioned in the scope?" },
-  { id: 13, text: "Are all function or requirement consider and risk analysis performed?" },
-  { id: 14, text: "Are all internal and external interfaces considered during the FMEA analysis?" },
-  { id: 15, text: "Are all product/process characteristics identified?" },
-  { id: 16, text: "Do all characteristics have classifications?" },
-  { id: 17, text: "In case of PFMEA, are process characteristics identified for all design characteristics within scope?" },
-  { id: 18, text: "In case of PFMEA, do the process characteristics inherit the same classifications as their associated product characteristics?" },
-  { id: 19, text: "Do all effects have severity ratings?" },
-  { id: 20, text: "Are all Severity (S1) ratings consistent with the effects?" },
-  { id: 21, text: "In case of PFMEA, does the Severity (S) rating for product-related failure modes match DFMEA?" },
-  { id: 22, text: "Are current prevention controls defined for all causes?" },
-  { id: 23, text: "Are current detection controls defined for all causes?" },
-  { id: 24, text: "Are Occurrence (O1) ratings assigned for all causes?" },
-  { id: 25, text: "Are Occurrence ratings consistent across similar causes?" },
-  { id: 26, text: "Are Detection (D1) ratings assigned for all line items?" },
-  { id: 27, text: "Are Detection ratings consistent across similar causes/failure modes?" },
-  { id: 28, text: "Is AP (Action Priority) calculated for all line items?" },
-  { id: 29, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Are recommended actions defined?" },
-  { id: 30, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is a target date assigned?" },
-  { id: 31, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is a responsible person assigned?" },
-  { id: 32, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is the status defined for the recommended actions?" },
-  { id: 33, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Are S2, O2, and D2 ratings reassessed?" },
-  { id: 34, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is AP (Action Priority) or RPN recalculated?" },
-  { id: 35, category: "Residual High / Medium Risk Management (AP2 / RPN>=120 / S>8 & RPN>40)", text: "Is the risk communicated to higher management?" },
-  { id: 36, text: "Is the FMEA top risk report generated?" },
-  { id: 37, text: "Is the FMEA revision number added?" },
-  { id: 38, text: "Is the FMEA revision date added?" },
-  { id: 39, text: "Are the FMEA details updated?" },
-  { id: 40, text: "Are all meeting details updated?" }
-];
-
-const DEFAULT_OUTPUT_CHECKLIST = OFFICIAL_39_CHECKPOINTS.map(c => ({
-  id: c.id,
-  text: c.text,
-  category: c.category || '',
-  checked: false,
-  comment: ''
-}));
-
-// --- Revision Context Helpers ---
 function getContextRevision() {
   const ctx = getActiveFmeaData();
   if (ctx.isPFMEA && ctx.pfmea) return ctx.pfmea.currentRevision || null;
@@ -13852,6 +18955,17 @@ function updateNavigationTabsState() {
     menuItemFormHeader.style.pointerEvents = canFormHeader ? 'auto' : 'none';
     menuItemFormHeader.style.cursor = canFormHeader ? 'pointer' : 'not-allowed';
   }
+
+  // 7. Control New File / Project Creation (Disabled for Read-Only Users)
+  const isReadOnlyUser = !currentUser || currentUser.role === 'Viewer' || (currentUser.username && currentUser.username.toLowerCase() === 'readonly');
+  const menuItemNewFile = document.getElementById('menuItemNewFile');
+  if (menuItemNewFile) {
+    menuItemNewFile.style.display = isReadOnlyUser ? 'none' : 'flex';
+  }
+  const placeholderCreateBtn = document.getElementById('placeholderCreateBlankBtn');
+  if (placeholderCreateBtn) {
+    placeholderCreateBtn.style.display = isReadOnlyUser ? 'none' : 'inline-block';
+  }
 }
 
 function updateAnalysisTabState() {
@@ -13993,6 +19107,61 @@ function renderRevisionStatusUI() {
 
   renderRevisionHistoryTable(histContainer);
   renderMeetingRecordsList(meetContainer);
+}
+
+const DEFAULT_INPUT_CHECKLIST = [
+  "Boundary Diagram / Block Diagram complete and reviewed",
+  "Interface Matrix & Parameter Diagram (P-Diagram) available",
+  "Customer requirements & Engineering specifications finalized",
+  "Cross-functional team members identified and assigned"
+];
+
+const OFFICIAL_39_CHECKPOINTS = [
+  { id: 1, text: "Is the customer name correct?" },
+  { id: 2, text: "Are the customer model/variant details correct?" },
+  { id: 3, text: "Is a customer-specific standard used if mandated by the customer?" },
+  { id: 4, text: "Is the program number correctly mentioned?" },
+  { id: 5, text: "Is the part number correctly mentioned?" },
+  { id: 6, text: "Is the part name correctly mentioned?" },
+  { id: 7, text: "Is the design/process responsible person's name correct?" },
+  { id: 8, text: "Is the reference mentioned correctly?" },
+  { id: 9, text: "Is the FMEA number mentioned?" },
+  { id: 10, text: "Is the FMEA start date mentioned?" },
+  { id: 11, text: "Has lesson learned or warranty data from a similar program been considered?" },
+  { id: 12, text: "Are all system or process element FMEAs conducted as mentioned in the scope?" },
+  { id: 13, text: "Are all function or requirement consider and risk analysis performed?" },
+  { id: 14, text: "Are all internal and external interfaces considered during the FMEA analysis?" },
+  { id: 15, text: "Are all product/process characteristics identified?" },
+  { id: 16, text: "Do all characteristics have classifications?" },
+  { id: 17, text: "In case of PFMEA, are process characteristics identified for all design characteristics within scope?" },
+  { id: 18, text: "In case of PFMEA, do the process characteristics inherit the same classifications as their associated product characteristics?" },
+  { id: 19, text: "Do all effects have severity ratings?" },
+  { id: 20, text: "Are all Severity (S1) ratings consistent with the effects?" },
+  { id: 21, text: "In case of PFMEA, does the Severity (S) rating for product-related failure modes match DFMEA?" },
+  { id: 22, text: "Are current prevention controls defined for all causes?" },
+  { id: 23, text: "Are current detection controls defined for all causes?" },
+  { id: 24, text: "Are Occurrence (O1) ratings assigned for all causes?" },
+  { id: 25, text: "Are Occurrence ratings consistent across similar causes?" },
+  { id: 26, text: "Are Detection (D1) ratings assigned for all line items?" },
+  { id: 27, text: "Are Detection ratings consistent across similar causes/failure modes?" },
+  { id: 28, text: "Is AP (Action Priority) calculated for all line items?" },
+  { id: 29, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Are recommended actions defined?" },
+  { id: 30, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is a target date assigned?" },
+  { id: 31, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is a responsible person assigned?" },
+  { id: 32, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is the status defined for the recommended actions?" },
+  { id: 33, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Are S2, O2, and D2 ratings reassessed?" },
+  { id: 34, category: "High / Medium Risk Verification (AP1 / RPN>=120 / S>8 & RPN>40)", text: "Is AP (Action Priority) or RPN recalculated?" },
+  { id: 35, category: "Residual High / Medium Risk Management (AP2 / RPN>=120 / S>8 & RPN>40)", text: "Is the risk communicated to higher management?" },
+  { id: 36, text: "Is the FMEA top risk report generated?" },
+  { id: 37, text: "Is the FMEA revision number added?" },
+  { id: 38, text: "Is the FMEA revision date added?" },
+  { id: 39, text: "Are the FMEA details updated?" },
+  { id: 40, text: "Are all meeting details updated?" }
+];
+
+if (typeof window !== 'undefined') {
+  window.DEFAULT_INPUT_CHECKLIST = DEFAULT_INPUT_CHECKLIST;
+  window.OFFICIAL_39_CHECKPOINTS = OFFICIAL_39_CHECKPOINTS;
 }
 
 function renderInputChecklistUI(cur) {
@@ -16567,83 +21736,6 @@ function syncInterfaceWithBoundaryDiagram(ifaceId, elemAId, elemBId, name, types
   }
 }
 
-function syncInterfaceFunctionData(ifaceId, name, spec, types) {
-  const cleanName = name ? name.replace(/^\[.*?\]\s*/, '') : '';
-
-  // Update Catalogue Functions under this interfaceId
-  (fmeaData.functions || []).forEach(f => {
-    if (f.interfaceId === ifaceId) {
-      const type = f.interfaceType || 'General';
-      if (name !== undefined) f.name = `[${type}] ${cleanName}`;
-      if (spec !== undefined) f.interfaceSpec = spec;
-    }
-  });
-
-  // Update Interface Matrix Record
-  const iface = (fmeaData.interfaceMatrix || []).find(i => i.id === ifaceId);
-  if (iface) {
-    if (name !== undefined) iface.name = cleanName;
-    if (spec !== undefined) iface.spec = spec;
-    if (types !== undefined) {
-      iface.types = types;
-      iface.interfaceType = types[0] || 'General';
-    }
-  }
-}
-
-function handleRemoveInterfaceLinkClick() {
-  const editId = document.getElementById('ifaceEditId').value;
-  if (!editId) return;
-  removeInterfaceLink(editId);
-  closeModal('interfaceLinkEditorModal');
-}
-
-function removeInterfaceLink(ifaceId) {
-  if (!checkCanEditFMEA()) return;
-  if (!confirm("Are you sure you want to remove this interface link? All common interface functions for each interface type will be removed from both elements in DFMEA.")) return;
-
-  // 1. Remove from interfaceMatrix
-  fmeaData.interfaceMatrix = (fmeaData.interfaceMatrix || []).filter(i => i.id !== ifaceId);
-
-  // 2. Remove all common functions bound to this interfaceId
-  fmeaData.functions = (fmeaData.functions || []).filter(f => f.interfaceId !== ifaceId);
-
-  // 3. Remove all function lines bound to this interfaceId from both elements
-  fmeaData.functionLines = (fmeaData.functionLines || []).filter(fl => fl.interfaceId !== ifaceId);
-
-  // 4. Remove connection from Boundary Diagram
-  if (fmeaData.boundaryDiagram && fmeaData.boundaryDiagram.connections) {
-    fmeaData.boundaryDiagram.connections = fmeaData.boundaryDiagram.connections.filter(c => c.interfaceId !== ifaceId);
-  }
-
-  renderInterfaceMatrix();
-  if (typeof renderBoundaryDiagram === 'function') renderBoundaryDiagram();
-  renderFMEATable();
-}
-
-function syncInterfaceWithBoundaryDiagram(ifaceId, elemAId, elemBId, name, types) {
-  fmeaData.boundaryDiagram = fmeaData.boundaryDiagram || { nodes: [], connections: [] };
-  fmeaData.boundaryDiagram.connections = fmeaData.boundaryDiagram.connections || [];
-
-  let conn = fmeaData.boundaryDiagram.connections.find(c => c.interfaceId === ifaceId || (c.fromId === elemAId && c.toId === elemBId));
-  if (conn) {
-    conn.interfaceId = ifaceId;
-    conn.label = name;
-    conn.type = types[0] || 'General';
-    conn.types = types;
-  } else {
-    fmeaData.boundaryDiagram.connections.push({
-      id: 'conn-' + Date.now(),
-      interfaceId: ifaceId,
-      fromId: elemAId,
-      toId: elemBId,
-      label: name,
-      type: types[0] || 'General',
-      types: types
-    });
-  }
-}
-
 function openFunctionalMatrixModal() {
   renderFunctionalMatrix();
   openModal('functionalMatrixModal');
@@ -16839,6 +21931,131 @@ function openAiagVdaHeaderModal() {
   openModal('aiagVdaHeaderModal');
 }
 
+const PRESET_BRAND_LOGOS = [
+  { id: 'JOST', name: 'JOST', type: 'image', src: 'Logo_Jost.svg.webp' },
+  { id: 'HYVA', name: 'HYVA', type: 'badge', bg: '#dc2626', color: '#fff', text: 'HYVA' },
+  { id: 'ROCKINGER', name: 'ROCKINGER', type: 'badge', bg: '#1e3a8a', color: '#fff', text: 'ROCKINGER' },
+  { id: 'TRIDEC', name: 'TRIDEC', type: 'badge', bg: '#047857', color: '#fff', text: 'TRIDEC' },
+  { id: 'EDBRO', name: 'EDBRO', type: 'badge', bg: '#d97706', color: '#fff', text: 'EDBRO' },
+  { id: 'QUICKE', name: 'QUICKE', type: 'badge', bg: '#475569', color: '#fff', text: 'QUICKE' }
+];
+
+function renderHeaderLogosSelector(selectedLogoIds = ['JOST']) {
+  const container = document.getElementById('hdr_logosContainer');
+  if (!container) return;
+
+  const customLogos = fmeaData.customLogos || [];
+  let allLogos = [...PRESET_BRAND_LOGOS];
+  customLogos.forEach(cl => {
+    allLogos.push({
+      id: cl.id,
+      name: cl.name,
+      type: 'custom_image',
+      src: cl.dataUrl
+    });
+  });
+
+  let html = '';
+  allLogos.forEach(logo => {
+    const isChecked = selectedLogoIds.includes(logo.id);
+    let previewHtml = '';
+    if (logo.type === 'image') {
+      previewHtml = `<img src="${logo.src}" alt="${escapeHtml(logo.name)}" style="height:20px; max-width:60px; object-fit:contain; vertical-align:middle;">`;
+    } else if (logo.type === 'custom_image') {
+      previewHtml = `<img src="${logo.src}" alt="${escapeHtml(logo.name)}" style="height:20px; max-width:60px; object-fit:contain; vertical-align:middle; border-radius:2px;">`;
+    } else {
+      previewHtml = `<span style="display:inline-block; padding:2px 8px; border-radius:3px; font-weight:bold; font-size:11px; background:${logo.bg}; color:${logo.color};">${escapeHtml(logo.text)}</span>`;
+    }
+
+    html += `
+      <label style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid ${isChecked ? '#2563eb' : '#cbd5e1'}; background:${isChecked ? '#eff6ff' : '#f8fafc'}; border-radius:6px; cursor:pointer; font-size:12px; user-select:none; transition:all 0.15s ease;">
+        <input type="checkbox" name="hdrBrandLogoChk" value="${escapeHtml(logo.id)}" ${isChecked ? 'checked' : ''} onchange="this.parentElement.style.borderColor = this.checked ? '#2563eb' : '#cbd5e1'; this.parentElement.style.background = this.checked ? '#eff6ff' : '#f8fafc';">
+        ${previewHtml}
+        <span style="font-weight:500; color:#334155;">${escapeHtml(logo.name)}</span>
+        ${logo.type === 'custom_image' ? `<span onclick="event.stopPropagation(); deleteCustomHeaderLogo('${logo.id}')" title="Delete custom logo" style="color:#ef4444; font-weight:bold; margin-left:4px; font-size:14px; cursor:pointer;">&times;</span>` : ''}
+      </label>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+function handleHeaderCustomLogoUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file (PNG, JPEG, SVG, WebP).');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    const logoId = 'CUSTOM_' + Date.now();
+    const logoName = file.name.replace(/\.[^/.]+$/, '').toUpperCase();
+
+    fmeaData.customLogos = fmeaData.customLogos || [];
+    fmeaData.customLogos.push({
+      id: logoId,
+      name: logoName,
+      dataUrl: dataUrl
+    });
+
+    const curSelected = getSelectedHeaderLogos();
+    curSelected.push(logoId);
+    renderHeaderLogosSelector(curSelected);
+    event.target.value = '';
+    showToast(`Logo "${logoName}" added!`);
+  };
+  reader.readAsDataURL(file);
+}
+
+function deleteCustomHeaderLogo(logoId) {
+  if (!confirm('Remove this custom logo?')) return;
+  fmeaData.customLogos = (fmeaData.customLogos || []).filter(l => l.id !== logoId);
+  const curSelected = getSelectedHeaderLogos().filter(id => id !== logoId);
+  renderHeaderLogosSelector(curSelected);
+}
+
+function getSelectedHeaderLogos() {
+  const chks = document.querySelectorAll('input[name="hdrBrandLogoChk"]:checked');
+  const selected = [];
+  chks.forEach(c => selected.push(c.value));
+  return selected.length > 0 ? selected : ['JOST'];
+}
+
+function renderHeaderLogosHTML(selectedLogoIds = ['JOST']) {
+  if (!selectedLogoIds || selectedLogoIds.length === 0) {
+    selectedLogoIds = ['JOST'];
+  }
+  const customLogos = fmeaData.customLogos || [];
+  let allLogos = [...PRESET_BRAND_LOGOS];
+  customLogos.forEach(cl => {
+    allLogos.push({
+      id: cl.id,
+      name: cl.name,
+      type: 'custom_image',
+      src: cl.dataUrl
+    });
+  });
+
+  let logosHtml = '';
+  selectedLogoIds.forEach(id => {
+    const logo = allLogos.find(l => l.id === id);
+    if (!logo) return;
+    if (logo.type === 'image') {
+      logosHtml += `<img src="${logo.src}" alt="${escapeHtml(logo.name)}" style="height:26px; width:auto; max-width:90px; object-fit:contain; margin-right:8px;" onerror="this.style.display='none'">`;
+    } else if (logo.type === 'custom_image') {
+      logosHtml += `<img src="${logo.src}" alt="${escapeHtml(logo.name)}" style="height:26px; width:auto; max-width:90px; object-fit:contain; margin-right:8px; background:#fff; padding:2px; border-radius:3px;">`;
+    } else {
+      logosHtml += `<span style="display:inline-block; padding:3px 9px; border-radius:4px; font-weight:900; font-size:12px; letter-spacing:0.5px; background:${logo.bg}; color:${logo.color}; margin-right:8px; border:1px solid rgba(255,255,255,0.4); text-transform:uppercase;">${escapeHtml(logo.text)}</span>`;
+    }
+  });
+
+  return logosHtml;
+}
+
 function getHeaderTargetObj(scopeId) {
   if (scopeId && scopeId.startsWith('PFMEA_')) {
     const pfmeaId = scopeId.replace('PFMEA_', '');
@@ -16874,6 +22091,9 @@ function switchAiagVdaHeaderScope() {
     h.fmeaDocNo = h.fmeaDocNo || `${curRev.fmeaType || 'FMEA'}-${curRev.revNumber || '1.0'}`;
     h.revNumber = curRev.revNumber;
   }
+
+  const selectedLogos = (h.selectedLogos && h.selectedLogos.length > 0) ? h.selectedLogos : ['JOST'];
+  renderHeaderLogosSelector(selectedLogos);
 
   document.getElementById('hdr_companyName').value = h.companyName || '';
   document.getElementById('hdr_engLocation').value = h.engLocation || '';
@@ -16916,6 +22136,7 @@ function saveAiagVdaHeaderInfo(e) {
   const scopeId = select ? select.value : currentHeaderTargetScopeId;
 
   const h = getHeaderTargetObj(scopeId);
+  h.selectedLogos = getSelectedHeaderLogos();
   h.companyName = document.getElementById('hdr_companyName').value.trim();
   h.engLocation = document.getElementById('hdr_engLocation').value.trim();
   h.customerName = document.getElementById('hdr_customerName').value.trim();
@@ -17019,6 +22240,9 @@ function executeExport() {
   const varSelect = document.getElementById('exportVariantSelect');
   const targetVariant = varSelect ? varSelect.value : (typeof selectedVariantFilter !== 'undefined' ? selectedVariantFilter : 'ALL');
 
+  const printHeaderModeEl = document.querySelector('input[name="printHeaderMode"]:checked');
+  const repeatHeaderEveryPage = printHeaderModeEl ? (printHeaderModeEl.value === 'everyPage') : false;
+
   if (checkedNodes.length === 0) {
     alert("Please select at least one structure element to export.");
     return;
@@ -17027,7 +22251,7 @@ function executeExport() {
   if (format === 'excel') {
     exportToExcel(checkedNodes, targetScopes, targetVariant);
   } else {
-    exportToPDF(checkedNodes, targetScopes, targetVariant);
+    exportToPDF(checkedNodes, targetScopes, targetVariant, repeatHeaderEveryPage);
   }
   closeModal('exportModal');
 }
@@ -17051,6 +22275,11 @@ function getAiagVdaHeaderHTML(overrideScope, hideTitleBar = false) {
     : `Design Failure Mode and Effect Analysis (DESIGN-FMEA)`;
 
   const revNum = (curRev && (curRev.revNumber || curRev.number || curRev.revNo)) || h.revNumber || h.revNo || '1.0';
+  const cleanRevNum = String(revNum).replace(/\s*\((in progress|draft|frozen)\)/i, '').trim();
+  const isOngoing = curRev
+    ? (curRev.status === 'In Progress' || curRev.status === 'Draft' || (curRev.status && curRev.status.toLowerCase() !== 'frozen'))
+    : (!fmeaData.status || fmeaData.status.toLowerCase() !== 'frozen');
+  const revStatusSuffix = isOngoing ? ' (In Progress)' : '';
   const rawStartDate = (curRev && (curRev.createdDate || curRev.startDate || curRev.createdAt || curRev.date)) || h.startDate || h.createdDate || new Date().toISOString().slice(0, 10);
   const rawRevDate = (curRev && (curRev.freezeDate || curRev.revDate || curRev.updatedAt || curRev.createdDate)) || h.revDate || h.startDate || new Date().toISOString().slice(0, 10);
 
@@ -17058,12 +22287,17 @@ function getAiagVdaHeaderHTML(overrideScope, hideTitleBar = false) {
   const revDate = String(rawRevDate).slice(0, 10);
   const scopeSubject = h.subjectSystem || ctx.name || (ctx.pfmea ? ctx.pfmea.name : '') || fmeaData.projectName || '';
 
+  const selectedLogos = (h.selectedLogos && h.selectedLogos.length > 0) ? h.selectedLogos : ['JOST'];
+  const brandLogosHtml = renderHeaderLogosHTML(selectedLogos);
+
   return `
-    <div style="border: 2px solid #0f172a; margin-bottom: 12px; font-family: Arial, sans-serif; font-size: 10px; background: #ffffff;">
+    <div class="fmea-project-header-box" style="border: 2px solid #0f172a; margin-bottom: 8px; font-family: Arial, sans-serif; font-size: 10px; background: #ffffff;">
       ${hideTitleBar ? '' : `
-      <div style="background: #0f172a; color: #ffffff; display:flex; align-items:center; justify-content:space-between; padding: 6px 12px;">
-        <img src="Logo_Jost.svg.webp" alt="JOST World" style="height:26px; width:auto; object-fit:contain;" onerror="this.style.display='none'">
-        <div style="flex:1; text-align:center; font-weight:bold; font-size:13px; letter-spacing:0.5px; text-transform:uppercase;">
+      <div style="background: #0f172a; color: #ffffff; display:flex; align-items:center; justify-content:space-between; padding: 5px 12px;">
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          ${brandLogosHtml}
+        </div>
+        <div style="flex:1; text-align:center; font-weight:bold; font-size:13px; letter-spacing:0.5px; text-transform:uppercase; padding: 0 10px;">
           AIAG-VDA ${fmeaTitle}
         </div>
         <div style="text-align:right; font-size:9px; color:#94a3b8; white-space:nowrap;">JOST World<br>FMEA Workbench</div>
@@ -17080,7 +22314,7 @@ function getAiagVdaHeaderHTML(overrideScope, hideTitleBar = false) {
           <td style="border: 1px solid #cbd5e1; padding: 4px 8px;"><strong>Engineering Location:</strong> ${escapeHtml(h.engLocation || '')}</td>
           <td style="border: 1px solid #cbd5e1; padding: 4px 8px;"><strong>FMEA Start Date:</strong> ${escapeHtml(startDate)}</td>
           <td style="border: 1px solid #cbd5e1; padding: 4px 8px;"><strong>Design / Process Responsibility:</strong> ${escapeHtml(h.designResp || '')}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 4px 8px;"><strong>FMEA Revision Date:</strong> ${escapeHtml(revDate)} (Rev ${escapeHtml(revNum)})</td>
+          <td style="border: 1px solid #cbd5e1; padding: 4px 8px;"><strong>FMEA Revision Date:</strong> ${escapeHtml(revDate)} (Rev ${escapeHtml(cleanRevNum)}${revStatusSuffix})</td>
         </tr>
         <tr style="background:#f8fafc;">
           <td style="border: 1px solid #cbd5e1; padding: 4px 8px;"><strong>Customer Name:</strong> ${escapeHtml(h.customerName || h.projectName || fmeaData.projectName || '')} ${h.modelYear ? '(' + escapeHtml(h.modelYear) + ')' : ''}</td>
@@ -17457,23 +22691,6 @@ function handleRpnThresholdInput() {
   renderInsightsDashboard();
 }
 
-function populateDashVariantDropdown() {
-  const select = document.getElementById('dashVariantSelect');
-  if (!select) return;
-  const currentVal = select.value || 'ALL';
-  const variants = fmeaData.variants || [];
-
-  let html = `<option value="ALL">All Variants</option>`;
-  variants.forEach(v => {
-    const vId = typeof v === 'object' ? v.id : v;
-    const vName = typeof v === 'object' ? v.name : v;
-    html += `<option value="${escapeHtml(vId)}">🚗 ${escapeHtml(vName)}</option>`;
-  });
-
-  select.innerHTML = html;
-  select.value = currentVal;
-}
-
 function openInsightsDashboardModal() {
   activeDashboardMode = (fmeaData && fmeaData.methodologyMode === 'AIAG-VDA') ? 'AIAG-VDA' : 'AIAG';
   populateFmeaScopeCheckboxDropdown('dashScopeMultiSelectContainer', 'renderInsightsDashboard');
@@ -17734,7 +22951,11 @@ function renderInsightsDashboard() {
 
   const projName = fmeaData.header?.projectName || fmeaData.headerInfo?.customerName || fmeaData.projectName || 'FMEA Project';
   const curRev = typeof getContextRevision === 'function' ? getContextRevision() : (fmeaData.currentRevision || null);
-  const revStr = curRev ? `Rev ${curRev.revNumber || curRev.number || '1.0'} (${curRev.status || 'Draft'})` : 'No Revision';
+  const isDashRevOngoing = curRev
+    ? (curRev.status === 'In Progress' || curRev.status === 'Draft' || (curRev.status && curRev.status.toLowerCase() !== 'frozen'))
+    : (!fmeaData.status || fmeaData.status.toLowerCase() !== 'frozen');
+  const cleanDashRevNum = curRev ? String(curRev.revNumber || curRev.number || '1.0').replace(/\s*\((in progress|draft|frozen)\)/i, '').trim() : '1.0';
+  const revStr = curRev ? `Rev ${cleanDashRevNum}${isDashRevOngoing ? ' (In Progress)' : ''}` : 'No Revision';
   const activeVar = variantFilter === 'ALL' ? 'All Variants' : (fmeaData.variants?.find(v => v.id === variantFilter)?.name || variantFilter);
   const activeScopeName = scopeNamesStr || 'All Scopes';
 
@@ -18183,10 +23404,15 @@ function formatAPBadge(s, o, d, isVDA) {
   return `<span style="background:${bg}; color:${color}; font-weight:bold; padding:2px 8px; border-radius:3px; font-size:10px;" title="Action Priority: ${ap === 'H' ? 'High' : (ap === 'M' ? 'Medium' : 'Low')}">${label}</span>`;
 }
 
-function getScopeTableHeaderHTML(isVDA, isPFMEA) {
+function getScopeTableHeaderHTML(isVDA, isPFMEA, topHeaderHtml = '') {
+  const topHeaderRow = topHeaderHtml
+    ? `<tr class="project-header-print-row"><th colspan="${isVDA ? 28 : 25}" style="padding:0 0 6px 0; border:none; background:transparent !important; text-align:left;">${topHeaderHtml}</th></tr>`
+    : '';
+
   if (!isVDA) {
     return `
         <thead>
+          ${topHeaderRow}
           <tr style="background:#0f172a !important; color:#ffffff !important; font-weight:bold; font-size:9.5px; text-transform:uppercase; text-align:center;">
             <th style="width:28px;">No.</th>
             <th style="width:130px;">${isPFMEA ? 'Process Step Station No. & Name' : 'Focus Element (System / Subsystem)'}</th>
@@ -18218,6 +23444,7 @@ function getScopeTableHeaderHTML(isVDA, isPFMEA) {
   }
   return `
         <thead>
+          ${topHeaderRow}
           <tr style="background:#0f172a !important; color:#ffffff !important; font-weight:bold; font-size:9.5px; text-transform:uppercase; text-align:center;">
             <th style="width:28px;" rowspan="2">No.</th>
             <th colspan="3" style="background:#1e293b !important; color:#fff !important; border:1px solid #475569;">STRUCTURAL ANALYSIS (STEP 2)</th>
@@ -18319,7 +23546,13 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
 
     if (structNode && !matchesVariantFilter(structNode.variantId, targetVariant)) return;
 
-    const funcObj = functionsList.find(f => f.id === fl.funcId);
+    // Resolve funcId with functionId alias (WB4 legacy flat-format compatibility)
+    const resolvedFuncId = fl.funcId || fl.functionId;
+    let funcObj = functionsList.find(f => f.id === resolvedFuncId);
+    // If function not found in library but functionName is set (WB4 flat format), synthesize it
+    if (!funcObj && (fl.functionName || fl.functionId)) {
+      funcObj = { id: resolvedFuncId || fl.id, name: fl.functionName || 'Function', type: fl.functionCategory || 'Primary function', structId: fl.structId };
+    }
     if (!funcObj || fl.isConsidered === false) return;
     if (!matchesVariantFilter(funcObj.variants || funcObj.variantId, targetVariant)) return;
 
@@ -18329,15 +23562,21 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
     const reqTextStr = assignedReqs.length > 0 ? assignedReqs.map(r => `${r.reqNo ? r.reqNo + ': ' : ''}${r.text}`).join('; ') : '-';
 
     (fl.failureModes || []).forEach(fm => {
-      const fmNameStr = formatCleanCellText(fm.name);
+      const fmNameStr = formatCleanCellText(fm.name || fl.failureModeName);
       const linkedEffIds = effMap[fm.id] || [];
       const linkedEffects = (fmeaData.libraries && fmeaData.libraries.effects || []).filter(e => linkedEffIds.includes(e.id));
-      const validEffects = linkedEffects.filter(e => {
+      let validEffects = linkedEffects.filter(e => {
         const desc = (e.desc || e.details || e.description || e.name || '').trim();
         return desc && desc !== '-' && !desc.toLowerCase().includes('(click to edit)');
       });
+      // Legacy WB4 flat-format fallback: if no effects in libraries but fl has effectName, synthesize one
+      if (validEffects.length === 0 && (fl.effectName || fm.effectName)) {
+        const effDesc = fl.effectName || fm.effectName || 'System consequence';
+        const effSev  = parseInt(fl.severity || fm.severity, 10) || 8;
+        validEffects = [{ id: fm.id + '-eff', desc: effDesc, severity: effSev, systemName: '' }];
+      }
       const hasValidEffect = validEffects.length > 0;
-      const maxSev = hasValidEffect ? validEffects.reduce((max, e) => Math.max(max, parseInt(e.severity) || 10), 1) : 10;
+      const maxSev = hasValidEffect ? validEffects.reduce((max, e) => Math.max(max, parseInt(e.severity) || 10), 1) : (parseInt(fm.severity || fl.severity, 10) || 10);
 
       const effectsText = hasValidEffect
         ? validEffects.map((e, idx) => {
@@ -18373,7 +23612,46 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
       }
 
       const linkedCauseIds = causeMap[fm.id] || [];
-      const linkedCauses = (fmeaData.libraries && fmeaData.libraries.causes || []).filter(c => linkedCauseIds.includes(c.id) && matchesVariantFilter(c.variants || c.variantId, targetVariant));
+      let linkedCauses = (fmeaData.libraries && fmeaData.libraries.causes || []).filter(c => linkedCauseIds.includes(c.id) && matchesVariantFilter(c.variants || c.variantId, targetVariant));
+      // Legacy WB4 flat-format fallback: synthesize a cause from fl fields if libraries is empty
+      if (linkedCauses.length === 0 && (fl.causeName || fl.causeId)) {
+        const legacyCause = {
+          id: fl.causeId || (fm.id + '-cause'),
+          details: fl.causeName || 'Root cause',
+          desc: fl.causeName || 'Root cause',
+          name: fl.causeName || 'Root cause',
+          characteristics: fl.characteristic || '-',
+          occurrence: parseInt(fl.occurrence, 10) || 3,
+          detection: parseInt(fl.detection, 10) || 3,
+          ap: fl.actionPriority || 'M',
+          variants: ['ALL']
+        };
+        linkedCauses = [legacyCause];
+        // Also synthesize controls from flat fields
+        if (fl.preventionControl || fl.detectionControl) {
+          const synthCtrlIds = [];
+          if (fl.preventionControl) {
+            fmeaData.libraries = fmeaData.libraries || {};
+            fmeaData.libraries.controls = fmeaData.libraries.controls || [];
+            const prevId = legacyCause.id + '-prev';
+            if (!fmeaData.libraries.controls.find(c => c.id === prevId)) {
+              fmeaData.libraries.controls.push({ id: prevId, desc: fl.preventionControl, type: 'Prevention' });
+            }
+            synthCtrlIds.push(prevId);
+          }
+          if (fl.detectionControl) {
+            fmeaData.libraries = fmeaData.libraries || {};
+            fmeaData.libraries.controls = fmeaData.libraries.controls || [];
+            const detId = legacyCause.id + '-det';
+            if (!fmeaData.libraries.controls.find(c => c.id === detId)) {
+              fmeaData.libraries.controls.push({ id: detId, desc: fl.detectionControl, type: 'Detection' });
+            }
+            synthCtrlIds.push(detId);
+          }
+          if (!fmeaData.causeControls) fmeaData.causeControls = {};
+          fmeaData.causeControls[legacyCause.id] = synthCtrlIds;
+        }
+      }
 
       let fmTotalRows = 0;
       if (linkedCauses.length === 0) {
@@ -18481,10 +23759,14 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
         const actIds = causeActions[cause.id] || [];
         const linkedActions = (fmeaData.libraries && fmeaData.libraries.actions || []).filter(a => actIds.includes(a.id) && matchesVariantFilter(a.variants || a.variantId, targetVariant));
 
+        const causeRowspan = Math.max(1, linkedActions.length);
+        const causeComments = cause.comments || (fm ? fm.comments : null) || '';
+        const causeCommentsStr = formatCleanCellText(causeComments);
+
         if (linkedActions.length === 0) {
           rowCounter++;
           if (!isVDA) {
-            // AIAG 4th Ed
+            // AIAG 4th Ed (25 cols)
             html += `<tr>
               <td style="text-align:center; font-weight:bold; color:#64748b;">${rowCounter}</td>`;
             if (isFirstRowForFm) {
@@ -18497,6 +23779,7 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
               <td rowspan="${fmTotalRows}">${escapeHtml(fmNameStr)}</td>
               <td rowspan="${fmTotalRows}">${effectsText}</td>
               <td rowspan="${fmTotalRows}" style="text-align:center; font-weight:bold; ${causeRiskStyle}">${maxSev}</td>`;
+              isFirstRowForFm = false;
             }
             const causeFullText = `${causeDetailsStr}${causeFuncStr !== '-' ? '<br/><span style="color:#64748b; font-size:10px;">Func: ' + escapeHtml(causeFuncStr) + '</span>' : ''}`;
             html += `
@@ -18517,14 +23800,11 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
               <td style="text-align:center;">-</td>
               <td style="text-align:center;">-</td>
               <td style="text-align:center;">-</td>
-              <td style="text-align:center; font-weight:bold;">-</td>`;
-            if (isFirstRowForFm) {
-              html += `<td rowspan="${fmTotalRows}">${escapeHtml(formatCleanCellText(fm.comments))}</td>`;
-              isFirstRowForFm = false;
-            }
-            html += `</tr>`;
+              <td style="text-align:center; font-weight:bold;">-</td>
+              <td>${escapeHtml(causeCommentsStr)}</td>
+            </tr>`;
           } else {
-            // AIAG-VDA 7-Step
+            // AIAG-VDA 7-Step (28 cols)
             html += `<tr>
               <td style="text-align:center; font-weight:bold; color:#64748b;">${rowCounter}</td>`;
             if (isFirstRowForFm) {
@@ -18547,6 +23827,7 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
               <td rowspan="${fmTotalRows}">${effectsText}</td>
               <td rowspan="${fmTotalRows}" style="text-align:center; font-weight:bold; ${causeRiskStyle}">${maxSev}</td>
               <td rowspan="${fmTotalRows}">${escapeHtml(fmNameStr)}</td>`;
+              isFirstRowForFm = false;
             }
             html += `
               <td>${causeDetailsStr}</td>
@@ -18557,30 +23838,31 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
               <td style="text-align:center; font-weight:bold;">${rpnBadge}</td>
               <td style="text-align:center;">${escapeHtml(causeClassSym)}</td>
               <td>-</td><td>-</td><td>-</td><td style="text-align:center;">-</td><td style="text-align:center;">-</td><td>-</td>
-              <td style="text-align:center;">-</td><td style="text-align:center;">-</td><td style="text-align:center;">-</td><td style="text-align:center;">-</td>`;
-            if (isFirstRowForFm) {
-              html += `<td rowspan="${fmTotalRows}">${escapeHtml(formatCleanCellText(fm.comments))}</td>`;
-              isFirstRowForFm = false;
-            }
-            html += `</tr>`;
+              <td style="text-align:center;">-</td><td style="text-align:center;">-</td><td style="text-align:center;">-</td><td style="text-align:center;">-</td>
+              <td>${escapeHtml(causeCommentsStr)}</td>
+            </tr>`;
           }
         } else {
-          linkedActions.forEach(act => {
+          const hasAnyActionDetail = linkedActions.some(a => a.detail && String(a.detail).trim() !== '' && a.detail !== '-');
+          const firstAct = linkedActions[0] || {};
+          const s2 = parseInt(cause.s2) || parseInt(firstAct.s2) || maxSev;
+          const o2 = parseInt(cause.o2) || parseInt(firstAct.o2) || occ;
+          const d2 = parseInt(cause.d2) || parseInt(firstAct.d2) || det;
+          const rpn2Badge = hasAnyActionDetail ? formatAPBadge(s2, o2, d2, isVDA) : '-';
+          const actRiskStyle = hasAnyActionDetail ? getRiskRatingStyle(s2, o2, d2, isVDA) : '';
+
+          linkedActions.forEach((act, actIdx) => {
             rowCounter++;
-            const s2 = parseInt(act.s2) || maxSev;
-            const o2 = parseInt(act.o2) || occ;
-            const d2 = parseInt(act.d2) || det;
+            const isFirstRowForCause = (actIdx === 0);
             const actDetailStr = formatCleanCellText(act.detail || act.desc || act.actionDetails || '');
             const isPreventive = (act.type === 'Prevention' || act.actionType === 'Prevention');
             const prevActStr = isPreventive ? actDetailStr : '-';
             const detActStr = !isPreventive ? actDetailStr : '-';
-            const rpn2Badge = actDetailStr !== '-' ? formatAPBadge(s2, o2, d2, isVDA) : '-';
-            const actRiskStyle = actDetailStr !== '-' ? getRiskRatingStyle(s2, o2, d2, isVDA) : '';
             const actStatusStr = act.status || (act.completionDate ? 'Passed' : (actDetailStr !== '-' ? 'Planned' : '-'));
             const actTakenStr = actDetailStr !== '-' ? (act.actionTaken ? act.actionTaken + (act.completionDate ? ' (' + act.completionDate + ')' : '') : '-') : '-';
 
             if (!isVDA) {
-              // AIAG 4th Ed
+              // AIAG 4th Ed (25 cols)
               html += `<tr>
                 <td style="text-align:center; font-weight:bold; color:#64748b;">${rowCounter}</td>`;
               if (isFirstRowForFm) {
@@ -18593,34 +23875,38 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
                 <td rowspan="${fmTotalRows}">${escapeHtml(fmNameStr)}</td>
                 <td rowspan="${fmTotalRows}">${effectsText}</td>
                 <td rowspan="${fmTotalRows}" style="text-align:center; font-weight:bold; ${causeRiskStyle}">${maxSev}</td>`;
+                isFirstRowForFm = false;
               }
-              const causeFullText = `${causeDetailsStr}${causeFuncStr !== '-' ? '<br/><span style="color:#64748b; font-size:10px;">Func: ' + escapeHtml(causeFuncStr) + '</span>' : ''}`;
+              if (isFirstRowForCause) {
+                const causeFullText = `${causeDetailsStr}${causeFuncStr !== '-' ? '<br/><span style="color:#64748b; font-size:10px;">Func: ' + escapeHtml(causeFuncStr) + '</span>' : ''}`;
+                html += `
+                  <td rowspan="${causeRowspan}">${causeFullText}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(formatCleanCellText(cause.characteristics || cause.characteristic || cause.spec || '-'))}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${escapeHtml(causeClassSym)}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${escapeHtml(causeVarNames)}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(prevCtrls)}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold; ${causeRiskStyle}">${occ}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(detCtrls)}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${det}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold;">${rpnBadge}</td>`;
+              }
               html += `
-                <td>${causeFullText}</td>
-                <td>${escapeHtml(formatCleanCellText(cause.characteristics || cause.characteristic || cause.spec || '-'))}</td>
-                <td style="text-align:center;">${escapeHtml(causeClassSym)}</td>
-                <td style="text-align:center;">${escapeHtml(causeVarNames)}</td>
-                <td>${escapeHtml(prevCtrls)}</td>
-                <td style="text-align:center; font-weight:bold; ${causeRiskStyle}">${occ}</td>
-                <td>${escapeHtml(detCtrls)}</td>
-                <td style="text-align:center;">${det}</td>
-                <td style="text-align:center; font-weight:bold;">${rpnBadge}</td>
                 <td>${escapeHtml(actDetailStr)}</td>
                 <td style="text-align:center;">${isPreventive ? 'P' : (actDetailStr !== '-' ? 'D' : '-')}</td>
                 <td>${actDetailStr !== '-' ? escapeHtml(act.responsible || '-') : '-'}</td>
                 <td style="text-align:center;">${actDetailStr !== '-' ? (act.targetDate || '-') : '-'}</td>
-                <td>${escapeHtml(actTakenStr)}</td>
-                <td style="text-align:center; font-weight:bold; ${actRiskStyle}">${actDetailStr !== '-' ? s2 : '-'}</td>
-                <td style="text-align:center; font-weight:bold; ${actRiskStyle}">${actDetailStr !== '-' ? o2 : '-'}</td>
-                <td style="text-align:center;">${actDetailStr !== '-' ? d2 : '-'}</td>
-                <td style="text-align:center; font-weight:bold;">${rpn2Badge}</td>`;
-              if (isFirstRowForFm) {
-                html += `<td rowspan="${fmTotalRows}">${escapeHtml(formatCleanCellText(act.comments || fm.comments))}</td>`;
-                isFirstRowForFm = false;
+                <td>${escapeHtml(actTakenStr)}</td>`;
+              if (isFirstRowForCause) {
+                html += `
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold; ${actRiskStyle}">${hasAnyActionDetail ? s2 : '-'}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold; ${actRiskStyle}">${hasAnyActionDetail ? o2 : '-'}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${hasAnyActionDetail ? d2 : '-'}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold;">${rpn2Badge}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(causeCommentsStr)}</td>`;
               }
               html += `</tr>`;
             } else {
-              // AIAG-VDA 7-Step
+              // AIAG-VDA 7-Step (28 cols)
               html += `<tr>
                 <td style="text-align:center; font-weight:bold; color:#64748b;">${rowCounter}</td>`;
               if (isFirstRowForFm) {
@@ -18628,7 +23914,9 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
                 <td rowspan="${fmTotalRows}">${higherSystemCellHTML}</td>
                 <td rowspan="${fmTotalRows}">${escapeHtml(structCellText)}</td>`;
               }
-              html += `<td>${escapeHtml(causeWorkElemStr)}</td>`;
+              if (isFirstRowForCause) {
+                html += `<td rowspan="${causeRowspan}">${escapeHtml(causeWorkElemStr)}</td>`;
+              }
               if (isFirstRowForFm) {
                 html += `
                 <td rowspan="${fmTotalRows}">${higherFuncCellHTML}</td>
@@ -18637,34 +23925,40 @@ function buildScopeTableRowsHTML(scope, nodeIds, targetVariant) {
                   ${reqTextStr && reqTextStr !== '-' ? `<div style="margin-top:4px; font-size:10px; color:#0284c7; font-weight:600; text-align:left;">📌 ${escapeHtml(reqTextStr)}</div>` : ''}
                 </td>`;
               }
-              html += `<td>${escapeHtml(causeFuncStr)}</td>`;
+              if (isFirstRowForCause) {
+                html += `<td rowspan="${causeRowspan}">${escapeHtml(causeFuncStr)}</td>`;
+              }
               if (isFirstRowForFm) {
                 html += `
                 <td rowspan="${fmTotalRows}">${effectsText}</td>
                 <td rowspan="${fmTotalRows}" style="text-align:center; font-weight:bold; ${causeRiskStyle}">${maxSev}</td>
                 <td rowspan="${fmTotalRows}">${escapeHtml(fmNameStr)}</td>`;
+                isFirstRowForFm = false;
+              }
+              if (isFirstRowForCause) {
+                html += `
+                  <td rowspan="${causeRowspan}">${causeDetailsStr}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(prevCtrls)}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold; ${causeRiskStyle}">${occ}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(detCtrls)}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${det}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold;">${rpnBadge}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${escapeHtml(causeClassSym)}</td>`;
               }
               html += `
-                <td>${causeDetailsStr}</td>
-                <td>${escapeHtml(prevCtrls)}</td>
-                <td style="text-align:center; font-weight:bold; ${causeRiskStyle}">${occ}</td>
-                <td>${escapeHtml(detCtrls)}</td>
-                <td style="text-align:center;">${det}</td>
-                <td style="text-align:center; font-weight:bold;">${rpnBadge}</td>
-                <td style="text-align:center;">${escapeHtml(causeClassSym)}</td>
                 <td>${escapeHtml(prevActStr)}</td>
                 <td>${escapeHtml(detActStr)}</td>
                 <td>${actDetailStr !== '-' ? escapeHtml(act.responsible || '-') : '-'}</td>
                 <td style="text-align:center;">${actDetailStr !== '-' ? (act.targetDate || '-') : '-'}</td>
                 <td style="text-align:center;">${actDetailStr !== '-' ? escapeHtml(actStatusStr) : '-'}</td>
-                <td>${escapeHtml(actTakenStr)}</td>
-                <td style="text-align:center; font-weight:bold; ${actRiskStyle}">${actDetailStr !== '-' ? s2 : '-'}</td>
-                <td style="text-align:center; font-weight:bold; ${actRiskStyle}">${actDetailStr !== '-' ? o2 : '-'}</td>
-                <td style="text-align:center;">${actDetailStr !== '-' ? d2 : '-'}</td>
-                <td style="text-align:center; font-weight:bold;">${rpn2Badge}</td>`;
-              if (isFirstRowForFm) {
-                html += `<td rowspan="${fmTotalRows}">${escapeHtml(formatCleanCellText(act.comments || fm.comments))}</td>`;
-                isFirstRowForFm = false;
+                <td>${escapeHtml(actTakenStr)}</td>`;
+              if (isFirstRowForCause) {
+                html += `
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold; ${actRiskStyle}">${hasAnyActionDetail ? s2 : '-'}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold; ${actRiskStyle}">${hasAnyActionDetail ? o2 : '-'}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center;">${hasAnyActionDetail ? d2 : '-'}</td>
+                  <td rowspan="${causeRowspan}" style="text-align:center; font-weight:bold;">${rpn2Badge}</td>
+                  <td rowspan="${causeRowspan}">${escapeHtml(causeCommentsStr)}</td>`;
               }
               html += `</tr>`;
             }
@@ -19009,7 +24303,7 @@ async function exportDashboardInsightsToExcel() {
   showToast(`📊 Downloaded PowerBI Excel/CSV Insights file!`);
 }
 
-function exportToPDF(nodeIds, targetScopes, targetVariant) {
+function exportToPDF(nodeIds, targetScopes, targetVariant, repeatHeaderEveryPage = false) {
   if (!targetScopes || targetScopes.length === 0) {
     const selectedScopeVals = getSelectedScopeValues('exportScopeMultiSelectContainer');
     targetScopes = resolveSelectedScopes(selectedScopeVals);
@@ -19028,34 +24322,114 @@ function exportToPDF(nodeIds, targetScopes, targetVariant) {
     const isPFMEA = scope.isPFMEA;
     const varDisplay = targetVariant && targetVariant !== 'ALL' ? ` (Variant Filter: ${escapeHtml(targetVariant)})` : '';
 
-    scopesHTML += `
-      <div class="scope-section">
-        ${headerHTML}
-        ${varDisplay ? `<div style="font-weight:bold; font-size:11px; margin-bottom:6px; color:#1e293b;">🔍 ${varDisplay}</div>` : ''}
-        <table>
-          ${getScopeTableHeaderHTML(isVDA, isPFMEA)}
-          <tbody>
-            ${rowsHtml || `<tr><td colspan="${isVDA ? 29 : 26}" style="text-align:center; padding:15px; color:#64748b;">No FMEA items defined for this scope ${varDisplay}.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    `;
+    if (repeatHeaderEveryPage) {
+      scopesHTML += `
+        <div class="scope-section">
+          ${varDisplay ? `<div style="font-weight:bold; font-size:11px; margin-bottom:6px; color:#1e293b;">🔍 ${varDisplay}</div>` : ''}
+          <table>
+            ${getScopeTableHeaderHTML(isVDA, isPFMEA, headerHTML)}
+            <tbody>
+              ${rowsHtml || `<tr><td colspan="${isVDA ? 29 : 26}" style="text-align:center; padding:15px; color:#64748b;">No FMEA items defined for this scope ${varDisplay}.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } else {
+      scopesHTML += `
+        <div class="scope-section">
+          ${headerHTML}
+          ${varDisplay ? `<div style="font-weight:bold; font-size:11px; margin-bottom:6px; color:#1e293b;">🔍 ${varDisplay}</div>` : ''}
+          <table>
+            ${getScopeTableHeaderHTML(isVDA, isPFMEA)}
+            <tbody>
+              ${rowsHtml || `<tr><td colspan="${isVDA ? 29 : 26}" style="text-align:center; padding:15px; color:#64748b;">No FMEA items defined for this scope ${varDisplay}.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
   });
+
+  const projectName = (fmeaData && fmeaData.projectInfo && fmeaData.projectInfo.name) || fmeaData.projectName || 'JOST FMEA';
+  const reportDocTitle = `${isVDA ? 'AIAG-VDA' : 'AIAG'} FMEA Report — ${projectName}`;
 
   const reportHtml = `<!DOCTYPE html>
     <html>
       <head>
-        <title>AIAG-VDA FMEA Report - JOST World</title>
+        <title>${escapeHtml(reportDocTitle)}</title>
         <style>
-          @page { size: A3 landscape; margin: 3mm 5mm 5mm 5mm; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0px; margin: 0px; font-size: 9.5px; color: #000; background: #fff; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          .scope-section { page-break-after: always; margin-bottom: 20px; }
-          .scope-section:last-child { page-break-after: auto; }
-          table { width: 100%; border-collapse: collapse; font-size: 9px; page-break-inside: auto; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          th, td { border: 1px solid #334155; padding: 4px 5px; vertical-align: top; text-align: left; word-break: break-word; }
-          th { background: #e2e8f0 !important; color: #0f172a !important; font-weight: bold; text-align: center; font-size: 9px; -webkit-print-color-adjust: exact !important; }
+          @page {
+            size: A3 landscape;
+            margin: 10mm 6mm 10mm 6mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 0;
+            margin: 0;
+            font-size: 8.5px;
+            color: #000;
+            background: #fff;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .scope-section {
+            page-break-after: always;
+            break-after: page;
+            margin-bottom: 0px;
+          }
+          .scope-section:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5px;
+            page-break-inside: auto;
+            break-inside: auto;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tfoot {
+            display: table-footer-group !important;
+          }
+          tbody {
+            display: table-row-group !important;
+          }
+          tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            page-break-after: auto;
+            break-after: auto;
+          }
+          .project-header-print-row th {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 0 6px 0 !important;
+          }
+          th, td {
+            border: 1px solid #334155;
+            padding: 2.5px 4px;
+            vertical-align: top;
+            text-align: left;
+            word-break: break-word;
+            line-height: 1.25;
+          }
+          th {
+            background: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: bold;
+            text-align: center;
+            font-size: 8.5px;
+            -webkit-print-color-adjust: exact !important;
+          }
         </style>
       </head>
       <body>
@@ -19092,7 +24466,88 @@ function unlockApplicationPointerEvents() {
 window.addEventListener('focus', unlockApplicationPointerEvents);
 window.addEventListener('afterprint', unlockApplicationPointerEvents);
 
-function executeHtmlPrint(htmlContent) {
+async function executeHtmlPrint(htmlContent) {
+  // ── Electron native PDF path ───────────────────────────────────────────────
+  if (window.electronAPI && typeof window.electronAPI.printToPdf === 'function') {
+    // Show a non-blocking progress toast
+    const toastId = '_pdfGenToast';
+    let toastEl = document.getElementById(toastId);
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.id = toastId;
+      toastEl.style.cssText = `
+        position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
+        background:#1e293b; color:#f8fafc; font-size:13px; font-weight:600;
+        padding:12px 24px; border-radius:10px; z-index:9999999;
+        border:1px solid #334155; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+        display:flex; align-items:center; gap:10px; white-space:nowrap;
+      `;
+      document.body.appendChild(toastEl);
+    }
+    toastEl.innerHTML = `<span style="font-size:16px;">⏳</span> Generating PDF… please wait`;
+    toastEl.style.display = 'flex';
+
+    const removeToast = () => { if (toastEl) toastEl.style.display = 'none'; };
+
+    try {
+      const result = await window.electronAPI.printToPdf(htmlContent);
+
+      if (!result || !result.success) {
+        removeToast();
+        const errMsg = (result && result.error) ? result.error : 'Unknown error';
+        if (typeof showToast === 'function') showToast(`❌ PDF generation failed: ${errMsg}`, 'error');
+        else alert(`PDF generation failed: ${errMsg}`);
+        unlockApplicationPointerEvents();
+        return;
+      }
+
+      // Ask the user where to save
+      const projectName = (fmeaData && fmeaData.projectInfo && fmeaData.projectInfo.name)
+        ? fmeaData.projectInfo.name.replace(/[^a-zA-Z0-9_\-]/g, '_')
+        : 'FMEA_Report';
+      const defaultName = `${projectName}_${new Date().toISOString().slice(0,10)}.pdf`;
+
+      const saveResult = await window.electronAPI.showSaveDialog(defaultName);
+
+      if (!saveResult || saveResult.canceled || !saveResult.filePath) {
+        removeToast();
+        unlockApplicationPointerEvents();
+        return; // User cancelled
+      }
+
+      // Convert Base64 back to binary and write via IPC (write-file handles path resolution)
+      const savePath = saveResult.filePath.endsWith('.pdf') ? saveResult.filePath : saveResult.filePath + '.pdf';
+
+      // Write the raw base64 data as binary via a direct IPC write (pass flag for binary)
+      const writeResult = await window.electronAPI.writeFile(savePath + '?binary=1', result.data);
+
+      removeToast();
+
+      if (writeResult && writeResult.success) {
+        const finalPath = writeResult.filePath || savePath;
+        if (typeof showToast === 'function') {
+          showToast(`✅ PDF saved successfully!`, 'success');
+        }
+        // Offer to reveal in Explorer
+        if (typeof window.electronAPI.showItemInFolder === 'function') {
+          window.electronAPI.showItemInFolder(finalPath);
+        }
+      } else {
+        const errMsg = (writeResult && writeResult.error) ? writeResult.error : 'Write failed';
+        if (typeof showToast === 'function') showToast(`❌ Could not save PDF: ${errMsg}`, 'error');
+        else alert(`Could not save PDF: ${errMsg}`);
+      }
+    } catch (err) {
+      removeToast();
+      if (typeof showToast === 'function') showToast(`❌ PDF error: ${err.message}`, 'error');
+      else alert('PDF error: ' + err.message);
+    } finally {
+      unlockApplicationPointerEvents();
+    }
+    return;
+  }
+
+  // ── Browser / fallback: iframe print dialog ────────────────────────────────
   const cleanHtml = htmlContent.replace(/<script>[\s\S]*?window\.print\(\);[\s\S]*?<\/script>/gi, '');
 
   let printIframe = document.getElementById('appPrintIframe');
@@ -19126,7 +24581,7 @@ function executeHtmlPrint(htmlContent) {
       iframeWin.focus();
       iframeWin.print();
     } catch (e) {
-      console.warn("Print execution notice:", e);
+      console.warn('Print execution notice:', e);
     } finally {
       setTimeout(unlockApplicationPointerEvents, 100);
       setTimeout(unlockApplicationPointerEvents, 400);
@@ -19144,47 +24599,104 @@ function executeHtmlPrint(htmlContent) {
 let activeModalStackZIndex = 100000;
 
 function openModal(id) {
-  const modal = document.getElementById(id);
-  if (!modal) return;
+  try {
+    const modal = (typeof id === 'string') ? document.getElementById(id) : id;
+    if (!modal) return;
 
-  // Ensure modal is attached to document.body
-  if (modal.parentElement !== document.body) {
-    document.body.appendChild(modal);
+    // Ensure modal is attached to document.body
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
+
+    // Elevate z-index above failureNetworkModal (which is 9999999) if it is open
+    const fnModal = document.getElementById('failureNetworkModal');
+    if (fnModal && fnModal.style.display !== 'none' && id !== 'failureNetworkModal') {
+      activeModalStackZIndex = Math.max(activeModalStackZIndex, 10000050);
+    }
+
+    // Calculate dynamic z-index so stacked modals always appear on top
+    activeModalStackZIndex += 10;
+    modal.style.zIndex = activeModalStackZIndex;
+    modal.style.display = 'flex';
+
+    setTimeout(() => {
+      try {
+        const input = modal.querySelector('input:not([type="hidden"]), select, textarea, button');
+        if (input) input.focus();
+      } catch (e) {}
+    }, 50);
+  } catch (err) {
+    console.error('Error opening modal:', id, err);
   }
-
-  // Elevate z-index above failureNetworkModal (which is 9999999) if it is open
-  const fnModal = document.getElementById('failureNetworkModal');
-  if (fnModal && fnModal.style.display !== 'none' && id !== 'failureNetworkModal') {
-    activeModalStackZIndex = Math.max(activeModalStackZIndex, 10000050);
-  }
-
-  // Calculate dynamic z-index so stacked modals always appear on top
-  activeModalStackZIndex += 10;
-  modal.style.zIndex = activeModalStackZIndex;
-  modal.style.display = 'flex';
-
-  setTimeout(() => {
-    const input = modal.querySelector('input:not([type="hidden"]), select, textarea, button');
-    if (input) input.focus();
-  }, 50);
 }
+window.openModal = openModal;
 
 function closeModal(id) {
-  const modal = document.getElementById(id);
-  if (!modal) return;
-  if (document.activeElement && modal.contains(document.activeElement)) {
-    document.activeElement.blur();
+  try {
+    if (!id) return;
+    const modal = (typeof id === 'string') ? document.getElementById(id) : id;
+    if (!modal) return;
+    if (document.activeElement && modal.contains && modal.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+    modal.style.display = 'none';
+    window.focus();
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+  } catch (err) {
+    console.error('Error closing modal:', id, err);
   }
-  modal.style.display = 'none';
-  window.focus();
-  requestAnimationFrame(() => {
-    window.dispatchEvent(new Event('resize'));
-  });
 }
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+window.closeModal = closeModal;
+
+// Global Delegated Close Button Handler for all screens & modals
+document.addEventListener('click', function(e) {
+  const closeTrigger = e.target.closest('.close-btn, [data-close-modal], .modal-close-btn, .btn-close-modal');
+  if (closeTrigger) {
+    // If it has inline onclick that already handles specific logic, allow it but catch any unhandled modal
+    const targetModal = closeTrigger.closest('.modal') || (closeTrigger.dataset && closeTrigger.dataset.target && document.querySelector(closeTrigger.dataset.target));
+    if (targetModal && targetModal.id) {
+      if (targetModal.id === 'aiWorkbench4Modal' && typeof closeAiWorkbench4Modal === 'function') {
+        try { closeAiWorkbench4Modal(); } catch (err) { closeModal('aiWorkbench4Modal'); }
+      } else if (targetModal.id === 'aiWorkbench3Modal' && typeof closeAiWorkbench3Modal === 'function') {
+        try { closeAiWorkbench3Modal(); } catch (err) { closeModal('aiWorkbench3Modal'); }
+      } else if (targetModal.id === 'aiWorkbench2Modal' && typeof closeAiWorkbench2Modal === 'function') {
+        try { closeAiWorkbench2Modal(); } catch (err) { closeModal('aiWorkbench2Modal'); }
+      } else {
+        closeModal(targetModal.id);
+      }
+    } else if (targetModal) {
+      targetModal.style.display = 'none';
+    }
+  }
+});
+
+// Global Escape Key Handler to close top modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const visibleModals = Array.from(document.querySelectorAll('.modal'))
+      .filter(m => m.style.display !== 'none' && m.style.display !== '' && window.getComputedStyle(m).display !== 'none');
+    if (visibleModals.length > 0) {
+      visibleModals.sort((a, b) => {
+        const za = parseInt(window.getComputedStyle(a).zIndex) || 0;
+        const zb = parseInt(window.getComputedStyle(b).zIndex) || 0;
+        return zb - za;
+      });
+      const topModal = visibleModals[0];
+      if (topModal.id === 'aiWorkbench4Modal' && typeof closeAiWorkbench4Modal === 'function') {
+        try { closeAiWorkbench4Modal(); } catch (err) { closeModal('aiWorkbench4Modal'); }
+      } else if (topModal.id === 'aiWorkbench3Modal' && typeof closeAiWorkbench3Modal === 'function') {
+        try { closeAiWorkbench3Modal(); } catch (err) { closeModal('aiWorkbench3Modal'); }
+      } else if (topModal.id === 'aiWorkbench2Modal' && typeof closeAiWorkbench2Modal === 'function') {
+        try { closeAiWorkbench2Modal(); } catch (err) { closeModal('aiWorkbench2Modal'); }
+      } else {
+        closeModal(topModal.id);
+      }
+    }
+  }
+});
+
 function escapeXml(str) { return escapeHtml(str); }
 
 function showToast(message, duration = 3000) {
@@ -19904,23 +25416,35 @@ async function exportDvpToExcel() {
 function printDvpReport() {
   const items = getFilteredDvpItems();
   const h = fmeaData.headerInfo || fmeaData.header || {};
+  const curRev = typeof getContextRevision === 'function' ? getContextRevision() : (fmeaData.currentRevision || null);
+  const revNum = (curRev && (curRev.revNumber || curRev.number)) || h.revNumber || '1.0';
+  const cleanRevNum = String(revNum).replace(/\s*\((in progress|draft|frozen)\)/i, '').trim();
+  const isOngoing = curRev
+    ? (curRev.status === 'In Progress' || curRev.status === 'Draft' || (curRev.status && curRev.status.toLowerCase() !== 'frozen'))
+    : (!fmeaData.status || fmeaData.status.toLowerCase() !== 'frozen');
+  const revLabel = `Rev ${cleanRevNum}${isOngoing ? ' (In Progress)' : ''}`;
 
   const dvpReportHtml = `<!DOCTYPE html>
     <html>
       <head>
-        <title>Design Verification Plan (DVP) Report</title>
+        <title>Design Verification Plan (DVP) Report — ${escapeHtml(h.customerName || h.projectName || fmeaData.projectName || 'JOST')}</title>
         <style>
-          @page { size: landscape; margin: 10mm; }
-          body { font-family: Arial, sans-serif; padding: 10px; font-size: 11px; color: #000; }
-          h2 { margin-bottom: 4px; color: #0f172a; }
-          table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
-          th, td { border: 1px solid #444; padding: 5px; vertical-align: top; text-align: left; }
-          th { background: #e2e8f0; font-weight: bold; text-align: center; }
+          @page { size: A4 landscape; margin: 10mm 8mm 10mm 8mm; }
+          * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0; margin: 0; font-size: 10px; color: #000; background: #fff; }
+          h2 { margin: 0 0 6px 0; color: #0f172a; font-size: 14px; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5px; margin-top: 10px; page-break-inside: auto; }
+          thead { display: table-header-group !important; }
+          tfoot { display: table-footer-group !important; }
+          tbody { display: table-row-group !important; }
+          tr { page-break-inside: avoid; break-inside: avoid; }
+          th, td { border: 1px solid #475569; padding: 4px 6px; vertical-align: top; text-align: left; }
+          th { background: #e2e8f0 !important; color: #0f172a !important; font-weight: bold; text-align: center; }
         </style>
       </head>
       <body>
         <h2>DESIGN VERIFICATION PLAN & REPORT (DVP&R)</h2>
-        <div><strong>Company:</strong> ${escapeHtml(h.companyName || '-')} | <strong>Project:</strong> ${escapeHtml(h.customerName || h.projectName || fmeaData.projectName || '-')} | <strong>Doc No:</strong> ${escapeHtml(h.fmeaDocNo || '-')}</div>
+        <div><strong>Company:</strong> ${escapeHtml(h.companyName || '-')} | <strong>Project:</strong> ${escapeHtml(h.customerName || h.projectName || fmeaData.projectName || '-')} | <strong>Doc No:</strong> ${escapeHtml(h.fmeaDocNo || '-')} | <strong>Revision:</strong> ${escapeHtml(revLabel)}</div>
         <table>
           <thead>
             <tr>
@@ -20286,11 +25810,6 @@ async function loadSubfilesPackageFile(rawContent) {
   } catch (err) {
     alert("Decryption / Import Error: " + err.message);
   }
-}
-
-function selectAllImportSubfiles(selectAll) {
-  const chks = document.querySelectorAll('.import_subfile_chk');
-  chks.forEach(c => c.checked = selectAll);
 }
 
 function executeSubfilesImport() {
@@ -20781,6 +26300,13 @@ function printCharacteristicsSpecsReport() {
   const data = getExtractedCharacteristicsData();
   const projName = escapeHtml(fmeaData.projectInfo?.name || 'JOST FMEA Project');
   const dateStr = new Date().toLocaleDateString();
+  const curRev = typeof getContextRevision === 'function' ? getContextRevision() : (fmeaData.currentRevision || null);
+  const revNum = (curRev && (curRev.revNumber || curRev.number)) || fmeaData.headerInfo?.revNumber || '1.0';
+  const cleanRevNum = String(revNum).replace(/\s*\((in progress|draft|frozen)\)/i, '').trim();
+  const isOngoing = curRev
+    ? (curRev.status === 'In Progress' || curRev.status === 'Draft' || (curRev.status && curRev.status.toLowerCase() !== 'frozen'))
+    : (!fmeaData.status || fmeaData.status.toLowerCase() !== 'frozen');
+  const revLabel = `Rev ${cleanRevNum}${isOngoing ? ' (In Progress)' : ''}`;
 
   const rowsHtml = data.map(item => `
     <tr>
@@ -20798,25 +26324,27 @@ function printCharacteristicsSpecsReport() {
     <head>
       <title>Characteristics & Specifications Report - ${projName}</title>
       <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; color: #1e293b; }
-        .header { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-        h1 { font-size: 20px; margin: 0; color: #0f172a; }
-        .meta { font-size: 12px; color: #64748b; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-        th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
-        th { background: #0f172a; color: #ffffff; }
+        @page { size: A4 landscape; margin: 10mm 8mm 10mm 8mm; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; color: #1e293b; font-size: 11px; background: #fff; }
+        .header { border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 16px; margin: 0; color: #0f172a; }
+        .meta { font-size: 11px; color: #64748b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; page-break-inside: auto; }
+        thead { display: table-header-group !important; }
+        tfoot { display: table-footer-group !important; }
+        tbody { display: table-row-group !important; }
+        tr { page-break-inside: avoid; break-inside: avoid; }
+        th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+        th { background: #0f172a !important; color: #ffffff !important; }
         tr:nth-child(even) { background: #f8fafc; }
-        @media print {
-          body { margin: 0; }
-          th { background: #0f172a !important; color: #ffffff !important; -webkit-print-color-adjust: exact; }
-        }
       </style>
     </head>
     <body>
       <div class="header">
         <div>
           <h1>Characteristics &amp; Engineering Specifications Report</h1>
-          <div class="meta">Project: <strong>${projName}</strong> | Date: ${dateStr}</div>
+          <div class="meta">Project: <strong>${projName}</strong> | Revision: <strong>${escapeHtml(revLabel)}</strong> | Date: ${dateStr}</div>
         </div>
         <div class="meta" style="text-align:right;">
           Total Records: <strong>${data.length}</strong>
@@ -20968,20 +26496,6 @@ function handleBoundaryAddLinkageClick() {
 }
 
 // Self-contained helper functions for tree traversal & node manipulation
-function getFlatStructureNodes(root) {
-  if (!root) return [];
-  const list = [];
-  function traverse(node) {
-    if (!node) return;
-    list.push(node);
-    if (node.children && Array.isArray(node.children)) {
-      node.children.forEach(child => traverse(child));
-    }
-  }
-  traverse(root);
-  return list;
-}
-
 function getStructureNodeByIdHelper(root, id) {
   if (!root) return null;
   if (root.id === id) return root;
@@ -21686,368 +27200,1744 @@ function exportBoundaryDiagramPNG() {
 }
 
 // ----------------------------------------------------
+// ----------------------------------------------------
 // 2. PFMEA Process Flow Diagram (PFD) Engine
 // ----------------------------------------------------
-function openProcessFlowDiagramModal() {
+let activePfdStructId = 'ALL';
+let activePfdSelectedItemId = null;
+let activePfdSelectedConnId = null;
+let isPfdAddingLink = false;
+let pfdLinkSourceItem = null;
+let pfdTreeCollapsed = false;
+let pfdToolboxCollapsed = false;
+
+function openProcessFlowDiagramModal(targetStructId = null) {
   const ctx = getActiveFmeaData();
-  const select = document.getElementById('pfdStructureSelect');
-  if (select) {
-    const structNodes = getFlatStructureNodes(fmeaData.structure);
-    let optionsHtml = `<option value="ALL">All System Tree Elements</option>`;
-    structNodes.forEach(node => {
-      const isSel = (selectedStructureId === node.id) ? 'selected' : '';
-      optionsHtml += `<option value="${node.id}" ${isSel}>${escapeHtml(node.partNo)} - ${escapeHtml(node.name)}</option>`;
-    });
-    select.innerHTML = optionsHtml;
+  if (!ctx || !ctx.isPFMEA) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Process Flow Diagram is only available in PFMEA mode. Please select or switch to a PFMEA first.', 'warning');
+    } else {
+      alert('Process Flow Diagram is only available in PFMEA mode. Please select or switch to a PFMEA first.');
+    }
+    return;
   }
 
-  openModal('processFlowDiagramModal');
-  syncProcessFlowDiagramWithPsteps(select ? select.value : 'ALL');
-  renderProcessFlowDiagram();
-}
+  activePfdStructId = targetStructId || activePfdStructId || 'ALL';
+  activePfdSelectedItemId = null;
+  activePfdSelectedConnId = null;
+  isPfdAddingLink = false;
+  pfdLinkSourceItem = null;
 
-function handlePfdStructureChange(structId) {
-  syncProcessFlowDiagramWithPsteps(structId);
+  openModal('processFlowDiagramModal');
+
+  renderPfdTreeSidebar();
+  syncProcessFlowDiagramWithPsteps(activePfdStructId);
   renderProcessFlowDiagram();
+  inspectPfdItem(null);
 }
+window.openProcessFlowDiagramModal = openProcessFlowDiagramModal;
+
+function togglePfdTreeSidebar() {
+  const sidebar = document.getElementById('pfdTreeSidebar');
+  const icon = document.getElementById('pfdTreeToggleIcon');
+  if (!sidebar) return;
+
+  pfdTreeCollapsed = !pfdTreeCollapsed;
+  if (pfdTreeCollapsed) {
+    sidebar.style.width = '0px';
+    sidebar.style.minWidth = '0px';
+    sidebar.style.borderRight = 'none';
+    if (icon) icon.textContent = '▶';
+  } else {
+    sidebar.style.width = '260px';
+    sidebar.style.minWidth = '260px';
+    sidebar.style.borderRight = '1px solid #1e293b';
+    if (icon) icon.textContent = '◀';
+  }
+}
+window.togglePfdTreeSidebar = togglePfdTreeSidebar;
+
+function togglePfdToolboxSidebar() {
+  const sidebar = document.getElementById('pfdToolboxSidebar');
+  const icon = document.getElementById('pfdToolboxToggleIcon');
+  if (!sidebar) return;
+
+  pfdToolboxCollapsed = !pfdToolboxCollapsed;
+  if (pfdToolboxCollapsed) {
+    sidebar.style.width = '0px';
+    sidebar.style.minWidth = '0px';
+    sidebar.style.borderLeft = 'none';
+    if (icon) icon.textContent = '◀';
+  } else {
+    sidebar.style.width = '280px';
+    sidebar.style.minWidth = '280px';
+    sidebar.style.borderLeft = '1px solid #1e293b';
+    if (icon) icon.textContent = '▶';
+  }
+}
+window.togglePfdToolboxSidebar = togglePfdToolboxSidebar;
+
+function renderPfdTreeSidebar() {
+  const container = document.getElementById('pfdTreeListContainer');
+  if (!container) return;
+
+  const ctx = getActiveFmeaData();
+  const psteps = (ctx && ctx.pfmea && ctx.pfmea.processSteps) ? ctx.pfmea.processSteps : [];
+  const structNodes = (typeof getFlatStructureNodes === 'function' && fmeaData && fmeaData.structure)
+    ? getFlatStructureNodes(fmeaData.structure)
+    : [];
+
+  let html = '';
+
+  // 1. Master Flow Item
+  const isMasterActive = (activePfdStructId === 'ALL');
+  html += `
+    <div class="pfd-tree-item ${isMasterActive ? 'active' : ''}" onclick="selectPfdStructureNode('ALL')">
+      <div style="display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+        <span>🌟</span>
+        <strong>Master Flow (All Elements)</strong>
+      </div>
+      <span class="badge" style="font-size:9.5px; background:rgba(0,0,0,0.3); color:#38bdf8; padding:1px 6px; border-radius:10px;">${psteps.length} ops</span>
+    </div>
+  `;
+
+  // 2. Structure Element Items
+  structNodes.forEach(node => {
+    const isActive = (String(activePfdStructId) === String(node.id));
+    const stepCount = psteps.filter(ps => String(ps.dfmeaStructId) === String(node.id)).length;
+    const indent = Math.max(0, (node.level || 1) - 1) * 12;
+
+    html += `
+      <div class="pfd-tree-item ${isActive ? 'active' : ''}" style="padding-left: ${8 + indent}px;" onclick="selectPfdStructureNode('${node.id}')" title="${escapeHtml(node.name)} (${escapeHtml(node.partNo || '')})">
+        <div style="display:flex; align-items:center; gap:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          <span style="font-size:11px;">↳ 🌳</span>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(node.partNo ? node.partNo + ' - ' : '')}${escapeHtml(node.name || 'Component')}</span>
+        </div>
+        <span class="badge" style="font-size:9px; background:rgba(0,0,0,0.25); color:#94a3b8; padding:1px 5px; border-radius:10px; margin-left:4px;">${stepCount}</span>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+window.renderPfdTreeSidebar = renderPfdTreeSidebar;
+
+function selectPfdStructureNode(nodeId) {
+  activePfdStructId = nodeId;
+  activePfdSelectedItemId = null;
+  activePfdSelectedConnId = null;
+
+  // Update badge title
+  const badge = document.getElementById('pfdActiveStructureBadge');
+  if (badge) {
+    if (nodeId === 'ALL') {
+      badge.textContent = 'Master Flow (All Elements)';
+      badge.style.background = '#0284c7';
+    } else {
+      const structNodes = (typeof getFlatStructureNodes === 'function' && fmeaData && fmeaData.structure) ? getFlatStructureNodes(fmeaData.structure) : [];
+      const node = structNodes.find(n => String(n.id) === String(nodeId));
+      badge.textContent = node ? `Element: ${node.partNo ? node.partNo + ' - ' : ''}${node.name}` : `Element ${nodeId}`;
+      badge.style.background = '#0d9488';
+    }
+  }
+
+  renderPfdTreeSidebar();
+  syncProcessFlowDiagramWithPsteps(nodeId);
+  renderProcessFlowDiagram();
+  inspectPfdItem(null);
+}
+window.selectPfdStructureNode = selectPfdStructureNode;
+
+function filterPfdTreeList(query) {
+  const container = document.getElementById('pfdTreeListContainer');
+  if (!container) return;
+  const q = (query || '').toLowerCase().trim();
+  const items = container.querySelectorAll('.pfd-tree-item');
+  items.forEach(item => {
+    if (!q) {
+      item.style.display = 'flex';
+    } else {
+      const match = item.textContent.toLowerCase().includes(q);
+      item.style.display = match ? 'flex' : 'none';
+    }
+  });
+}
+window.filterPfdTreeList = filterPfdTreeList;
 
 function syncProcessFlowDiagramWithPsteps(structId) {
   const ctx = getActiveFmeaData();
-  ctx.pfmea = ctx.pfmea || { processSteps: [] };
+  if (!ctx || !ctx.pfmea) return;
+  ctx.pfmea.processSteps = ctx.pfmea.processSteps || [];
   ctx.pfmea.processFlowDiagrams = ctx.pfmea.processFlowDiagrams || {};
 
-  let psteps = ctx.pfmea.processSteps || [];
+  let psteps = ctx.pfmea.processSteps;
   if (structId && structId !== 'ALL') {
     psteps = psteps.filter(ps => String(ps.dfmeaStructId) === String(structId));
   }
 
-  let pfdData = ctx.pfmea.processFlowDiagrams[structId || 'ALL'] || { steps: [] };
-  const existingMap = new Map();
-  (pfdData.steps || []).forEach(s => existingMap.set(s.id, s));
+  let pfdData = ctx.pfmea.processFlowDiagrams[structId || 'ALL'];
+  if (!pfdData) {
+    pfdData = { items: [], connections: [] };
+    ctx.pfmea.processFlowDiagrams[structId || 'ALL'] = pfdData;
+  }
+  pfdData.items = pfdData.items || [];
+  pfdData.connections = pfdData.connections || [];
 
-  const updatedSteps = [];
-  psteps.forEach((ps, idx) => {
-    let pfdStep = existingMap.get(ps.id);
-    if (!pfdStep) {
-      pfdStep = {
-        id: ps.id,
-        stepNo: ps.stepNo || String((idx + 1) * 10),
-        name: ps.name || 'Process Step',
-        category: ps.category || 'Operation',
-        description: ps.description || '',
-        dfmeaStructId: ps.dfmeaStructId,
-        x: 60 + idx * 210,
-        y: 120,
-        width: 170,
-        height: 80
-      };
-    } else {
-      pfdStep.stepNo = ps.stepNo || pfdStep.stepNo;
-      pfdStep.name = ps.name || pfdStep.name;
-      pfdStep.category = ps.category || pfdStep.category || 'Operation';
-      pfdStep.dfmeaStructId = ps.dfmeaStructId;
-    }
-    updatedSteps.push(pfdStep);
+  // Map existing items
+  const itemByPstepId = new Map();
+  pfdData.items.forEach(it => {
+    if (it.pstepId) itemByPstepId.set(it.pstepId, it);
   });
 
-  pfdData.steps = updatedSteps;
-  ctx.pfmea.processFlowDiagrams[structId || 'ALL'] = pfdData;
+  // Ensure each PFMEA step exists in diagram items
+  psteps.forEach((ps, idx) => {
+    let item = itemByPstepId.get(ps.id);
+    if (!item) {
+      // Calculate clean initial layout position
+      const col = idx % 4;
+      const row = Math.floor(idx / 4);
+      item = {
+        id: 'pfd_step_' + ps.id,
+        type: 'process',
+        name: ps.name || 'Process Operation',
+        stepNo: ps.stepNo || String((idx + 1) * 10),
+        description: ps.description || '',
+        x: 60 + col * 230,
+        y: 60 + row * 140,
+        width: 170,
+        height: 80,
+        isPfmeaStep: true,
+        pstepId: ps.id,
+        dfmeaStructId: ps.dfmeaStructId
+      };
+      pfdData.items.push(item);
+    } else {
+      item.stepNo = ps.stepNo || item.stepNo;
+      item.name = ps.name || item.name;
+      item.description = ps.description !== undefined ? ps.description : item.description;
+      item.dfmeaStructId = ps.dfmeaStructId;
+      item.isPfmeaStep = true;
+      item.type = 'process'; // Locked to process
+    }
+  });
+
+  // Clean up any process steps that were deleted from PFMEA
+  const currentPstepIdSet = new Set(ctx.pfmea.processSteps.map(ps => ps.id));
+  pfdData.items = pfdData.items.filter(it => {
+    if (it.isPfmeaStep && it.pstepId) {
+      return currentPstepIdSet.has(it.pstepId);
+    }
+    return true;
+  });
+
+  // Clean up broken connections
+  const validItemIds = new Set(pfdData.items.map(it => it.id));
+  pfdData.connections = pfdData.connections.filter(c => validItemIds.has(c.from) && validItemIds.has(c.to));
 }
+window.syncProcessFlowDiagramWithPsteps = syncProcessFlowDiagramWithPsteps;
 
-function renderProcessFlowDiagram() {
-  const select = document.getElementById('pfdStructureSelect');
-  const structId = select ? select.value : 'ALL';
-  const ctx = getActiveFmeaData();
-  ctx.pfmea = ctx.pfmea || { processSteps: [] };
-  ctx.pfmea.processFlowDiagrams = ctx.pfmea.processFlowDiagrams || {};
+// Calculate exact edge-to-edge orthogonal connection between two geometric nodes
+function computeEdgeToEdgeConnection(item1, item2) {
+  const w1 = item1.width || 140;
+  const h1 = item1.height || 80;
+  const w2 = item2.width || 140;
+  const h2 = item2.height || 80;
 
-  const pfdData = ctx.pfmea.processFlowDiagrams[structId] || { steps: [] };
-  const steps = pfdData.steps || [];
+  const c1x = (item1.x || 0) + w1 / 2;
+  const c1y = (item1.y || 0) + h1 / 2;
+  const c2x = (item2.x || 0) + w2 / 2;
+  const c2y = (item2.y || 0) + h2 / 2;
 
-  const container = document.getElementById('pfdNodesContainer');
-  const svgGroup = document.getElementById('pfdConnectionsGroup');
-  if (!container || !svgGroup) return;
+  const dx = c2x - c1x;
+  const dy = c2y - c1y;
 
-  container.innerHTML = '';
-  svgGroup.innerHTML = '';
+  let startX, startY, endX, endY, pathD;
+  let headBtnX = 0, headBtnY = 0;
 
-  for (let i = 0; i < steps.length - 1; i++) {
-    const s1 = steps[i];
-    const s2 = steps[i + 1];
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal dominant routing
+    if (dx >= 0) {
+      // Exits Right border of item1, Enters Left border of item2
+      startX = (item1.x || 0) + w1;
+      startY = c1y;
+      endX = item2.x || 0;
+      endY = c2y;
+      headBtnX = endX - 22;
+      headBtnY = endY;
+    } else {
+      // Exits Left border of item1, Enters Right border of item2
+      startX = item1.x || 0;
+      startY = c1y;
+      endX = (item2.x || 0) + w2;
+      endY = c2y;
+      headBtnX = endX + 22;
+      headBtnY = endY;
+    }
 
-    const x1 = (s1.x || 0) + (s1.width || 170);
-    const y1 = (s1.y || 0) + (s1.height || 80) / 2;
-    const x2 = (s2.x || 0);
-    const y2 = (s2.y || 0) + (s2.height || 80) / 2;
+    if (Math.abs(startY - endY) < 6) {
+      pathD = `M ${startX} ${startY} L ${endX} ${endY}`;
+    } else {
+      const midX = (startX + endX) / 2;
+      pathD = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+    }
+  } else {
+    // Vertical dominant routing
+    if (dy >= 0) {
+      // Exits Bottom border of item1, Enters Top border of item2
+      startX = c1x;
+      startY = (item1.y || 0) + h1;
+      endX = c2x;
+      endY = item2.y || 0;
+      headBtnX = endX;
+      headBtnY = endY - 22;
+    } else {
+      // Exits Top border of item1, Enters Bottom border of item2
+      startX = c1x;
+      startY = item1.y || 0;
+      endX = c2x;
+      endY = (item2.y || 0) + h2;
+      headBtnX = endX;
+      headBtnY = endY + 22;
+    }
 
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', x1);
-    line.setAttribute('y1', y1);
-    line.setAttribute('x2', x2);
-    line.setAttribute('y2', y2);
-    line.setAttribute('stroke', '#3b82f6');
-    line.setAttribute('stroke-width', '2.5');
-    line.setAttribute('marker-end', 'url(#pfdArrowHead)');
-    svgGroup.appendChild(line);
+    if (Math.abs(startX - endX) < 6) {
+      pathD = `M ${startX} ${startY} L ${endX} ${endY}`;
+    } else {
+      const midY = (startY + endY) / 2;
+      pathD = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+    }
   }
 
-  steps.forEach(step => {
-    const isSelected = (step.id === activePfdSelectedStepId);
-    let categoryBg = '#2563eb';
-    let catIcon = '⚙️';
+  return { startX, startY, endX, endY, headBtnX, headBtnY, pathD };
+}
+window.computeEdgeToEdgeConnection = computeEdgeToEdgeConnection;
 
-    if (step.category === 'Inspection') { categoryBg = '#d97706'; catIcon = '🔍'; }
-    else if (step.category === 'Storage') { categoryBg = '#059669'; catIcon = '📦'; }
-    else if (step.category === 'Transport') { categoryBg = '#7c3aed'; catIcon = '🚚'; }
-    else if (step.category === 'Delay') { categoryBg = '#dc2626'; catIcon = '⏳'; }
+function renderProcessFlowDiagram() {
+  const container = document.getElementById('pfdNodesContainer');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const items = pfdData.items || [];
+
+  // 1. RENDER EDGE-TO-EDGE CONNECTIONS WITH HOVER (+) BUTTON & 24px HIT AREA
+  renderPfdConnectionsOnly();
+
+  // 2. RENDER TRUE GEOMETRIC SHAPES
+  items.forEach(item => {
+    const isSelected = (item.id === activePfdSelectedItemId);
+    const isLinkSource = (pfdLinkSourceItem && pfdLinkSourceItem.id === item.id);
 
     const el = document.createElement('div');
-    el.className = 'pfd-step-node';
-    el.style.cssText = `
-      position: absolute;
-      left: ${step.x || 60}px;
-      top: ${step.y || 120}px;
-      width: ${step.width || 170}px;
-      min-height: ${step.height || 80}px;
-      background: linear-gradient(135deg, #1e293b, #0f172a);
-      border: 2px solid ${isSelected ? '#38bdf8' : '#334155'};
-      border-radius: 8px;
-      box-shadow: ${isSelected ? '0 0 15px rgba(56, 189, 248, 0.4)' : '0 4px 12px rgba(0,0,0,0.3)'};
-      color: #f8fafc;
-      font-family: sans-serif;
-      cursor: move;
-      user-select: none;
-      box-sizing: border-box;
-      padding: 8px 10px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    `;
+    el.id = item.id;
+    el.setAttribute('data-pfd-id', item.id);
+    el.className = `pfd-step-node pfd-shape-${item.type || 'process'} ${isSelected ? 'selected' : ''} ${isLinkSource ? 'link-source' : ''}`;
+    el.style.left = (item.x || 60) + 'px';
+    el.style.top = (item.y || 60) + 'px';
+    el.style.width = (item.width || 150) + 'px';
+    el.style.height = (item.height || 75) + 'px';
 
-    el.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:3px; margin-bottom:4px;">
-        <span style="background:${categoryBg}; color:#fff; font-size:9px; font-weight:bold; padding:1px 5px; border-radius:3px;">${catIcon} ${escapeHtml(step.category || 'Step')}</span>
-        <span style="font-size:10px; color:#38bdf8; font-weight:bold;">Step ${escapeHtml(step.stepNo || '')}</span>
-      </div>
-      <div style="font-size:11px; font-weight:bold; color:#f8fafc; word-break:break-word;">
-        ${escapeHtml(step.name || 'Process Step')}
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:4px; margin-top:4px;">
-        <button class="btn btn-xs btn-outline-info" style="font-size:9px; padding:1px 4px;" onclick="event.stopPropagation(); inspectPfdStep('${step.id}')">✏️ Edit</button>
-        <button class="btn btn-xs btn-outline-danger" style="font-size:9px; padding:1px 4px;" onclick="event.stopPropagation(); deletePfdStep('${step.id}')">🗑️</button>
-      </div>
-    `;
+    if (item.type === 'Yes' || item.type === 'No') {
+      el.innerHTML = `
+        <div style="font-weight:800; font-size:11.5px; text-align:center; color:${item.type === 'Yes' ? '#4ade80' : '#f87171'};">${escapeHtml(item.name || item.type)}</div>
+      `;
+    } else if (item.isPfmeaStep) {
+      el.innerHTML = `
+        <div style="font-size:9.5px; font-weight:800; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px; pointer-events:none;">
+          Step ${escapeHtml(item.stepNo || '')}
+        </div>
+        <div style="font-size:11.5px; font-weight:700; color:#ffffff; word-break:break-word; line-height:1.2; pointer-events:none;">
+          ${escapeHtml(item.name || 'Process Operation')}
+        </div>
+        <div style="font-size:8.5px; color:#38bdf8; margin-top:3px; opacity:0.85; pointer-events:none;">
+          ★ PFMEA Synced
+        </div>
+      `;
+    } else {
+      el.innerHTML = `
+        <div style="font-size:11.5px; font-weight:700; color:#f8fafc; word-break:break-word; line-height:1.2; pointer-events:none;">
+          ${escapeHtml(item.name || item.type)}
+        </div>
+        ${item.description ? `<div style="font-size:9px; color:#94a3b8; margin-top:3px; opacity:0.8; pointer-events:none;">${escapeHtml(item.description)}</div>` : ''}
+      `;
+    }
 
-    el.onclick = (evt) => {
-      evt.stopPropagation();
-      inspectPfdStep(step.id);
+    // Resizer corner handle: pass el directly into initPfdResize
+    const resizer = document.createElement('div');
+    resizer.className = 'pfd-resizer';
+    resizer.title = 'Drag to resize element';
+    resizer.onmousedown = (e) => {
+      e.stopPropagation();
+      initPfdResize(e, item, el);
+    };
+    el.appendChild(resizer);
+
+    // Click handler
+    el.onclick = (e) => {
+      e.stopPropagation();
+      handlePfdNodeClick(item.id);
     };
 
-    let isDragging = false;
-    let startX = 0, startY = 0, initialLeft = step.x || 60, initialTop = step.y || 120;
+    // Double click to rename
+    el.ondblclick = (e) => {
+      e.stopPropagation();
+      promptRenamePfdItem(item.id);
+    };
 
-    el.onmousedown = (evt) => {
-      if (evt.target.tagName === 'BUTTON' || evt.target.tagName === 'INPUT') return;
-      isDragging = true;
-      startX = evt.clientX;
-      startY = evt.clientY;
-      initialLeft = step.x || 60;
-      initialTop = step.y || 120;
-      el.style.zIndex = '100';
-
-      const onMouseMove = (moveEvt) => {
-        if (!isDragging) return;
-        const dx = moveEvt.clientX - startX;
-        const dy = moveEvt.clientY - startY;
-        step.x = Math.max(10, initialLeft + dx);
-        step.y = Math.max(10, initialTop + dy);
-        el.style.left = step.x + 'px';
-        el.style.top = step.y + 'px';
-        renderPfdConnectionsOnly();
-      };
-
-      const onMouseUp = () => {
-        isDragging = false;
-        el.style.zIndex = '';
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-      };
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+    // Drag handler
+    el.onmousedown = (e) => {
+      if (e.target.classList.contains('pfd-resizer')) return;
+      initPfdDrag(e, item, el);
     };
 
     container.appendChild(el);
   });
 }
+window.renderProcessFlowDiagram = renderProcessFlowDiagram;
+
+function startPfdAddLinkFromItem(itemId) {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const item = (pfdData.items || []).find(it => it.id === itemId);
+  if (!item) return;
+
+  isPfdAddingLink = true;
+  pfdLinkSourceItem = item;
+  const banner = document.getElementById('pfdLinkingBanner');
+  if (banner) {
+    banner.style.display = 'flex';
+    banner.innerHTML = `
+      <span>🔗 Source selected: <strong>${escapeHtml(item.name || item.type)}</strong>. Now click the <strong>TARGET</strong> element.</span>
+      <button type="button" onclick="cancelPfdAddLink()" style="background:rgba(0,0,0,0.35); border:1px solid #fff; color:#fff; font-size:11px; padding:3px 9px; border-radius:4px; cursor:pointer;">Cancel (Esc)</button>
+    `;
+  }
+  renderProcessFlowDiagram();
+}
+window.startPfdAddLinkFromItem = startPfdAddLinkFromItem;
+
+function initPfdDrag(event, item, el) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+
+  document.body.classList.add('pfd-dragging');
+
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const initialLeft = item.x || 60;
+  const initialTop = item.y || 60;
+  let hasMoved = false;
+
+  el.style.zIndex = '50';
+
+  function onMouseMove(e) {
+    hasMoved = true;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    item.x = Math.max(10, initialLeft + dx);
+    item.y = Math.max(10, initialTop + dy);
+    el.style.left = item.x + 'px';
+    el.style.top = item.y + 'px';
+    renderPfdConnectionsOnly();
+  }
+
+  function onMouseUp() {
+    document.body.classList.remove('pfd-dragging');
+    el.style.zIndex = '2';
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function initPfdResize(event, item, nodeEl) {
+  if (event.button !== 0) return;
+  event.stopPropagation();
+  event.preventDefault();
+
+  document.body.classList.add('pfd-dragging');
+
+  const targetEl = nodeEl || document.getElementById(item.id) || document.querySelector(`[data-pfd-id="${item.id}"]`);
+  if (!targetEl) return;
+
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const initialWidth = item.width || targetEl.offsetWidth || 150;
+  const initialHeight = item.height || targetEl.offsetHeight || 75;
+
+  function onMouseMove(e) {
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    item.width = Math.max(70, Math.round(initialWidth + dx));
+    item.height = Math.max(40, Math.round(initialHeight + dy));
+
+    // Real-time visual resize of the node element
+    targetEl.style.width = item.width + 'px';
+    targetEl.style.height = item.height + 'px';
+
+    // Real-time update of connection arrows to keep edge-to-edge alignment
+    renderPfdConnectionsOnly();
+  }
+
+  function onMouseUp() {
+    document.body.classList.remove('pfd-dragging');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    renderPfdConnectionsOnly();
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+
+// ----------------------------------------------------
+// Reverse PFD Arrow / Connection Flow Direction
+// ----------------------------------------------------
+function reversePfdConnectionDirection(connId) {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const conn = (pfdData.connections || []).find(c => c.id === connId);
+  if (!conn) return;
+
+  const item1 = (pfdData.items || []).find(it => it.id === conn.from);
+  const item2 = (pfdData.items || []).find(it => it.id === conn.to);
+
+  // Guard: Cannot reverse direction of Decision Yes/No branches
+  const isDecisionBranchConn = (item1 && item1.type === 'decision' && item2 && (item2.type === 'Yes' || item2.type === 'No')) ||
+                               (item2 && item2.type === 'decision' && item1 && (item1.type === 'Yes' || item1.type === 'No')) ||
+                               (item2 && item2.decisionId && item2.decisionId === (item1 ? item1.id : '')) ||
+                               (item1 && item1.decisionId && item1.decisionId === (item2 ? item2.id : ''));
+
+  if (isDecisionBranchConn) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Cannot reverse direction of Decision Yes/No branch links.', 'warning');
+    }
+    return;
+  }
+
+  // Swap source and target
+  const prevFrom = conn.from;
+  conn.from = conn.to;
+  conn.to = prevFrom;
+
+  renderPfdConnectionsOnly();
+  inspectPfdConnection(connId);
+
+  if (typeof showToast === 'function') {
+    const newFromItem = (pfdData.items || []).find(it => it.id === conn.from);
+    const newToItem = (pfdData.items || []).find(it => it.id === conn.to);
+    showToast(`⇄ Arrow reversed: ${newFromItem ? (newFromItem.name || newFromItem.type) : 'Source'} ➔ ${newToItem ? (newToItem.name || newToItem.type) : 'Target'}`, 'info');
+  }
+}
+window.reversePfdConnectionDirection = reversePfdConnectionDirection;
 
 function renderPfdConnectionsOnly() {
   const svgGroup = document.getElementById('pfdConnectionsGroup');
   if (!svgGroup) return;
   svgGroup.innerHTML = '';
 
-  const select = document.getElementById('pfdStructureSelect');
-  const structId = select ? select.value : 'ALL';
   const ctx = getActiveFmeaData();
-  const pfdData = (ctx.pfmea?.processFlowDiagrams || {})[structId] || { steps: [] };
-  const steps = pfdData.steps || [];
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
 
-  for (let i = 0; i < steps.length - 1; i++) {
-    const s1 = steps[i];
-    const s2 = steps[i + 1];
+  const items = pfdData.items || [];
+  const connections = pfdData.connections || [];
+  const itemMap = new Map();
+  items.forEach(it => itemMap.set(it.id, it));
 
-    const x1 = (s1.x || 0) + (s1.width || 170);
-    const y1 = (s1.y || 0) + (s1.height || 80) / 2;
-    const x2 = (s2.x || 0);
-    const y2 = (s2.y || 0) + (s2.height || 80) / 2;
+  connections.forEach(conn => {
+    const item1 = itemMap.get(conn.from);
+    const item2 = itemMap.get(conn.to);
+    if (!item1 || !item2) return;
 
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', x1);
-    line.setAttribute('y1', y1);
-    line.setAttribute('x2', x2);
-    line.setAttribute('y2', y2);
-    line.setAttribute('stroke', '#3b82f6');
-    line.setAttribute('stroke-width', '2.5');
-    line.setAttribute('marker-end', 'url(#pfdArrowHead)');
-    svgGroup.appendChild(line);
-  }
+    const { startX, startY, endX, endY, headBtnX, headBtnY, pathD } = computeEdgeToEdgeConnection(item1, item2);
+
+    const isSelected = (conn.id === activePfdSelectedConnId);
+    
+    // Wrapper group for this connection to capture line hover
+    const connGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    connGroup.setAttribute('class', 'pfd-conn-group' + (isSelected ? ' selected' : ''));
+    connGroup.setAttribute('data-conn-id', conn.id);
+    connGroup.style.pointerEvents = 'auto';
+
+    // 1. Transparent wide hit-area path for easy hovering and clicking on the connection
+    const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hitPath.setAttribute('d', pathD);
+    hitPath.setAttribute('fill', 'none');
+    hitPath.setAttribute('stroke', 'rgba(0,0,0,0.001)');
+    hitPath.setAttribute('stroke-width', '24');
+    hitPath.setAttribute('class', 'pfd-conn-hit-area');
+    hitPath.style.pointerEvents = 'stroke';
+    hitPath.style.cursor = 'pointer';
+    hitPath.onclick = (e) => {
+      e.stopPropagation();
+      selectPfdConnection(conn.id);
+    };
+    connGroup.appendChild(hitPath);
+
+    // 2. Visible Connection Path Line
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathD);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', isSelected ? '#f43f5e' : '#38bdf8');
+    path.setAttribute('stroke-width', isSelected ? '3.5' : '2.2');
+    path.setAttribute('marker-end', isSelected ? 'url(#pfdArrowHeadSelected)' : 'url(#pfdArrowHead)');
+    path.setAttribute('class', 'pfd-conn-line' + (isSelected ? ' selected' : ''));
+    path.style.pointerEvents = 'stroke';
+    path.style.cursor = 'pointer';
+    path.onclick = (e) => {
+      e.stopPropagation();
+      selectPfdConnection(conn.id);
+    };
+    connGroup.appendChild(path);
+
+    // 3. Check if this connection is a Decision ➔ Yes/No branch link
+    const isDecisionBranchConn = (item1.type === 'decision' && (item2.type === 'Yes' || item2.type === 'No')) ||
+                                 (item2.type === 'decision' && (item1.type === 'Yes' || item1.type === 'No')) ||
+                                 (item2.decisionId && item2.decisionId === item1.id) ||
+                                 (item1.decisionId && item1.decisionId === item2.id);
+
+    let insertBtnGroup = null;
+    let reverseBtnGroup = null;
+
+    // Only render interactive buttons on standard flow connections (BLOCKED for Decision Yes/No branches)
+    if (!isDecisionBranchConn) {
+      // A. [+] Insert In-Between Button at visual midpoint
+      const midBtnX = Math.round((startX + endX) / 2);
+      const midBtnY = Math.round((startY + endY) / 2);
+
+      insertBtnGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      insertBtnGroup.setAttribute('class', 'pfd-arrow-insert-btn');
+      insertBtnGroup.setAttribute('transform', `translate(${midBtnX}, ${midBtnY})`);
+      insertBtnGroup.setAttribute('title', `Insert element between ${item1.name || item1.type} and ${item2.name || item2.type}`);
+      insertBtnGroup.style.opacity = '0';
+      insertBtnGroup.style.pointerEvents = 'none';
+      insertBtnGroup.style.cursor = 'pointer';
+
+      insertBtnGroup.innerHTML = `
+        <circle cx="0" cy="0" r="11" fill="#0f172a" stroke="${isSelected ? '#f43f5e' : '#38bdf8'}" stroke-width="2" />
+        <line x1="-5" y1="0" x2="5" y2="0" stroke="${isSelected ? '#f43f5e' : '#38bdf8'}" stroke-width="2" stroke-linecap="round" />
+        <line x1="0" y1="-5" x2="0" y2="5" stroke="${isSelected ? '#f43f5e' : '#38bdf8'}" stroke-width="2" stroke-linecap="round" />
+      `;
+
+      insertBtnGroup.onclick = (e) => {
+        e.stopPropagation();
+        openInsertBetweenModal(conn.id);
+      };
+
+      connGroup.appendChild(insertBtnGroup);
+
+      // B. [⇄] Reverse Direction Button right at the Arrow Head
+      reverseBtnGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      reverseBtnGroup.setAttribute('class', 'pfd-arrow-reverse-btn');
+      reverseBtnGroup.setAttribute('transform', `translate(${Math.round(headBtnX)}, ${Math.round(headBtnY)})`);
+      reverseBtnGroup.setAttribute('title', `Reverse arrow direction (${item1.name || item1.type} ➔ ${item2.name || item2.type})`);
+      reverseBtnGroup.style.opacity = '0';
+      reverseBtnGroup.style.pointerEvents = 'none';
+      reverseBtnGroup.style.cursor = 'pointer';
+
+      reverseBtnGroup.innerHTML = `
+        <circle cx="0" cy="0" r="11" fill="#0f172a" stroke="${isSelected ? '#f43f5e' : '#38bdf8'}" stroke-width="2" />
+        <path d="M -5 -2 L 3 -2 M 0 -5 L 3 -2 L 0 1 M 5 2 L -3 2 M 0 5 L -3 2 L 0 -1" stroke="${isSelected ? '#f43f5e' : '#38bdf8'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+      `;
+
+      reverseBtnGroup.onclick = (e) => {
+        e.stopPropagation();
+        reversePfdConnectionDirection(conn.id);
+      };
+
+      connGroup.appendChild(reverseBtnGroup);
+    }
+
+    // Attach mouseenter and mouseleave listeners to ensure hover works across all rendering engines
+    connGroup.onmouseenter = () => {
+      if (document.body.classList.contains('pfd-dragging')) return;
+      connGroup.classList.add('hovered');
+      if (insertBtnGroup) {
+        insertBtnGroup.style.opacity = '1';
+        insertBtnGroup.style.pointerEvents = 'auto';
+      }
+      if (reverseBtnGroup) {
+        reverseBtnGroup.style.opacity = '1';
+        reverseBtnGroup.style.pointerEvents = 'auto';
+      }
+    };
+    connGroup.onmouseleave = () => {
+      connGroup.classList.remove('hovered');
+      if (insertBtnGroup) {
+        insertBtnGroup.style.opacity = '0';
+        insertBtnGroup.style.pointerEvents = 'none';
+      }
+      if (reverseBtnGroup) {
+        reverseBtnGroup.style.opacity = '0';
+        reverseBtnGroup.style.pointerEvents = 'none';
+      }
+    };
+
+    svgGroup.appendChild(connGroup);
+  });
 }
 
-function autoLayoutProcessFlowDiagram() {
-  const select = document.getElementById('pfdStructureSelect');
-  const structId = select ? select.value : 'ALL';
-  const ctx = getActiveFmeaData();
-  const pfdData = (ctx.pfmea?.processFlowDiagrams || {})[structId] || { steps: [] };
-  const steps = pfdData.steps || [];
-
-  steps.forEach((step, idx) => {
-    step.x = 60 + idx * 210;
-    step.y = 120;
-    step.width = 170;
-    step.height = 80;
-  });
-
+function startPfdAddLink() {
+  isPfdAddingLink = true;
+  pfdLinkSourceItem = null;
+  const banner = document.getElementById('pfdLinkingBanner');
+  if (banner) {
+    banner.style.display = 'flex';
+    banner.innerHTML = `
+      <span>🔗 <strong>Direction of Flow:</strong> Click the <strong>SOURCE</strong> element, then click the <strong>TARGET</strong> element.</span>
+      <button type="button" onclick="cancelPfdAddLink()" style="background:rgba(0,0,0,0.3); border:1px solid #fff; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; cursor:pointer;">Cancel (Esc)</button>
+    `;
+  }
+  if (typeof showToast === 'function') {
+    showToast('🔗 Direction of Flow Mode Active: Select SOURCE element first.', 'info');
+  }
   renderProcessFlowDiagram();
 }
+window.startPfdAddLink = startPfdAddLink;
 
-function inspectPfdStep(stepId) {
-  activePfdSelectedStepId = stepId;
+function cancelPfdAddLink() {
+  isPfdAddingLink = false;
+  pfdLinkSourceItem = null;
+  const banner = document.getElementById('pfdLinkingBanner');
+  if (banner) banner.style.display = 'none';
+  renderProcessFlowDiagram();
+}
+window.cancelPfdAddLink = cancelPfdAddLink;
+
+function handlePfdNodeClick(itemId) {
   const ctx = getActiveFmeaData();
-  const pstep = (ctx.pfmea?.processSteps || []).find(ps => ps.id === stepId);
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const item = (pfdData.items || []).find(it => it.id === itemId);
+  if (!item) return;
+
+  if (isPfdAddingLink) {
+    if (!pfdLinkSourceItem) {
+      pfdLinkSourceItem = item;
+      const banner = document.getElementById('pfdLinkingBanner');
+      if (banner) {
+        banner.innerHTML = `
+          <span>🔗 Source selected: <strong>${escapeHtml(item.name || item.type)}</strong>. Now click the <strong>TARGET</strong> element.</span>
+          <button type="button" onclick="cancelPfdAddLink()" style="background:rgba(0,0,0,0.3); border:1px solid #fff; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; cursor:pointer;">Cancel (Esc)</button>
+        `;
+      }
+      renderProcessFlowDiagram();
+    } else {
+      if (pfdLinkSourceItem.id === item.id) {
+        if (typeof showToast === 'function') {
+          showToast('⚠️ Cannot link an element to itself. Select a different target.', 'warning');
+        }
+        return;
+      }
+
+      // Check if connection already exists
+      const exists = (pfdData.connections || []).some(c => c.from === pfdLinkSourceItem.id && c.to === item.id);
+      if (!exists) {
+        pfdData.connections.push({
+          id: 'pfd_conn_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          from: pfdLinkSourceItem.id,
+          to: item.id
+        });
+        if (typeof showToast === 'function') {
+          showToast('✅ Direction of flow link created!', 'success');
+        }
+      } else {
+        if (typeof showToast === 'function') {
+          showToast('Link already exists between these elements.', 'info');
+        }
+      }
+
+      cancelPfdAddLink();
+    }
+    return;
+  }
+
+  // Normal inspection click
+  activePfdSelectedItemId = item.id;
+  activePfdSelectedConnId = null;
+  inspectPfdItem(item.id);
+  renderProcessFlowDiagram();
+}
+window.handlePfdNodeClick = handlePfdNodeClick;
+
+function selectPfdConnection(connId) {
+  activePfdSelectedConnId = connId;
+  activePfdSelectedItemId = null;
+  inspectPfdConnection(connId);
+  renderProcessFlowDiagram();
+}
+window.selectPfdConnection = selectPfdConnection;
+
+function inspectPfdConnection(connId) {
   const container = document.getElementById('pfdStepInspectorContent');
   if (!container) return;
 
-  if (!pstep) {
-    container.innerHTML = `<div style="color:#94a3b8;">Select a process step in the flow diagram to inspect properties.</div>`;
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const conn = (pfdData.connections || []).find(c => c.id === connId);
+  if (!conn) {
+    container.innerHTML = '<div style="color:#94a3b8;">Select an element or connection in the diagram to inspect.</div>';
     return;
   }
+
+  const item1 = (pfdData.items || []).find(it => it.id === conn.from);
+  const item2 = (pfdData.items || []).find(it => it.id === conn.to);
+
+  const isDecisionBranchConn = (item1 && item1.type === 'decision' && item2 && (item2.type === 'Yes' || item2.type === 'No')) ||
+                               (item2 && item2.type === 'decision' && item1 && (item1.type === 'Yes' || item1.type === 'No')) ||
+                               (item2 && item2.decisionId && item2.decisionId === (item1 ? item1.id : '')) ||
+                               (item1 && item1.decisionId && item1.decisionId === (item2 ? item2.id : ''));
 
   container.innerHTML = `
     <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:12px;">
-      <div style="margin-bottom:8px;">
-        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:bold;">Step Number (#)</label>
-        <input type="text" id="inspPfdStepNo" value="${escapeHtml(pstep.stepNo || '')}" style="width:100%; font-size:11px; padding:4px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:4px; box-sizing:border-box;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-weight:700; color:#38bdf8; font-size:12px;">➡️ Flow Connection Link</span>
+        <span class="badge" style="font-size:9.5px; background:${isDecisionBranchConn ? '#6366f1' : '#0284c7'}; color:#fff; padding:1px 6px;">${isDecisionBranchConn ? 'Decision Branch' : 'Orthogonal'}</span>
       </div>
-      <div style="margin-bottom:8px;">
-        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:bold;">Process Step Name</label>
-        <input type="text" id="inspPfdStepName" value="${escapeHtml(pstep.name || '')}" style="width:100%; font-size:11px; padding:4px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:4px; box-sizing:border-box;">
+      <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">
+        <strong>From:</strong> ${escapeHtml(item1 ? (item1.name || item1.type) : 'Element')}
       </div>
-      <div style="margin-bottom:8px;">
-        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:bold;">Step Type / Category</label>
-        <select id="inspPfdCategory" style="width:100%; font-size:11px; padding:4px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:4px; box-sizing:border-box;">
-          <option value="Operation" ${pstep.category === 'Operation' ? 'selected' : ''}>⚙️ Operation Step</option>
-          <option value="Inspection" ${pstep.category === 'Inspection' ? 'selected' : ''}>🔍 Inspection / QC</option>
-          <option value="Storage" ${pstep.category === 'Storage' ? 'selected' : ''}>📦 Storage / Stock</option>
-          <option value="Transport" ${pstep.category === 'Transport' ? 'selected' : ''}>🚚 Transport / Move</option>
-          <option value="Delay" ${pstep.category === 'Delay' ? 'selected' : ''}>⏳ Delay / Queue</option>
-        </select>
+      <div style="font-size:11px; color:#cbd5e1; margin-bottom:14px;">
+        <strong>To:</strong> ${escapeHtml(item2 ? (item2.name || item2.type) : 'Element')}
       </div>
-      <div style="margin-bottom:10px;">
-        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:bold;">Description / Notes</label>
-        <textarea id="inspPfdDesc" rows="2" style="width:100%; font-size:11px; padding:4px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:4px; box-sizing:border-box;">${escapeHtml(pstep.description || '')}</textarea>
-      </div>
-      <div style="display:flex; gap:6px;">
-        <button class="btn btn-xs btn-primary" style="flex:1;" onclick="savePfdStepFromInspector('${pstep.id}')">💾 Save Changes</button>
-        <button class="btn btn-xs btn-danger" onclick="deletePfdStep('${pstep.id}')">🗑️ Delete</button>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${isDecisionBranchConn ? `
+          <div style="font-size:10px; color:#94a3b8; background:#0f172a; padding:6px 8px; border-radius:4px; border:1px solid #334155; font-style:italic;">
+            🔒 Decision branch link (cannot insert elements or reverse Decision Yes/No branch tags).
+          </div>
+        ` : `
+          <button type="button" class="btn btn-sm btn-primary" style="width:100%; font-size:11px; padding:6px; font-weight:700;" onclick="openInsertBetweenModal('${conn.id}')">
+            ➕ Insert Element In-Between
+          </button>
+          <button type="button" class="btn btn-sm btn-info" style="width:100%; font-size:11px; padding:6px; font-weight:700; background:#0284c7; border:none; color:#fff;" onclick="reversePfdConnectionDirection('${conn.id}')">
+            ⇄ Reverse Arrow Direction
+          </button>
+        `}
+        <button type="button" class="btn btn-sm btn-outline-danger" style="width:100%; font-size:11px; padding:4px;" onclick="deletePfdConnection('${conn.id}')">
+          🗑️ Delete Connection Link
+        </button>
       </div>
     </div>
   `;
-
-  renderProcessFlowDiagram();
 }
+window.inspectPfdConnection = inspectPfdConnection;
 
-function savePfdStepFromInspector(stepId) {
-  const stepNo = document.getElementById('inspPfdStepNo')?.value?.trim();
-  const name = document.getElementById('inspPfdStepName')?.value?.trim();
-  const category = document.getElementById('inspPfdCategory')?.value;
-  const desc = document.getElementById('inspPfdDesc')?.value?.trim();
+let activePfdInsertConnId = null;
 
-  if (!name) {
-    alert('Please enter a process step name.');
+function openInsertBetweenModal(connId) {
+  activePfdInsertConnId = connId;
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const conn = (pfdData.connections || []).find(c => c.id === connId);
+  if (!conn) return;
+
+  const item1 = (pfdData.items || []).find(it => it.id === conn.from);
+  const item2 = (pfdData.items || []).find(it => it.id === conn.to);
+
+  // Guard: Cannot insert between Decision and its Yes/No branch
+  const isDecisionBranchConn = (item1 && item1.type === 'decision' && item2 && (item2.type === 'Yes' || item2.type === 'No')) ||
+                               (item2 && item2.type === 'decision' && item1 && (item1.type === 'Yes' || item1.type === 'No')) ||
+                               (item2 && item2.decisionId && item2.decisionId === (item1 ? item1.id : '')) ||
+                               (item1 && item1.decisionId && item1.decisionId === (item2 ? item2.id : ''));
+
+  if (isDecisionBranchConn) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ Cannot insert elements between a Decision and its Yes/No branch tags.', 'warning');
+    } else {
+      alert('Cannot insert elements between a Decision and its Yes/No branch tags.');
+    }
+    return;
+  }
+
+  const contextBox = document.getElementById('pfdInsertBetweenContext');
+  if (contextBox) {
+    contextBox.innerHTML = `
+      <div style="color:#94a3b8; font-size:10px; text-transform:uppercase; font-weight:700; margin-bottom:4px;">Flow Connection:</div>
+      <div style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#f8fafc;">
+        <span style="color:#38bdf8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px;">${escapeHtml(item1 ? (item1.name || item1.type) : 'Source')}</span>
+        <span style="color:#94a3b8;">➔</span>
+        <span style="color:#c084fc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px;">${escapeHtml(item2 ? (item2.name || item2.type) : 'Target')}</span>
+      </div>
+    `;
+  }
+
+  openModal('pfdInsertBetweenModal');
+}
+window.openInsertBetweenModal = openInsertBetweenModal;
+
+function confirmInsertPfdItemBetween(type) {
+  if (!activePfdInsertConnId) return;
+
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const connIndex = (pfdData.connections || []).findIndex(c => c.id === activePfdInsertConnId);
+  if (connIndex === -1) return;
+  const oldConn = pfdData.connections[connIndex];
+
+  const item1 = (pfdData.items || []).find(it => it.id === oldConn.from);
+  const item2 = (pfdData.items || []).find(it => it.id === oldConn.to);
+  if (!item1 || !item2) return;
+
+  // Read actual live rendered positions
+  const el1 = document.getElementById(item1.id);
+  const el2 = document.getElementById(item2.id);
+  const x1 = el1 ? (parseFloat(el1.style.left) || el1.offsetLeft) : (item1.x || 0);
+  const y1 = el1 ? (parseFloat(el1.style.top) || el1.offsetTop) : (item1.y || 0);
+  const x2 = el2 ? (parseFloat(el2.style.left) || el2.offsetLeft) : (item2.x || 0);
+  const y2 = el2 ? (parseFloat(el2.style.top) || el2.offsetTop) : (item2.y || 0);
+
+  // Calculate mid-point position
+  const midX = Math.round((x1 + x2) / 2);
+  const midY = Math.round((y1 + y2) / 2);
+
+  const targetStructId = (activePfdStructId && activePfdStructId !== 'ALL')
+    ? activePfdStructId
+    : (selectedStructureId || (fmeaData && fmeaData.structure && fmeaData.structure.id));
+
+  // Determine size & default name
+  let defaultName = 'New Element';
+  let defaultWidth = 150;
+  let defaultHeight = 75;
+
+  switch (type) {
+    case 'process':
+      defaultName = 'New Operation ' + (((ctx.pfmea?.processSteps || []).length + 1) * 10);
+      defaultWidth = 160;
+      defaultHeight = 75;
+      break;
+    case 'inspection':
+      defaultName = 'Quality Inspection';
+      defaultWidth = 110;
+      defaultHeight = 110;
+      break;
+    case 'materialTransfer':
+      defaultName = 'Material Handling';
+      defaultWidth = 160;
+      defaultHeight = 75;
+      break;
+    case 'storage':
+      defaultName = 'Buffer Storage';
+      defaultWidth = 120;
+      defaultHeight = 95;
+      break;
+    case 'delay':
+      defaultName = 'Cooling / Queue Delay';
+      defaultWidth = 140;
+      defaultHeight = 75;
+      break;
+    case 'decision':
+      defaultName = 'Pass / Fail?';
+      defaultWidth = 140;
+      defaultHeight = 90;
+      break;
+    case 'terminator':
+      defaultName = 'Process Boundary';
+      defaultWidth = 150;
+      defaultHeight = 65;
+      break;
+    case 'document':
+      defaultName = 'Work Instruction SOP';
+      defaultWidth = 145;
+      defaultHeight = 85;
+      break;
+    case 'inputoutput':
+      defaultName = 'Raw Material In';
+      defaultWidth = 160;
+      defaultHeight = 75;
+      break;
+    case 'operator':
+      defaultName = 'Manual Workstation';
+      defaultWidth = 150;
+      defaultHeight = 75;
+      break;
+    case 'rework':
+      defaultName = 'Rework Station';
+      defaultWidth = 145;
+      defaultHeight = 75;
+      break;
+    case 'packaging':
+      defaultName = 'Packaging / Palletizing';
+      defaultWidth = 150;
+      defaultHeight = 75;
+      break;
+  }
+
+  const newItem = {
+    id: 'pfd_item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    type: type,
+    name: defaultName,
+    stepNo: '',
+    description: '',
+    x: midX,
+    y: midY,
+    width: defaultWidth,
+    height: defaultHeight,
+    isPfmeaStep: (type === 'process'),
+    pstepId: null,
+    dfmeaStructId: targetStructId
+  };
+
+  if (type === 'process') {
+    ctx.pfmea = ctx.pfmea || { processSteps: [] };
+    ctx.pfmea.processSteps = ctx.pfmea.processSteps || [];
+    const nextStepNo = String((ctx.pfmea.processSteps.length + 1) * 10);
+    const newPstep = {
+      id: 'pstep_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      stepNo: nextStepNo,
+      name: defaultName,
+      description: '',
+      category: 'Operation',
+      variantId: ['ALL'],
+      dfmeaStructId: targetStructId
+    };
+    ctx.pfmea.processSteps.push(newPstep);
+    newItem.pstepId = newPstep.id;
+    newItem.stepNo = nextStepNo;
+
+    if (typeof renderFMEATable === 'function') renderFMEATable();
+    if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
+  }
+
+  pfdData.items.push(newItem);
+
+  // If Decision, spawn Yes/No branches
+  if (type === 'decision') {
+    const yesItem = {
+      id: 'pfd_yes_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      type: 'Yes', name: 'Yes', stepNo: '', description: 'Pass / Accept branch', decisionId: newItem.id,
+      x: midX + 45,
+      y: midY + 135,
+      width: 50,
+      height: 30,
+      isPfmeaStep: false,
+      pstepId: null,
+      dfmeaStructId: targetStructId
+    };
+    const noItem = {
+      id: 'pfd_no_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      type: 'No', name: 'No', stepNo: '', description: 'Fail / Reject branch', decisionId: newItem.id,
+      x: midX + 185,
+      y: midY + 30,
+      width: 50,
+      height: 30,
+      isPfmeaStep: false,
+      pstepId: null,
+      dfmeaStructId: targetStructId
+    };
+    pfdData.items.push(yesItem, noItem);
+    pfdData.connections.push({ id: 'conn_yes_' + Date.now(), from: newItem.id, to: yesItem.id });
+    pfdData.connections.push({ id: 'conn_no_' + Date.now(), from: newItem.id, to: noItem.id });
+  }
+
+  // Remove the old connection
+  pfdData.connections.splice(connIndex, 1);
+
+  // Add the two new updated connections: item1 -> newItem -> item2
+  pfdData.connections.push({
+    id: 'conn_' + Date.now() + '_in',
+    from: item1.id,
+    to: newItem.id
+  });
+  pfdData.connections.push({
+    id: 'conn_' + Date.now() + '_out',
+    from: newItem.id,
+    to: item2.id
+  });
+
+  closeModal('pfdInsertBetweenModal');
+  activePfdInsertConnId = null;
+  activePfdSelectedItemId = newItem.id;
+  activePfdSelectedConnId = null;
+
+  renderPfdTreeSidebar();
+  renderProcessFlowDiagram();
+  inspectPfdItem(newItem.id);
+
+  if (typeof showToast === 'function') {
+    showToast(`➕ Inserted ${defaultName} between ${item1.name || item1.type} and ${item2.name || item2.type}!`, 'success');
+  }
+}
+window.confirmInsertPfdItemBetween = confirmInsertPfdItemBetween;
+
+
+async function deletePfdConnection(connId) {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const conn = (pfdData.connections || []).find(c => c.id === connId);
+  if (!conn) return;
+
+  const item1 = (pfdData.items || []).find(it => it.id === conn.from);
+  const item2 = (pfdData.items || []).find(it => it.id === conn.to);
+  const fromName = item1 ? (item1.name || item1.type) : 'Source';
+  const toName = item2 ? (item2.name || item2.type) : 'Target';
+
+  const confirmMsg = `Are you sure you want to delete the flow connection from "${fromName}" to "${toName}"?`;
+  const confirmed = typeof showCustomConfirm === 'function'
+    ? await showCustomConfirm(confirmMsg, 'Delete Flow Connection', 'warning')
+    : confirm(confirmMsg);
+
+  if (!confirmed) return;
+
+  pfdData.connections = (pfdData.connections || []).filter(c => c.id !== connId);
+  activePfdSelectedConnId = null;
+  inspectPfdItem(null);
+  renderProcessFlowDiagram();
+
+  if (typeof showToast === 'function') {
+    showToast('Flow connection deleted.', 'info');
+  }
+}
+window.deletePfdConnection = deletePfdConnection;
+
+function inspectPfdItem(itemId) {
+  const container = document.getElementById('pfdStepInspectorContent');
+  if (!container) return;
+
+  if (!itemId) {
+    container.innerHTML = `
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:14px; text-align:center; color:#94a3b8;">
+        <div style="font-size:28px; margin-bottom:8px;">🖱️</div>
+        <div style="font-weight:700; color:#cbd5e1; font-size:12px; margin-bottom:6px;">No Element Selected</div>
+        <div style="font-size:11px; line-height:1.4;">Click any element or connection line on the canvas to view and edit its properties.</div>
+      </div>
+    `;
     return;
   }
 
   const ctx = getActiveFmeaData();
-  const pstep = (ctx.pfmea?.processSteps || []).find(ps => ps.id === stepId);
-  if (pstep) {
-    pstep.stepNo = stepNo || pstep.stepNo;
-    pstep.name = name;
-    pstep.category = category || 'Operation';
-    pstep.description = desc || '';
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const item = (pfdData.items || []).find(it => it.id === itemId);
+  if (!item) {
+    container.innerHTML = '<div style="color:#94a3b8; font-size:11.5px;">Element not found.</div>';
+    return;
   }
 
-  const select = document.getElementById('pfdStructureSelect');
-  syncProcessFlowDiagramWithPsteps(select ? select.value : 'ALL');
-  if (typeof renderFMEATable === 'function') renderFMEATable();
-  renderProcessFlowDiagram();
-  alert('Process step updated and synced with matrix table!');
+  const isProcessStep = !!item.isPfmeaStep;
+
+  let typeControlHtml = '';
+  if (isProcessStep) {
+    typeControlHtml = `
+      <div style="margin-bottom:10px;">
+        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:700; display:block; margin-bottom:4px;">Element Type</label>
+        <div style="display:flex; align-items:center; gap:6px; background:#0f172a; border:1px solid #0284c7; padding:7px 10px; border-radius:5px; font-size:11px; color:#38bdf8;">
+          <span>⚙️ Process Operation</span>
+          <span class="badge" style="font-size:9px; background:#0284c7; color:#fff; margin-left:auto; font-weight:700;">🔒 PFMEA Synced</span>
+        </div>
+        <small style="font-size:9.5px; color:#64748b; margin-top:3px; display:block;">Operation type is locked to maintain PFMEA matrix synchronization.</small>
+      </div>
+    `;
+  } else {
+    typeControlHtml = `
+      <div style="margin-bottom:10px;">
+        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:700; display:block; margin-bottom:4px;">Change Element Type</label>
+        <select id="inspPfdItemType" style="width:100%; font-size:11px; padding:6px 8px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:5px; box-sizing:border-box; outline:none;">
+          <option value="inspection" ${item.type === 'inspection' ? 'selected' : ''}>🔍 Inspection / QC</option>
+          <option value="materialTransfer" ${item.type === 'materialTransfer' ? 'selected' : ''}>🚚 Material Handling / Transport</option>
+          <option value="storage" ${item.type === 'storage' ? 'selected' : ''}>📦 Storage / Buffer</option>
+          <option value="delay" ${item.type === 'delay' ? 'selected' : ''}>⏳ Delay / Queue Point</option>
+          <option value="decision" ${item.type === 'decision' ? 'selected' : ''}>🔷 Decision (Pass / Fail)</option>
+          <option value="terminator" ${item.type === 'terminator' ? 'selected' : ''}>🛑 Start / End Boundary</option>
+          <option value="document" ${item.type === 'document' ? 'selected' : ''}>📄 Document / SOP</option>
+          <option value="inputoutput" ${item.type === 'inputoutput' ? 'selected' : ''}>📥 Input / Output Material</option>
+          <option value="operator" ${item.type === 'operator' ? 'selected' : ''}>👤 Manual Workstation</option>
+          <option value="rework" ${item.type === 'rework' ? 'selected' : ''}>🔄 Rework Loop</option>
+          <option value="packaging" ${item.type === 'packaging' ? 'selected' : ''}>📦 Packaging & Palletizing</option>
+          <option value="Yes" ${item.type === 'Yes' ? 'selected' : ''}>✅ Yes Branch</option>
+          <option value="No" ${item.type === 'No' ? 'selected' : ''}>❌ No Branch</option>
+        </select>
+      </div>
+    `;
+  }
+
+  container.innerHTML = `
+    <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:12px; box-shadow:0 4px 12px rgba(0,0,0,0.4);">
+      ${isProcessStep ? `
+        <div style="margin-bottom:8px;">
+          <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:700; display:block; margin-bottom:4px;">Step Number (#)</label>
+          <input type="text" id="inspPfdItemStepNo" value="${escapeHtml(item.stepNo || '')}" style="width:100%; font-size:11px; padding:6px 8px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:5px; box-sizing:border-box;">
+        </div>
+      ` : ''}
+
+      <div style="margin-bottom:8px;">
+        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:700; display:block; margin-bottom:4px;">${isProcessStep ? 'Operation Name' : 'Element Label / Name'}</label>
+        <input type="text" id="inspPfdItemName" value="${escapeHtml(item.name || '')}" style="width:100%; font-size:11px; padding:6px 8px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:5px; box-sizing:border-box;">
+      </div>
+
+      ${typeControlHtml}
+
+      <div style="margin-bottom:12px;">
+        <label style="font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:700; display:block; margin-bottom:4px;">Description / Notes</label>
+        <textarea id="inspPfdItemDesc" rows="3" style="width:100%; font-size:11px; padding:6px 8px; background:#0f172a; border:1px solid #334155; color:#fff; border-radius:5px; box-sizing:border-box;">${escapeHtml(item.description || '')}</textarea>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <button type="button" class="btn btn-sm btn-primary" style="font-size:11px; padding:6px; font-weight:700;" onclick="savePfdItemFromInspector('${item.id}')">💾 Save Changes</button>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn btn-sm btn-outline-info" style="flex:1; font-size:10.5px; padding:4px;" onclick="startPfdAddLinkFromItem('${item.id}')">➡️ Flow From Here</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" style="font-size:10.5px; padding:4px 10px;" onclick="deletePfdItem('${item.id}')" title="Delete this element">🗑️</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
+window.inspectPfdItem = inspectPfdItem;
 
-function openAddPfdStepModal() {
-  const select = document.getElementById('pfdStructureSelect');
-  const structId = select ? select.value : 'ALL';
-
-  const name = prompt('Enter Process Step Name (e.g. Stamping, Welding, QC Inspection):');
-  if (!name || !name.trim()) return;
-
-  const stepNo = prompt('Enter Process Step Number (e.g. 10, 20, 30):', '10');
-
+function savePfdItemFromInspector(itemId) {
   const ctx = getActiveFmeaData();
-  ctx.pfmea = ctx.pfmea || { processSteps: [] };
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
 
-  const targetStructId = (structId && structId !== 'ALL') ? structId : (selectedStructureId || fmeaData.structure.id);
+  const item = (pfdData.items || []).find(it => it.id === itemId);
+  if (!item) return;
 
-  const newPstep = {
-    id: 'pstep_' + Date.now(),
-    stepNo: (stepNo || '10').trim(),
-    name: name.trim(),
+  const nameInput = document.getElementById('inspPfdItemName');
+  const stepNoInput = document.getElementById('inspPfdItemStepNo');
+  const typeSelect = document.getElementById('inspPfdItemType');
+  const descTextarea = document.getElementById('inspPfdItemDesc');
+
+  if (nameInput && nameInput.value.trim()) {
+    item.name = nameInput.value.trim();
+  }
+  if (descTextarea) {
+    item.description = descTextarea.value.trim();
+  }
+
+  if (item.isPfmeaStep) {
+    if (stepNoInput && stepNoInput.value.trim()) {
+      item.stepNo = stepNoInput.value.trim();
+    }
+    // Sync with ctx.pfmea.processSteps
+    const pstep = (ctx.pfmea.processSteps || []).find(ps => ps.id === item.pstepId);
+    if (pstep) {
+      pstep.name = item.name;
+      pstep.stepNo = item.stepNo;
+      pstep.description = item.description;
+    }
+    if (typeof renderFMEATable === 'function') renderFMEATable();
+    if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
+  } else {
+    // Auxiliary element: can change type!
+    if (typeSelect && typeSelect.value) {
+      item.type = typeSelect.value;
+    }
+  }
+
+  renderProcessFlowDiagram();
+  renderPfdTreeSidebar();
+  if (typeof showToast === 'function') {
+    showToast('💾 Element details updated and synchronized!', 'success');
+  }
+}
+window.savePfdItemFromInspector = savePfdItemFromInspector;
+
+function promptRenamePfdItem(itemId) {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const item = (pfdData.items || []).find(it => it.id === itemId);
+  if (!item) return;
+
+  const newName = prompt('Enter new name for element:', item.name || '');
+  if (newName !== null && newName.trim() !== '') {
+    item.name = newName.trim();
+    if (item.isPfmeaStep) {
+      const pstep = (ctx.pfmea.processSteps || []).find(ps => ps.id === item.pstepId);
+      if (pstep) pstep.name = item.name;
+      if (typeof renderFMEATable === 'function') renderFMEATable();
+    }
+    renderProcessFlowDiagram();
+    inspectPfdItem(item.id);
+  }
+}
+window.promptRenamePfdItem = promptRenamePfdItem;
+
+function addPfdItem(type) {
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.pfmea) return;
+  ctx.pfmea.processSteps = ctx.pfmea.processSteps || [];
+  ctx.pfmea.processFlowDiagrams = ctx.pfmea.processFlowDiagrams || {};
+
+  let pfdData = ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'];
+  if (!pfdData) {
+    pfdData = { items: [], connections: [] };
+    ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] = pfdData;
+  }
+  pfdData.items = pfdData.items || [];
+  pfdData.connections = pfdData.connections || [];
+
+  const canvas = document.getElementById('pfdCanvasContainer');
+  const scrollX = canvas ? canvas.scrollLeft : 0;
+  const scrollY = canvas ? canvas.scrollTop : 0;
+  const count = pfdData.items.length;
+  const posX = Math.max(50, scrollX + 90 + (count % 3) * 60);
+  const posY = Math.max(50, scrollY + 80 + (count % 4) * 50);
+
+  const targetStructId = (activePfdStructId && activePfdStructId !== 'ALL')
+    ? activePfdStructId
+    : (selectedStructureId || (fmeaData && fmeaData.structure && fmeaData.structure.id));
+
+  let defaultName = 'New Element';
+  let defaultWidth = 150;
+  let defaultHeight = 75;
+
+  switch (type) {
+    case 'process':
+      defaultName = 'New Operation ' + ((ctx.pfmea.processSteps.length + 1) * 10);
+      defaultWidth = 160;
+      defaultHeight = 75;
+      break;
+    case 'inspection':
+      defaultName = 'Quality Inspection';
+      defaultWidth = 110;
+      defaultHeight = 110; // Circle
+      break;
+    case 'materialTransfer':
+      defaultName = 'Material Handling';
+      defaultWidth = 160;
+      defaultHeight = 75; // Block Arrow
+      break;
+    case 'storage':
+      defaultName = 'Buffer Storage';
+      defaultWidth = 120;
+      defaultHeight = 95; // Inverted Triangle
+      break;
+    case 'delay':
+      defaultName = 'Cooling / Queue Delay';
+      defaultWidth = 140;
+      defaultHeight = 75; // D-shape
+      break;
+    case 'decision':
+      defaultName = 'Pass / Fail?';
+      defaultWidth = 140;
+      defaultHeight = 90; // Diamond
+      break;
+    case 'terminator':
+      defaultName = 'Process Boundary';
+      defaultWidth = 150;
+      defaultHeight = 65; // Stadium / Pill
+      break;
+    case 'document':
+      defaultName = 'Work Instruction SOP';
+      defaultWidth = 145;
+      defaultHeight = 85; // Wavy sheet
+      break;
+    case 'inputoutput':
+      defaultName = 'Raw Material In';
+      defaultWidth = 160;
+      defaultHeight = 75; // Parallelogram
+      break;
+    case 'operator':
+      defaultName = 'Manual Workstation';
+      defaultWidth = 150;
+      defaultHeight = 75;
+      break;
+    case 'rework':
+      defaultName = 'Rework Station';
+      defaultWidth = 145;
+      defaultHeight = 75;
+      break;
+    case 'packaging':
+      defaultName = 'Packaging / Palletizing';
+      defaultWidth = 150;
+      defaultHeight = 75;
+      break;
+  }
+
+  const newItem = {
+    id: 'pfd_item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    type: type,
+    name: defaultName,
+    stepNo: '',
     description: '',
-    category: 'Operation',
-    variantId: ['ALL'],
+    x: posX,
+    y: posY,
+    width: defaultWidth,
+    height: defaultHeight,
+    isPfmeaStep: (type === 'process'),
+    pstepId: null,
     dfmeaStructId: targetStructId
   };
 
-  ctx.pfmea.processSteps.push(newPstep);
+  if (type === 'process') {
+    const nextStepNo = String((ctx.pfmea.processSteps.length + 1) * 10);
+    const newPstep = {
+      id: 'pstep_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      stepNo: nextStepNo,
+      name: defaultName,
+      description: '',
+      category: 'Operation',
+      variantId: ['ALL'],
+      dfmeaStructId: targetStructId
+    };
+    ctx.pfmea.processSteps.push(newPstep);
+    newItem.pstepId = newPstep.id;
+    newItem.stepNo = nextStepNo;
 
-  syncProcessFlowDiagramWithPsteps(structId);
-  if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
-  if (typeof renderFMEATable === 'function') renderFMEATable();
+    if (typeof renderFMEATable === 'function') renderFMEATable();
+    if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
+  }
+
+  pfdData.items.push(newItem);
+
+  // If Decision type, auto-spawn connected Yes and No branches cleanly (Yes below, No to the right)
+  if (type === 'decision') {
+    const yesItem = {
+      id: 'pfd_yes_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      type: 'Yes', name: 'Yes', stepNo: '', description: 'Pass / Accept branch', decisionId: newItem.id,
+      x: posX + 45,
+      y: posY + 135,
+      width: 50,
+      height: 30,
+      isPfmeaStep: false,
+      pstepId: null,
+      dfmeaStructId: targetStructId
+    };
+    const noItem = {
+      id: 'pfd_no_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      type: 'No', name: 'No', stepNo: '', description: 'Fail / Reject branch', decisionId: newItem.id,
+      x: posX + 185,
+      y: posY + 30,
+      width: 50,
+      height: 30,
+      isPfmeaStep: false,
+      pstepId: null,
+      dfmeaStructId: targetStructId
+    };
+
+    pfdData.items.push(yesItem, noItem);
+    pfdData.connections.push({
+      id: 'conn_yes_' + Date.now(),
+      from: newItem.id,
+      to: yesItem.id
+    });
+    pfdData.connections.push({
+      id: 'conn_no_' + Date.now(),
+      from: newItem.id,
+      to: noItem.id
+    });
+  }
+
+  activePfdSelectedItemId = newItem.id;
+  activePfdSelectedConnId = null;
+
+  renderPfdTreeSidebar();
   renderProcessFlowDiagram();
+  inspectPfdItem(newItem.id);
+
+  if (typeof showToast === 'function') {
+    showToast(`➕ Added ${defaultName} to diagram`, 'success');
+  }
 }
+window.addPfdItem = addPfdItem;
 
-function deletePfdStep(stepId) {
-  if (!confirm('Are you sure you want to delete this Process Step and remove it from the PFMEA?')) return;
+async function deleteSelectedPfdItemOrLink() {
+  if (activePfdSelectedItemId) {
+    await deletePfdItem(activePfdSelectedItemId);
+  } else if (activePfdSelectedConnId) {
+    await deletePfdConnection(activePfdSelectedConnId);
+  } else {
+    if (typeof showToast === 'function') {
+      showToast('Please click an element or connection line to select it first.', 'info');
+    }
+  }
+}
+window.deleteSelectedPfdItemOrLink = deleteSelectedPfdItemOrLink;
 
-  deleteProcessStepHelper(stepId);
+async function deletePfdItem(itemId) {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
 
-  const select = document.getElementById('pfdStructureSelect');
-  syncProcessFlowDiagramWithPsteps(select ? select.value : 'ALL');
-  if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
-  if (typeof renderFMEATable === 'function') renderFMEATable();
+  const item = (pfdData.items || []).find(it => it.id === itemId);
+  if (!item) return;
+
+  let confirmMsg = '';
+  let confirmTitle = 'Delete Element';
+
+  if (item.isPfmeaStep) {
+    confirmMsg = `Are you sure you want to delete Process Step "${item.name || item.stepNo}"? This will also remove it from the PFMEA operations and matrix table.`;
+    confirmTitle = 'Delete PFMEA Process Operation';
+  } else if (item.type === 'decision') {
+    confirmMsg = `Are you sure you want to delete Decision "${item.name || 'Pass / Fail'}"? Its associated "Yes" and "No" branch elements will also be deleted.`;
+    confirmTitle = 'Delete Decision Element';
+  } else if (item.type === 'Yes' || item.type === 'No') {
+    confirmMsg = `Are you sure you want to delete the "${item.type}" branch element?`;
+    confirmTitle = 'Delete Branch Element';
+  } else {
+    confirmMsg = `Are you sure you want to delete this element ("${item.name || item.type}")?`;
+    confirmTitle = 'Delete Element';
+  }
+
+  const confirmed = typeof showCustomConfirm === 'function'
+    ? await showCustomConfirm(confirmMsg, confirmTitle, 'warning')
+    : confirm(confirmMsg);
+
+  if (!confirmed) return;
+
+  // If Decision element, collect all associated Yes and No branch elements
+  const itemsToDelete = new Set([itemId]);
+  if (item.type === 'decision') {
+    // 1. Any item with decisionId === itemId
+    (pfdData.items || []).forEach(it => {
+      if (it.decisionId === itemId) {
+        itemsToDelete.add(it.id);
+      }
+    });
+    // 2. Any Yes or No element connected directly from this decision
+    (pfdData.connections || []).forEach(c => {
+      if (c.from === itemId) {
+        const target = (pfdData.items || []).find(it => it.id === c.to);
+        if (target && (target.type === 'Yes' || target.type === 'No')) {
+          itemsToDelete.add(target.id);
+        }
+      }
+    });
+  }
+
+  // Delete from PFMEA steps if it's a PFMEA step
+  if (item.isPfmeaStep && item.pstepId) {
+    if (typeof deleteProcessStepHelper === 'function') {
+      deleteProcessStepHelper(item.pstepId);
+    } else {
+      ctx.pfmea.processSteps = (ctx.pfmea.processSteps || []).filter(ps => ps.id !== item.pstepId);
+    }
+    if (typeof renderFMEATable === 'function') renderFMEATable();
+    if (typeof renderTreeSidebar === 'function') renderTreeSidebar();
+  }
+
+  // Remove all items in itemsToDelete from pfdData.items
+  pfdData.items = (pfdData.items || []).filter(it => !itemsToDelete.has(it.id));
+
+  // Remove any connections connected to any deleted items
+  pfdData.connections = (pfdData.connections || []).filter(c => !itemsToDelete.has(c.from) && !itemsToDelete.has(c.to));
+
+  activePfdSelectedItemId = null;
+  inspectPfdItem(null);
+  renderPfdTreeSidebar();
   renderProcessFlowDiagram();
-}
 
-// ═══════════════════════════════════════════════════════════════════════════
+  if (typeof showToast === 'function') {
+    showToast('🗑️ Element(s) deleted from diagram.', 'info');
+  }
+}
+window.deletePfdItem = deletePfdItem;
+
+function autoLayoutProcessFlowDiagram() {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const items = pfdData.items || [];
+  if (items.length === 0) return;
+
+  items.forEach((item, idx) => {
+    const col = idx % 4;
+    const row = Math.floor(idx / 4);
+    item.x = 60 + col * 230;
+    item.y = 60 + row * 140;
+  });
+
+  renderProcessFlowDiagram();
+  if (typeof showToast === 'function') {
+    showToast('⚡ Auto-layout arranged elements neatly.', 'info');
+  }
+}
+window.autoLayoutProcessFlowDiagram = autoLayoutProcessFlowDiagram;
+
+function exportProcessFlowDiagramPNG() {
+  const ctx = getActiveFmeaData();
+  const pfdData = (ctx && ctx.pfmea && ctx.pfmea.processFlowDiagrams)
+    ? (ctx.pfmea.processFlowDiagrams[activePfdStructId || 'ALL'] || { items: [], connections: [] })
+    : { items: [], connections: [] };
+
+  const items = pfdData.items || [];
+  if (items.length === 0) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ No elements in current diagram to export.', 'warning');
+    } else {
+      alert('No elements in current diagram to export.');
+    }
+    return;
+  }
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  items.forEach(it => {
+    const sx = it.x || 60;
+    const sy = it.y || 60;
+    const sw = it.width || 170;
+    const sh = it.height || 80;
+    if (sx < minX) minX = sx;
+    if (sx + sw > maxX) maxX = sx + sw;
+    if (sy < minY) minY = sy;
+    if (sy + sh > maxY) maxY = sy + sh;
+  });
+
+  const padding = 70;
+  const exportW = Math.max(900, Math.ceil(maxX - minX + padding * 2));
+  const exportH = Math.max(500, Math.ceil(maxY - minY + padding * 2 + 70));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = exportW;
+  canvas.height = exportH;
+  const c = canvas.getContext('2d');
+
+  // Background
+  c.fillStyle = '#0b1329';
+  c.fillRect(0, 0, exportW, exportH);
+
+  // Top header bar
+  c.fillStyle = '#1e293b';
+  c.fillRect(0, 0, exportW, 55);
+  c.fillStyle = '#38bdf8';
+  c.font = 'bold 15px sans-serif';
+  c.fillText('JOST World — PFMEA Process Flow Diagram (PFD)', 25, 34);
+
+  c.fillStyle = '#94a3b8';
+  c.font = '11px sans-serif';
+  const pfmeaName = (ctx.pfmea && ctx.pfmea.name) ? ctx.pfmea.name : 'PFMEA';
+  c.fillText(`${pfmeaName} • ${items.length} Elements • Scope: ${activePfdStructId}`, exportW - 320, 34);
+
+  const offsetX = padding - minX;
+  const offsetY = padding + 60 - minY;
+
+  // Draw connections
+  const itemMap = new Map();
+  items.forEach(it => itemMap.set(it.id, it));
+
+  c.lineWidth = 2.5;
+  c.strokeStyle = '#38bdf8';
+  (pfdData.connections || []).forEach(conn => {
+    const item1 = itemMap.get(conn.from);
+    const item2 = itemMap.get(conn.to);
+    if (!item1 || !item2) return;
+
+    const startX = (item1.x || 0) + (item1.width || 170) / 2 + offsetX;
+    const startY = (item1.y || 0) + (item1.height || 80) / 2 + offsetY;
+    const endX = (item2.x || 0) + (item2.width || 170) / 2 + offsetX;
+    const endY = (item2.y || 0) + (item2.height || 80) / 2 + offsetY;
+
+    const distVert = Math.abs(startY - endY);
+    const distHorz = Math.abs(startX - endX);
+
+    c.beginPath();
+    c.moveTo(startX, startY);
+    if (distVert > distHorz) {
+      const midY = (startY + endY) / 2;
+      c.lineTo(startX, midY);
+      c.lineTo(endX, midY);
+      c.lineTo(endX, endY);
+    } else {
+      const midX = (startX + endX) / 2;
+      c.lineTo(midX, startY);
+      c.lineTo(midX, endY);
+      c.lineTo(endX, endY);
+    }
+    c.stroke();
+  });
+
+  // Draw node elements
+  items.forEach(item => {
+    const sx = (item.x || 60) + offsetX;
+    const sy = (item.y || 60) + offsetY;
+    const sw = item.width || 170;
+    const sh = item.height || 80;
+
+    c.fillStyle = '#1e293b';
+    c.strokeStyle = item.isPfmeaStep ? '#38bdf8' : '#64748b';
+    c.lineWidth = 2;
+
+    c.beginPath();
+    if (typeof c.roundRect === 'function') {
+      c.roundRect(sx, sy, sw, sh, 8);
+    } else {
+      c.rect(sx, sy, sw, sh);
+    }
+    c.fill();
+    c.stroke();
+
+    // Node Type label
+    c.fillStyle = item.isPfmeaStep ? '#0284c7' : '#334155';
+    c.beginPath();
+    if (typeof c.roundRect === 'function') {
+      c.roundRect(sx + 8, sy + 6, 75, 16, 3);
+    } else {
+      c.rect(sx + 8, sy + 6, 75, 16);
+    }
+    c.fill();
+
+    c.fillStyle = '#ffffff';
+    c.font = 'bold 9px sans-serif';
+    c.fillText(item.type.toUpperCase(), sx + 12, sy + 18);
+
+    if (item.stepNo) {
+      c.fillStyle = '#38bdf8';
+      c.font = 'bold 10px sans-serif';
+      c.fillText(`Step ${item.stepNo}`, sx + sw - 65, sy + 18);
+    }
+
+    c.fillStyle = '#f8fafc';
+    c.font = 'bold 11px sans-serif';
+    const nameText = item.name || item.type;
+    c.fillText(nameText.length > 22 ? nameText.substring(0, 20) + '...' : nameText, sx + 10, sy + 44);
+
+    if (item.description) {
+      c.fillStyle = '#94a3b8';
+      c.font = '9px sans-serif';
+      c.fillText(item.description.length > 26 ? item.description.substring(0, 24) + '...' : item.description, sx + 10, sy + 64);
+    }
+  });
+
+  // Trigger download
+  const link = document.createElement('a');
+  link.download = `PFD_${(ctx.pfmea?.name || 'PFMEA').replace(/[^a-zA-Z0-9_-]/g, '_')}_${activePfdStructId}_${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  if (typeof showToast === 'function') {
+    showToast('📥 Process Flow Diagram PNG exported successfully.', 'success');
+  }
+}
+window.exportProcessFlowDiagramPNG = exportProcessFlowDiagramPNG;
+
+
 // AI WORKBENCH ENGINE & MULTI-STEP GENERATION WORKFLOW
 // ═══════════════════════════════════════════════════════════════════════════
 let aiWorkbenchState = {
@@ -22313,10 +29203,14 @@ function loadWb2NodeContext(nodeId) {
   updateWb3JointCharacteristicsPreview();
   updateWb3ComponentCharacteristicsPreview();
 
-  const savedJoints = saved.joints || ['Welding', 'Nut-Bolt'];
+  const savedJoints = Array.isArray(saved.joints) ? saved.joints : [];
   document.querySelectorAll('.wb2-joint-chk').forEach(chk => {
     chk.checked = savedJoints.includes(chk.value);
   });
+  const wb2CustomJointInput = document.getElementById('wb2CustomJointCharsInput');
+  if (wb2CustomJointInput) {
+    wb2CustomJointInput.value = saved.customJointChars || '';
+  }
 
   // Top Element Specific Requirements Query
   const rootReqBox = document.getElementById('wb2RootRequirementQueryBox');
@@ -22366,6 +29260,11 @@ function saveCurrentWb2Inputs() {
 
   const joints = [];
   document.querySelectorAll('.wb2-joint-chk:checked').forEach(chk => joints.push(chk.value));
+  const customJointChars = document.getElementById('wb2CustomJointCharsInput')?.value?.trim() || '';
+
+  const componentFeatures = [];
+  document.querySelectorAll('.wb2-comp-feature-chk:checked').forEach(chk => componentFeatures.push(chk.value));
+  const customComponentFeatures = document.getElementById('wb2CompCustomFeaturesInput')?.value?.trim() || '';
 
   aiWorkbench2State.nodeContexts[nodeId] = {
     itemName,
@@ -22373,6 +29272,9 @@ function saveCurrentWb2Inputs() {
     itemType,
     itemDesc,
     joints,
+    customJointChars,
+    componentFeatures,
+    customComponentFeatures,
     material,
     gdt,
     env,
@@ -23470,12 +30372,19 @@ ${JSON.stringify(fms.map(f => ({ tempId: f.tempId, name: f.name, severity: f.sev
 `;
 
   if (isAssy || userCtx.itemType === 'Mixed') {
-    const selJoints = (userCtx.joints && userCtx.joints.length > 0) ? userCtx.joints : ['Welding', 'Nut-Bolt'];
-    prompt += buildWb3JointCharacteristicsPromptText(selJoints);
+    const selJoints = Array.isArray(userCtx.joints) ? userCtx.joints : [];
+    const customJointChars = userCtx.customJointChars || '';
+    const jointText = buildWb3JointCharacteristicsPromptText(selJoints, customJointChars);
+    if (jointText) prompt += jointText;
   }
 
   if (isComp || userCtx.itemType === 'Mixed') {
-    prompt += WB3_COMPONENT_CHARACTERISTICS_PROMPT_TEXT;
+    const selFeatures = Array.isArray(userCtx.componentFeatures) ? userCtx.componentFeatures : [];
+    const customFeatures = userCtx.customComponentFeatures || '';
+    if (selFeatures.length > 0 || customFeatures) {
+      const featText = buildWb3ComponentFeaturesPromptText(selFeatures, customFeatures);
+      if (featText) prompt += featText;
+    }
   }
 
   if (userCtx.isCatalogueItem) {
@@ -24443,7 +31352,8 @@ function buildWb2SubfilePackage(targetNodeId = null) {
     libraries: {
       effects: localEffects,
       causes: localCauses,
-      controls: localControls
+      controls: localControls,
+      characteristics: localCharacteristics
     },
     failureModeEffects: failureModeEffects,
     failureModeCauses: failureModeCauses,
@@ -24566,9 +31476,13 @@ function parseAndIngestWb2FullSubpackage(pkg, options = {}) {
   });
 
   // 4. Synchronize Master Libraries
-  ctx.libraries = ctx.libraries || { effects: [], causes: [], controls: [], actions: [] };
+  ctx.libraries = ctx.libraries || { effects: [], causes: [], controls: [], actions: [], characteristics: [] };
   if (typeof fmeaData !== 'undefined') {
-    fmeaData.libraries = fmeaData.libraries || { effects: [], causes: [], controls: [], actions: [] };
+    fmeaData.libraries = fmeaData.libraries || { effects: [], causes: [], controls: [], actions: [], characteristics: [] };
+  }
+  ctx.libraries.characteristics = ctx.libraries.characteristics || [];
+  if (typeof fmeaData !== 'undefined' && fmeaData.libraries) {
+    fmeaData.libraries.characteristics = fmeaData.libraries.characteristics || [];
   }
 
   // Effects
@@ -24584,15 +31498,38 @@ function parseAndIngestWb2FullSubpackage(pkg, options = {}) {
     }
   });
 
-  // Causes (CRITICAL: Enriched with structId, systemElement, variants)
+  // Characteristics (Imported & Linked to Library)
+  (pkg.libraries?.characteristics || []).forEach(ch => {
+    const enrichedChar = Object.assign({
+      structId: targetId,
+      systemElement: pkg.structure[0]?.name || 'Component',
+      variants: ['ALL'],
+      applicability: 'ALL',
+      origin: 'Imported'
+    }, ch);
+
+    let existingCtx = ctx.libraries.characteristics.find(x => x.id === enrichedChar.id || ((x.name || '').trim().toLowerCase() === (enrichedChar.name || '').trim().toLowerCase() && (!enrichedChar.structId || !x.structId || String(x.structId) === String(enrichedChar.structId))));
+    if (!existingCtx) ctx.libraries.characteristics.push(enrichedChar);
+    else Object.assign(existingCtx, enrichedChar);
+
+    if (typeof fmeaData !== 'undefined' && fmeaData.libraries && fmeaData.libraries.characteristics) {
+      let existingFm = fmeaData.libraries.characteristics.find(x => x.id === enrichedChar.id || ((x.name || '').trim().toLowerCase() === (enrichedChar.name || '').trim().toLowerCase() && (!enrichedChar.structId || !x.structId || String(x.structId) === String(enrichedChar.structId))));
+      if (!existingFm) fmeaData.libraries.characteristics.push(enrichedChar);
+      else Object.assign(existingFm, enrichedChar);
+    }
+  });
+
+  // Causes (CRITICAL: Enriched with structId, systemElement, variants, characteristics)
   (pkg.libraries?.causes || []).forEach(c => {
     const enriched = Object.assign({
       structId: targetId,
       systemElement: pkg.structure[0]?.name || 'Component',
-      variants: ["ALL"],
+      variants: ['ALL'],
       details: c.details || c.causeDetails || c.desc || 'Root cause mechanism',
       desc: c.details || c.causeDetails || c.desc || 'Root cause mechanism',
-      name: c.details || c.causeDetails || c.desc || 'Root cause mechanism'
+      name: c.details || c.causeDetails || c.desc || 'Root cause mechanism',
+      characteristics: c.characteristics || c.characteristicName || 'Design Characteristic',
+      spec: c.spec || '____'
     }, c);
 
     let existingCtx = ctx.libraries.causes.find(x => x.id === enriched.id);
@@ -24604,6 +31541,10 @@ function parseAndIngestWb2FullSubpackage(pkg, options = {}) {
       let existingFm = fmeaData.libraries.causes.find(x => x.id === enriched.id);
       if (!existingFm) fmeaData.libraries.causes.push(enriched);
       else Object.assign(existingFm, enriched);
+    }
+
+    if (typeof syncAndStoreCauseCharacteristics === 'function') {
+      syncAndStoreCauseCharacteristics(enriched);
     }
   });
 
@@ -24619,6 +31560,10 @@ function parseAndIngestWb2FullSubpackage(pkg, options = {}) {
       else Object.assign(existingFm, ctrl);
     }
   });
+
+  if (typeof ensureAllCharacteristicsStoredAndLinked === 'function') {
+    ensureAllCharacteristicsStoredAndLinked();
+  }
 
   // 5. Update Linkage Maps
   ctx.failureModeEffects = ctx.failureModeEffects || {};
@@ -24914,24 +31859,72 @@ function copyWb2StepPrompt(step) {
 }
 
 function sanitizeJsonString(str) {
-  let cleaned = str.trim();
+  if (!str) return '{}';
+  let cleaned = String(str).trim();
+
+  // 0. Strip reasoning / thinking tags (<think>, <thought>, <reasoning>)
+  cleaned = cleaned
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    .replace(/\[THOUGHT\][\s\S]*?\[\/THOUGHT\]/gi, '')
+    .trim();
+
+  // 1. Replace smart quotes
+  cleaned = cleaned.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+
+  // 2. Strip markdown code fences if wrapped
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    cleaned = codeBlockMatch[1].trim();
+  } else {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  }
+
+  // 3. Find first '{' or '['
   const firstBrace = cleaned.indexOf('{');
   const firstBracket = cleaned.indexOf('[');
-  let startIdx = 0;
+  let startIdx = -1;
   if (firstBrace !== -1 && firstBracket !== -1) startIdx = Math.min(firstBrace, firstBracket);
   else if (firstBrace !== -1) startIdx = firstBrace;
   else if (firstBracket !== -1) startIdx = firstBracket;
-  cleaned = cleaned.slice(startIdx);
 
+  if (startIdx !== -1) {
+    cleaned = cleaned.slice(startIdx);
+  }
+
+  // 4. Find last '}' or ']'
   const lastBrace = cleaned.lastIndexOf('}');
   const lastBracket = cleaned.lastIndexOf(']');
-  let endIdx = cleaned.length;
+  let endIdx = -1;
   if (lastBrace !== -1 && lastBracket !== -1) endIdx = Math.max(lastBrace, lastBracket) + 1;
   else if (lastBrace !== -1) endIdx = lastBrace + 1;
   else if (lastBracket !== -1) endIdx = lastBracket + 1;
-  cleaned = cleaned.slice(0, endIdx);
 
+  if (endIdx !== -1) {
+    cleaned = cleaned.slice(0, endIdx);
+  }
+
+  // 5. Remove single-line JS comments (unless inside quotes)
+  cleaned = cleaned.replace(/(^|[^\\])\/\/.*$/gm, '$1');
+
+  // 6. Remove multi-line JS comments
+  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // 7. Remove trailing commas before closing braces/brackets
   cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+
+  // 8. Fix unquoted keys if JSON.parse fails
+  try {
+    JSON.parse(cleaned);
+  } catch(e) {
+    try {
+      const fixed = cleaned.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
+      JSON.parse(fixed);
+      return fixed;
+    } catch(_) {}
+  }
+
   return cleaned;
 }
 
@@ -25720,23 +32713,41 @@ function resolveWb3JointKey(key) {
   return key;
 }
 
-function buildWb3JointCharacteristicsPromptText(selectedJoints) {
-  if (!Array.isArray(selectedJoints) || selectedJoints.length === 0) return '';
+function buildWb3JointCharacteristicsPromptText(selectedJoints, customJointCharsText) {
+  const hasJoints = Array.isArray(selectedJoints) && selectedJoints.length > 0;
+  const hasCustom = customJointCharsText && typeof customJointCharsText === 'string' && customJointCharsText.trim().length > 0;
+  if (!hasJoints && !hasCustom) return '';
+
   const seen = new Set();
   const sections = [];
 
-  selectedJoints.forEach(j => {
-    const resolvedName = resolveWb3JointKey(j);
-    if (!resolvedName || seen.has(resolvedName)) return;
-    seen.add(resolvedName);
-    const chars = WB3_JOINT_CHARACTERISTICS[resolvedName] || WB3_JOINT_CHARACTERISTICS[j];
-    if (Array.isArray(chars) && chars.length > 0) {
-      sections.push(`### ${resolvedName}\n${chars.map(c => `* ${c}`).join('\n')}`);
+  if (hasJoints) {
+    selectedJoints.forEach(j => {
+      const resolvedName = resolveWb3JointKey(j);
+      if (!resolvedName || seen.has(resolvedName)) return;
+      seen.add(resolvedName);
+      const chars = WB3_JOINT_CHARACTERISTICS[resolvedName] || WB3_JOINT_CHARACTERISTICS[j];
+      if (Array.isArray(chars) && chars.length > 0) {
+        sections.push(`### ${resolvedName}\n${chars.map(c => `* ${c}`).join('\n')}`);
+      }
+    });
+  }
+
+  if (hasCustom) {
+    const customItems = [];
+    customJointCharsText.split(/[,;\n]/).forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || seen.has(trimmed.toLowerCase())) return;
+      seen.add(trimmed.toLowerCase());
+      customItems.push(`* **${trimmed} (User Defined):** Formulate failure causes specifically addressing this user-defined assembly characteristic`);
+    });
+    if (customItems.length > 0) {
+      sections.push(`### User-Defined Assembly / Joint Characteristics\n${customItems.join('\n')}`);
     }
-  });
+  }
 
   if (sections.length === 0) return '';
-  return `\n════════════════════════════════════════════════════════════════════════════════\nSELECTED JOINT CHARACTERISTICS (DERIVE CAUSES ONLY FROM THESE CHECKED JOINTS):\nCheck these characteristics when identifying failure causes for this assembly:\nCRITICAL INSTRUCTION FOR CAUSE FORMULATION:\nLink ONLY those joint characteristics that are logically and physically relevant to the specific Failure Mode (FM), joint mechanics, and root cause mechanism under consideration (do not mechanically copy or link illogical characteristics).\n\n${sections.join('\n\n')}\n════════════════════════════════════════════════════════════════════════════════\n`;
+  return `\n════════════════════════════════════════════════════════════════════════════════\nSELECTED ASSEMBLY & JOINT CHARACTERISTICS (DERIVE CAUSES FROM THESE CHARACTERISTICS):\nCheck these characteristics when identifying failure causes for this assembly:\nCRITICAL INSTRUCTION FOR CAUSE FORMULATION:\nLink ONLY those joint and assembly characteristics (including user-defined characteristics) that are logically, physically, and mechanistically relevant to the specific Failure Mode (FM), joint mechanics, and root cause mechanism under consideration (do not mechanically copy or link illogical characteristics).\n\n${sections.join('\n\n')}\n════════════════════════════════════════════════════════════════════════════════\n`;
 }
 
 var WB3_COMPONENT_CHARACTERISTICS = {
@@ -26281,14 +33292,19 @@ function wb3SetApiLock(lock) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function syncWorkbenchStateToProjectData() {
-  if (typeof fmeaData === 'undefined' || !fmeaData) return;
+  const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : (typeof fmeaData !== 'undefined' ? fmeaData : null);
+  if (!ctx && typeof fmeaData === 'undefined') return;
+
   if (typeof saveCurrentWb3Inputs === 'function') {
     try { saveCurrentWb3Inputs(); } catch (e) {}
+  }
+  if (typeof saveCurrentWb4Inputs === 'function') {
+    try { saveCurrentWb4Inputs(); } catch (e) {}
   }
 
   // 1. Package AI Workbench 3.0 State
   if (typeof aiWorkbench3State !== 'undefined' && aiWorkbench3State) {
-    fmeaData.aiWorkbench3State = {
+    const wb3Pkg = {
       currentNodeId: aiWorkbench3State.currentNodeId || null,
       currentStep: aiWorkbench3State.currentStep || 1,
       executionMode: aiWorkbench3State.executionMode || 'MANUAL',
@@ -26315,27 +33331,70 @@ function syncWorkbenchStateToProjectData() {
         ? JSON.parse(JSON.stringify(wb3AutoPilotResumeState)) : (aiWorkbench3State.wb3AutoPilotResumeState || null),
       savedAt: new Date().toISOString()
     };
+    if (ctx) ctx.aiWorkbench3State = wb3Pkg;
+    if (typeof fmeaData !== 'undefined' && fmeaData) fmeaData.aiWorkbench3State = wb3Pkg;
+    try {
+      localStorage.setItem('jost_fmea_wb3_state', JSON.stringify(wb3Pkg));
+    } catch (e) {}
+  }
+
+  // 1b. Package AI Workbench 4.0 State
+  if (typeof aiWorkbench4State !== 'undefined' && aiWorkbench4State) {
+    try {
+      const wb4Pkg = {
+        currentNodeId: aiWorkbench4State.currentNodeId || null,
+        currentStep: aiWorkbench4State.currentStep || 1,
+        executionMode: aiWorkbench4State.executionMode || 'MANUAL',
+        nodeDrawingData: JSON.parse(JSON.stringify(aiWorkbench4State.nodeDrawingData || {})),
+        nodeFunctions: JSON.parse(JSON.stringify(aiWorkbench4State.nodeFunctions || {})),
+        nodeFailures: JSON.parse(JSON.stringify(aiWorkbench4State.nodeFailures || {})),
+        nodeCauses: JSON.parse(JSON.stringify(aiWorkbench4State.nodeCauses || {})),
+        nodeEffects: JSON.parse(JSON.stringify(aiWorkbench4State.nodeEffects || {})),
+        nodeControls: JSON.parse(JSON.stringify(aiWorkbench4State.nodeControls || {})),
+        step5FmPointer: JSON.parse(JSON.stringify(aiWorkbench4State.step5FmPointer || {})),
+        updatedEffectsLibrary: JSON.parse(JSON.stringify(aiWorkbench4State.updatedEffectsLibrary || {})),
+        processedNodes: Array.from(aiWorkbench4State.processedNodes || []),
+        autoPilotConfig: (typeof aiWorkbench4State.autoPilotConfig === 'object' && aiWorkbench4State.autoPilotConfig)
+          ? JSON.parse(JSON.stringify(aiWorkbench4State.autoPilotConfig)) : null,
+        wb4AutoPilotResumeState: (typeof wb4AutoPilotResumeState !== 'undefined' && wb4AutoPilotResumeState)
+          ? JSON.parse(JSON.stringify(wb4AutoPilotResumeState)) : (aiWorkbench4State.wb4AutoPilotResumeState || null),
+        savedAt: new Date().toISOString()
+      };
+      if (ctx) ctx.aiWorkbench4State = wb4Pkg;
+      if (typeof fmeaData !== 'undefined' && fmeaData) fmeaData.aiWorkbench4State = wb4Pkg;
+      try {
+        localStorage.setItem('jost_fmea_wb4_state', JSON.stringify(wb4Pkg));
+      } catch (e) {}
+    } catch (e) {
+      console.warn('Failed to sync WB4 state:', e);
+    }
   }
 
   // 2. Package AI Workbench 2.0 State if present
   if (typeof aiWorkbench2State !== 'undefined' && aiWorkbench2State) {
     try {
-      fmeaData.aiWorkbench2State = JSON.parse(JSON.stringify(aiWorkbench2State));
+      const wb2Pkg = JSON.parse(JSON.stringify(aiWorkbench2State));
+      if (ctx) ctx.aiWorkbench2State = wb2Pkg;
+      if (typeof fmeaData !== 'undefined' && fmeaData) fmeaData.aiWorkbench2State = wb2Pkg;
     } catch (e) {}
   }
 }
 
 function restoreWorkbenchStateFromProjectData(sourceData) {
-  const data = sourceData || fmeaData;
-  // Always reset in-memory state first so previous file's data NEVER leaks into another file
-  resetWb3InMemoryState();
-  if (!data) return false;
-
-  const savedWb3 = data.aiWorkbench3State || data.workbench3State;
+  const data = sourceData || (typeof getActiveFmeaData === 'function' ? getActiveFmeaData() : null) || (typeof fmeaData !== 'undefined' ? fmeaData : null);
   let restored = false;
 
+  // Restore WB3
+  let savedWb3 = data ? (data.aiWorkbench3State || data.workbench3State) : null;
+  if (!savedWb3) {
+    try {
+      const localWb3 = localStorage.getItem('jost_fmea_wb3_state');
+      if (localWb3) savedWb3 = JSON.parse(localWb3);
+    } catch (e) {}
+  }
+
   if (savedWb3 && typeof savedWb3 === 'object' && typeof aiWorkbench3State !== 'undefined') {
-    aiWorkbench3State.currentNodeId = savedWb3.currentNodeId || null;
+    aiWorkbench3State.currentNodeId = savedWb3.currentNodeId || aiWorkbench3State.currentNodeId || null;
     aiWorkbench3State.currentStep = savedWb3.currentStep || 1;
     aiWorkbench3State.executionMode = savedWb3.executionMode || 'MANUAL';
     aiWorkbench3State.requirementsNeeded = !!savedWb3.requirementsNeeded;
@@ -26343,23 +33402,24 @@ function restoreWorkbenchStateFromProjectData(sourceData) {
     aiWorkbench3State.userControlsList = savedWb3.userControlsList || '';
     aiWorkbench3State.topLevelReqsProvided = !!savedWb3.topLevelReqsProvided;
 
-    aiWorkbench3State.nodeContexts = savedWb3.nodeContexts ? JSON.parse(JSON.stringify(savedWb3.nodeContexts)) : {};
-    aiWorkbench3State.nodeFunctions = savedWb3.nodeFunctions ? JSON.parse(JSON.stringify(savedWb3.nodeFunctions)) : {};
-    aiWorkbench3State.nodeFailures = savedWb3.nodeFailures ? JSON.parse(JSON.stringify(savedWb3.nodeFailures)) : {};
-    aiWorkbench3State.nodeCauses = savedWb3.nodeCauses ? JSON.parse(JSON.stringify(savedWb3.nodeCauses)) : {};
-    aiWorkbench3State.nodeControls = savedWb3.nodeControls ? JSON.parse(JSON.stringify(savedWb3.nodeControls)) : {};
-    aiWorkbench3State.nodeRequirements = savedWb3.nodeRequirements ? JSON.parse(JSON.stringify(savedWb3.nodeRequirements)) : {};
-    aiWorkbench3State.topLevelRequirements = savedWb3.topLevelRequirements ? JSON.parse(JSON.stringify(savedWb3.topLevelRequirements)) : {};
+    if (savedWb3.nodeContexts) aiWorkbench3State.nodeContexts = JSON.parse(JSON.stringify(savedWb3.nodeContexts));
+    if (savedWb3.nodeFunctions) aiWorkbench3State.nodeFunctions = JSON.parse(JSON.stringify(savedWb3.nodeFunctions));
+    if (savedWb3.nodeFailures) aiWorkbench3State.nodeFailures = JSON.parse(JSON.stringify(savedWb3.nodeFailures));
+    if (savedWb3.nodeCauses) aiWorkbench3State.nodeCauses = JSON.parse(JSON.stringify(savedWb3.nodeCauses));
+    if (savedWb3.nodeControls) aiWorkbench3State.nodeControls = JSON.parse(JSON.stringify(savedWb3.nodeControls));
+    if (savedWb3.nodeRequirements) aiWorkbench3State.nodeRequirements = JSON.parse(JSON.stringify(savedWb3.nodeRequirements));
+    if (savedWb3.topLevelRequirements) aiWorkbench3State.topLevelRequirements = JSON.parse(JSON.stringify(savedWb3.topLevelRequirements));
 
-    aiWorkbench3State.step4FmPointer = savedWb3.step4FmPointer ? JSON.parse(JSON.stringify(savedWb3.step4FmPointer)) : {};
-    aiWorkbench3State.step5FmPointer = savedWb3.step5FmPointer ? JSON.parse(JSON.stringify(savedWb3.step5FmPointer)) : {};
-    aiWorkbench3State.step6FmPointer = savedWb3.step6FmPointer ? JSON.parse(JSON.stringify(savedWb3.step6FmPointer)) : {};
+    if (savedWb3.step4FmPointer) aiWorkbench3State.step4FmPointer = JSON.parse(JSON.stringify(savedWb3.step4FmPointer));
+    if (savedWb3.step5FmPointer) aiWorkbench3State.step5FmPointer = JSON.parse(JSON.stringify(savedWb3.step5FmPointer));
+    if (savedWb3.step6FmPointer) aiWorkbench3State.step6FmPointer = JSON.parse(JSON.stringify(savedWb3.step6FmPointer));
 
-    aiWorkbench3State.updatedEffectsLibrary = savedWb3.updatedEffectsLibrary ? JSON.parse(JSON.stringify(savedWb3.updatedEffectsLibrary)) : {};
-    aiWorkbench3State.updatedCausesLibrary = savedWb3.updatedCausesLibrary ? JSON.parse(JSON.stringify(savedWb3.updatedCausesLibrary)) : {};
+    if (savedWb3.updatedEffectsLibrary) aiWorkbench3State.updatedEffectsLibrary = JSON.parse(JSON.stringify(savedWb3.updatedEffectsLibrary));
+    if (savedWb3.updatedCausesLibrary) aiWorkbench3State.updatedCausesLibrary = JSON.parse(JSON.stringify(savedWb3.updatedCausesLibrary));
 
-    const processedArr = Array.isArray(savedWb3.processedNodes) ? savedWb3.processedNodes : [];
-    aiWorkbench3State.processedNodes = new Set(processedArr);
+    if (Array.isArray(savedWb3.processedNodes)) {
+      aiWorkbench3State.processedNodes = new Set(savedWb3.processedNodes);
+    }
 
     if (savedWb3.autoPilotConfig) {
       aiWorkbench3State.autoPilotConfig = JSON.parse(JSON.stringify(savedWb3.autoPilotConfig));
@@ -26374,11 +33434,49 @@ function restoreWorkbenchStateFromProjectData(sourceData) {
     restored = true;
   }
 
-  const savedWb2 = data.aiWorkbench2State || data.workbench2State;
+  // Restore WB2
+  const savedWb2 = data ? (data.aiWorkbench2State || data.workbench2State) : null;
   if (savedWb2 && typeof savedWb2 === 'object' && typeof aiWorkbench2State !== 'undefined') {
     try {
       Object.assign(aiWorkbench2State, JSON.parse(JSON.stringify(savedWb2)));
     } catch (e) {}
+  }
+
+  // Restore WB4
+  let savedWb4 = data ? (data.aiWorkbench4State || data.workbench4State) : null;
+  if (!savedWb4) {
+    try {
+      const localWb4 = localStorage.getItem('jost_fmea_wb4_state');
+      if (localWb4) savedWb4 = JSON.parse(localWb4);
+    } catch (e) {}
+  }
+
+  if (savedWb4 && typeof savedWb4 === 'object' && typeof aiWorkbench4State !== 'undefined') {
+    try {
+      aiWorkbench4State.currentNodeId = savedWb4.currentNodeId || aiWorkbench4State.currentNodeId || null;
+      aiWorkbench4State.currentStep = savedWb4.currentStep || 1;
+      aiWorkbench4State.executionMode = savedWb4.executionMode || 'MANUAL';
+      if (savedWb4.nodeDrawingData) aiWorkbench4State.nodeDrawingData = JSON.parse(JSON.stringify(savedWb4.nodeDrawingData));
+      if (savedWb4.nodeFunctions) aiWorkbench4State.nodeFunctions = JSON.parse(JSON.stringify(savedWb4.nodeFunctions));
+      if (savedWb4.nodeFailures) aiWorkbench4State.nodeFailures = JSON.parse(JSON.stringify(savedWb4.nodeFailures));
+      if (savedWb4.nodeCauses) aiWorkbench4State.nodeCauses = JSON.parse(JSON.stringify(savedWb4.nodeCauses));
+      if (savedWb4.nodeEffects) aiWorkbench4State.nodeEffects = JSON.parse(JSON.stringify(savedWb4.nodeEffects));
+      if (savedWb4.nodeControls) aiWorkbench4State.nodeControls = JSON.parse(JSON.stringify(savedWb4.nodeControls));
+      if (savedWb4.step5FmPointer) aiWorkbench4State.step5FmPointer = JSON.parse(JSON.stringify(savedWb4.step5FmPointer));
+      if (savedWb4.updatedEffectsLibrary) aiWorkbench4State.updatedEffectsLibrary = JSON.parse(JSON.stringify(savedWb4.updatedEffectsLibrary));
+      if (Array.isArray(savedWb4.processedNodes)) {
+        aiWorkbench4State.processedNodes = new Set(savedWb4.processedNodes);
+      }
+      if (savedWb4.autoPilotConfig) aiWorkbench4State.autoPilotConfig = JSON.parse(JSON.stringify(savedWb4.autoPilotConfig));
+      if (savedWb4.wb4AutoPilotResumeState) {
+        aiWorkbench4State.wb4AutoPilotResumeState = JSON.parse(JSON.stringify(savedWb4.wb4AutoPilotResumeState));
+        if (typeof wb4AutoPilotResumeState !== 'undefined') wb4AutoPilotResumeState = JSON.parse(JSON.stringify(savedWb4.wb4AutoPilotResumeState));
+      }
+      aiWorkbench4State.lastSavedAt = savedWb4.savedAt || null;
+      restored = true;
+    } catch (e) {
+      console.warn('Failed to restore WB4 state:', e);
+    }
   }
 
   return restored;
@@ -26476,6 +33574,7 @@ function openAiWorkbench3Modal(targetNodeId = null) {
   renderWb3StructureNavBar();
   loadWb3NodeContext(activeId);
   setWb3AnalysisMode(aiWorkbench3State.analysisMode || 'moderate');
+  setWb3ExecutionMode(aiWorkbench3State.executionMode || 'MANUAL');
   openModal('aiWorkbench3Modal');
 
   // Intelligent Resume Step Determination
@@ -26521,46 +33620,295 @@ function closeAiWorkbench3Modal() {
   if (chk) chk.checked = !!viewCompleteFmeaMode;
 }
 
-function clearWb3NodeState() {
-  const nodeId = aiWorkbench3State.currentNodeId;
-  if (!nodeId) return;
-  const name = (aiWorkbench3State.nodeContexts[nodeId] || {}).itemName || nodeId;
-  if (!confirm(`⚠️ Clear ALL Workbench 3 data for "${name}"?\n\nThis will erase all functions, failure modes, effects, causes, controls, and requirements for this element. This CANNOT be undone.\n\nProceed?`)) return;
+function showWorkbenchClearScopeModal(wbType = 'WB3') {
+  const isWb4 = wbType === 'WB4';
+  const state = isWb4 ? aiWorkbench4State : aiWorkbench3State;
+  const nodeId = state.currentNodeId;
+  const ctx = getActiveFmeaData();
+  const node = (ctx && ctx.structure && nodeId) ? getStructureNodeById(ctx.structure, nodeId) : null;
+  const elementName = (node ? node.name : '') || (state.nodeContexts && state.nodeContexts[nodeId] ? state.nodeContexts[nodeId].itemName : '') || 'Current Element';
+  const currentStep = state.currentStep || 1;
 
-  // Wipe all per-node state
-  delete aiWorkbench3State.nodeContexts[nodeId];
-  delete aiWorkbench3State.nodeFunctions[nodeId];
-  delete aiWorkbench3State.nodeFailures[nodeId];
-  delete aiWorkbench3State.nodeCauses[nodeId];
-  delete aiWorkbench3State.nodeControls[nodeId];
-  delete aiWorkbench3State.nodeRequirements[nodeId];
-  delete aiWorkbench3State.updatedEffectsLibrary[nodeId];
-  delete aiWorkbench3State.updatedCausesLibrary[nodeId];
-  delete aiWorkbench3State.step4FmPointer[nodeId];
-  delete aiWorkbench3State.step5FmPointer[nodeId];
-  delete aiWorkbench3State.step6FmPointer[nodeId];
-  delete aiWorkbench3State.topLevelRequirements[nodeId];
-  aiWorkbench3State.processedNodes.delete(nodeId);
-  if (aiWorkbench3State.ingestedNodes) aiWorkbench3State.ingestedNodes.delete(nodeId);
-  aiWorkbench3State.requirementsNeeded = false;
-  aiWorkbench3State.controlsListProvided = false;
-  aiWorkbench3State.userControlsList = '';
+  const stepLabelsWb3 = {
+    1: 'Step 1: Drawing & Context',
+    2: 'Step 2: Functions Analysis',
+    3: 'Step 3: Failure Modes Analysis',
+    4: 'Step 4: Failure Effects & Network Linkage',
+    5: 'Step 5: Root Causes Analysis',
+    6: 'Step 6: Prevention & Detection Controls',
+    7: 'Step 7: AIAG-VDA Risk Matrix',
+    8: 'Step 8: Final Dashboard'
+  };
 
-  // Reset the Step 1 form fields
-  ['wb3InputItemName','wb3InputPartNumber','wb3InputItemDesc','wb3InputMaterial','wb3InputGdt','wb3InputEnvironment','wb3InputControlsList','wb3Step1TopReqsInput'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  const chk = document.getElementById('wb3ChkRequirementsNeeded');
-  if (chk) chk.checked = false;
-  const topReqChk = document.getElementById('wb3ChkTopLevelReqs');
-  if (topReqChk) topReqChk.checked = false;
-  toggleWb3TopReqsInput(false);
-  document.querySelectorAll('.wb3-joint-chk').forEach(c => { c.checked = false; });
+  const stepLabelsWb4 = {
+    1: 'Step 1: Drawing & Process Context',
+    2: 'Step 2: Process Functions',
+    3: 'Step 3: Process Failure Modes',
+    4: 'Step 4: Characteristic Causes',
+    5: 'Step 5: Failure Effects & Stakeholder Impact',
+    6: 'Step 6: Prevention & Detection Controls',
+    7: 'Step 7: Risk Matrix',
+    8: 'Step 8: Final Dashboard'
+  };
 
-  goToWb3Step(1);
-  if (typeof showToast === 'function') showToast(`🗑️ WB3 data cleared for "${name}". Starting fresh from Step 1.`, 'info');
+  const stepLabels = isWb4 ? stepLabelsWb4 : stepLabelsWb3;
+  const activeStepLabel = stepLabels[currentStep] || `Step ${currentStep}`;
+
+  // Remove existing modal if any
+  const existing = document.getElementById('wbClearScopeModal');
+  if (existing) existing.remove();
+
+  const modalHtml = `
+    <div id="wbClearScopeModal" style="position:fixed; inset:0; z-index:999999; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:16px;">
+      <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; max-width:540px; width:100%; box-shadow:0 25px 50px -12px rgba(0,0,0,0.7); overflow:hidden; font-family:inherit;">
+        <!-- Header -->
+        <div style="background:#1e293b; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #334155;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:18px;">🗑️</span>
+            <div>
+              <div style="font-size:14px; font-weight:800; color:#f8fafc;">Clear Data — AI Workbench ${isWb4 ? '4.0' : '3.0'}</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:2px;">Target: <strong style="color:#38bdf8;">${escapeHtml(elementName)}</strong> (Currently on ${activeStepLabel})</div>
+            </div>
+          </div>
+          <button type="button" onclick="document.getElementById('wbClearScopeModal').remove()" style="background:transparent; border:none; color:#94a3b8; font-size:18px; cursor:pointer; padding:4px 8px; border-radius:4px; line-height:1;">✕</button>
+        </div>
+
+        <!-- Body -->
+        <div style="padding:18px; display:flex; flex-direction:column; gap:12px;">
+          <div style="font-size:12px; color:#cbd5e1; font-weight:600;">Select the scope of data you want to clear:</div>
+
+          <!-- Option 1: Current Step Only -->
+          <label style="display:flex; gap:12px; padding:12px 14px; background:#1e293b; border:2px solid #334155; border-radius:8px; cursor:pointer; transition:all 0.15s ease;" onmouseover="this.style.borderColor='#38bdf8'" onmouseout="if(!this.querySelector('input').checked) this.style.borderColor='#334155'">
+            <input type="radio" name="wbClearScopeRadio" value="step" checked style="margin-top:3px; accent-color:#38bdf8;">
+            <div>
+              <div style="font-size:12.5px; font-weight:700; color:#38bdf8;">🎯 Current Step Only (${activeStepLabel})</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:3px; line-height:1.4;">Clear data only for the active step of this element. All other completed steps (before and after) remain preserved.</div>
+            </div>
+          </label>
+
+          <!-- Option 2: All Steps for this Element -->
+          <label style="display:flex; gap:12px; padding:12px 14px; background:#1e293b; border:2px solid #334155; border-radius:8px; cursor:pointer; transition:all 0.15s ease;" onmouseover="this.style.borderColor='#f59e0b'" onmouseout="if(!this.querySelector('input').checked) this.style.borderColor='#334155'">
+            <input type="radio" name="wbClearScopeRadio" value="element" style="margin-top:3px; accent-color:#f59e0b;">
+            <div>
+              <div style="font-size:12.5px; font-weight:700; color:#fbbf24;">📦 All Steps for Current Element ("${escapeHtml(elementName)}")</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:3px; line-height:1.4;">Wipe all functions, failure modes, effects, causes, controls, and drawings for this element only. Restarts this element at Step 1.</div>
+            </div>
+          </label>
+
+          <!-- Option 3: All Components and Elements -->
+          <label style="display:flex; gap:12px; padding:12px 14px; background:#1e293b; border:2px solid #334155; border-radius:8px; cursor:pointer; transition:all 0.15s ease;" onmouseover="this.style.borderColor='#ef4444'" onmouseout="if(!this.querySelector('input').checked) this.style.borderColor='#334155'">
+            <input type="radio" name="wbClearScopeRadio" value="all_elements" style="margin-top:3px; accent-color:#ef4444;">
+            <div>
+              <div style="font-size:12.5px; font-weight:700; color:#f87171;">🌐 All Components & Elements (Entire Workbench)</div>
+              <div style="font-size:11px; color:#94a3b8; margin-top:3px; line-height:1.4;">Wipe all workbench progress across EVERY structure element in the project. Restarts the entire workbench clean from Step 1.</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Footer -->
+        <div style="background:#1e293b; padding:12px 18px; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #334155;">
+          <button type="button" onclick="document.getElementById('wbClearScopeModal').remove()" style="padding:7px 16px; background:#334155; color:#cbd5e1; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">Cancel</button>
+          <button type="button" onclick="executeWorkbenchClearScope('${wbType}')" style="padding:7px 18px; background:#dc2626; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">🗑️ Confirm & Clear</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
+
+function executeWorkbenchClearScope(wbType = 'WB3') {
+  const modal = document.getElementById('wbClearScopeModal');
+  const selectedRadio = modal ? modal.querySelector('input[name="wbClearScopeRadio"]:checked') : null;
+  const scope = selectedRadio ? selectedRadio.value : 'step';
+  if (modal) modal.remove();
+
+  if (wbType === 'WB4') {
+    executeWb4ClearScope(scope);
+  } else {
+    executeWb3ClearScope(scope);
+  }
+}
+
+function executeWb3ClearScope(scope) {
+  const nodeId = aiWorkbench3State.currentNodeId;
+  const currentStep = aiWorkbench3State.currentStep || 1;
+  const ctx = getActiveFmeaData();
+  const node = (ctx && ctx.structure && nodeId) ? getStructureNodeById(ctx.structure, nodeId) : null;
+  const elementName = (node ? node.name : '') || (aiWorkbench3State.nodeContexts[nodeId] ? aiWorkbench3State.nodeContexts[nodeId].itemName : '') || 'Element';
+
+  if (scope === 'step') {
+    if (currentStep === 1) {
+      delete aiWorkbench3State.nodeContexts[nodeId];
+      delete aiWorkbench3State.nodeRequirements[nodeId];
+      ['wb3InputItemName','wb3InputPartNumber','wb3InputItemDesc','wb3InputMaterial','wb3InputGdt','wb3InputEnvironment','wb3InputControlsList','wb3Step1TopReqsInput'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      loadWb3NodeContext(nodeId);
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 1 Drawing Context for "${elementName}".`, 'info');
+    } else if (currentStep === 2) {
+      delete aiWorkbench3State.nodeFunctions[nodeId];
+      renderWb3FunctionsTable();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 2 Functions for "${elementName}".`, 'info');
+    } else if (currentStep === 3) {
+      delete aiWorkbench3State.nodeFailures[nodeId];
+      renderWb3FailureModesList();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 3 Failure Modes for "${elementName}".`, 'info');
+    } else if (currentStep === 4) {
+      const fms = aiWorkbench3State.nodeFailures[nodeId] || [];
+      fms.forEach(f => { delete f.effectsList; delete f.linkedHigherFailureId; });
+      delete aiWorkbench3State.updatedEffectsLibrary[nodeId];
+      aiWorkbench3State.step4FmPointer[nodeId] = 0;
+      renderWb3Step4MicroNav();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 4 Effects & Linkages for "${elementName}".`, 'info');
+    } else if (currentStep === 5) {
+      delete aiWorkbench3State.nodeCauses[nodeId];
+      delete aiWorkbench3State.updatedCausesLibrary[nodeId];
+      aiWorkbench3State.step5FmPointer[nodeId] = 0;
+      renderWb3Step5MicroNav();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 5 Root Causes for "${elementName}".`, 'info');
+    } else if (currentStep === 6) {
+      delete aiWorkbench3State.nodeControls[nodeId];
+      aiWorkbench3State.step6FmPointer[nodeId] = 0;
+      renderWb3Step6MicroNav();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 6 Controls for "${elementName}".`, 'info');
+    } else if (currentStep >= 7) {
+      updateWb3Step8Dashboard();
+      if (typeof showToast === 'function') showToast(`🗑️ Refreshed dashboard for "${elementName}".`, 'info');
+    }
+  } else if (scope === 'element') {
+    delete aiWorkbench3State.nodeContexts[nodeId];
+    delete aiWorkbench3State.nodeFunctions[nodeId];
+    delete aiWorkbench3State.nodeFailures[nodeId];
+    delete aiWorkbench3State.nodeCauses[nodeId];
+    delete aiWorkbench3State.nodeControls[nodeId];
+    delete aiWorkbench3State.nodeRequirements[nodeId];
+    delete aiWorkbench3State.updatedEffectsLibrary[nodeId];
+    delete aiWorkbench3State.updatedCausesLibrary[nodeId];
+    delete aiWorkbench3State.step4FmPointer[nodeId];
+    delete aiWorkbench3State.step5FmPointer[nodeId];
+    delete aiWorkbench3State.step6FmPointer[nodeId];
+    delete aiWorkbench3State.topLevelRequirements[nodeId];
+    aiWorkbench3State.processedNodes.delete(nodeId);
+    if (aiWorkbench3State.ingestedNodes) aiWorkbench3State.ingestedNodes.delete(nodeId);
+    ['wb3InputItemName','wb3InputPartNumber','wb3InputItemDesc','wb3InputMaterial','wb3InputGdt','wb3InputEnvironment','wb3InputControlsList','wb3Step1TopReqsInput'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    goToWb3Step(1);
+    if (typeof showToast === 'function') showToast(`🗑️ Cleared ALL steps for "${elementName}". Restarting at Step 1.`, 'info');
+  } else if (scope === 'all_elements') {
+    aiWorkbench3State.nodeContexts = {};
+    aiWorkbench3State.nodeFunctions = {};
+    aiWorkbench3State.nodeFailures = {};
+    aiWorkbench3State.nodeCauses = {};
+    aiWorkbench3State.nodeControls = {};
+    aiWorkbench3State.nodeRequirements = {};
+    aiWorkbench3State.updatedEffectsLibrary = {};
+    aiWorkbench3State.updatedCausesLibrary = {};
+    aiWorkbench3State.step4FmPointer = {};
+    aiWorkbench3State.step5FmPointer = {};
+    aiWorkbench3State.step6FmPointer = {};
+    aiWorkbench3State.topLevelRequirements = {};
+    aiWorkbench3State.processedNodes = new Set();
+    aiWorkbench3State.ingestedNodes = new Set();
+    ['wb3InputItemName','wb3InputPartNumber','wb3InputItemDesc','wb3InputMaterial','wb3InputGdt','wb3InputEnvironment','wb3InputControlsList','wb3Step1TopReqsInput'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    goToWb3Step(1);
+    if (typeof showToast === 'function') showToast('🗑️ Cleared Workbench 3.0 data for ALL components and elements.', 'info');
+  }
+
+  if (typeof syncWorkbenchStateToProjectData === 'function') syncWorkbenchStateToProjectData();
+}
+
+function executeWb4ClearScope(scope) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const currentStep = aiWorkbench4State.currentStep || 1;
+  const ctx = getActiveFmeaData();
+  const node = (ctx && ctx.structure && nodeId) ? getStructureNodeById(ctx.structure, nodeId) : null;
+  const elementName = (node ? node.name : '') || (aiWorkbench4State.nodeContexts && aiWorkbench4State.nodeContexts[nodeId] ? aiWorkbench4State.nodeContexts[nodeId].itemName : '') || 'Element';
+
+  if (scope === 'step') {
+    if (currentStep === 1) {
+      if (aiWorkbench4State.nodeDrawingData) delete aiWorkbench4State.nodeDrawingData[nodeId];
+      if (aiWorkbench4State.nodeContexts) delete aiWorkbench4State.nodeContexts[nodeId];
+      const el = document.getElementById('wb4RawDrawingInput'); if (el) el.value = '';
+      if (typeof loadWb4NodeContext === 'function') loadWb4NodeContext(nodeId);
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 1 Drawing Context for "${elementName}".`, 'info');
+    } else if (currentStep === 2) {
+      if (aiWorkbench4State.nodeFunctions) delete aiWorkbench4State.nodeFunctions[nodeId];
+      if (typeof renderWb4FunctionsTable === 'function') renderWb4FunctionsTable();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 2 Functions for "${elementName}".`, 'info');
+    } else if (currentStep === 3) {
+      if (aiWorkbench4State.nodeFailures) delete aiWorkbench4State.nodeFailures[nodeId];
+      if (typeof renderWb4FailureModesList === 'function') renderWb4FailureModesList();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 3 Failure Modes for "${elementName}".`, 'info');
+    } else if (currentStep === 4) {
+      if (aiWorkbench4State.nodeCauses) delete aiWorkbench4State.nodeCauses[nodeId];
+      if (aiWorkbench4State.step4FmPointer) aiWorkbench4State.step4FmPointer[nodeId] = 0;
+      if (typeof renderWb4Step4MicroNav === 'function') renderWb4Step4MicroNav();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 4 Characteristic Causes for "${elementName}".`, 'info');
+    } else if (currentStep === 5) {
+      if (aiWorkbench4State.nodeEffects) delete aiWorkbench4State.nodeEffects[nodeId];
+      if (aiWorkbench4State.step5FmPointer) aiWorkbench4State.step5FmPointer[nodeId] = 0;
+      if (typeof renderWb4Step5MicroNav === 'function') renderWb4Step5MicroNav();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 5 Failure Effects for "${elementName}".`, 'info');
+    } else if (currentStep === 6) {
+      if (aiWorkbench4State.nodeControls) delete aiWorkbench4State.nodeControls[nodeId];
+      if (aiWorkbench4State.step6FmPointer) aiWorkbench4State.step6FmPointer[nodeId] = 0;
+      if (typeof renderWb4Step6MicroNav === 'function') renderWb4Step6MicroNav();
+      if (typeof showToast === 'function') showToast(`🗑️ Cleared Step 6 Controls for "${elementName}".`, 'info');
+    } else if (currentStep >= 7) {
+      if (typeof updateWb4Step8Dashboard === 'function') updateWb4Step8Dashboard();
+      if (typeof showToast === 'function') showToast(`🗑️ Refreshed dashboard for "${elementName}".`, 'info');
+    }
+  } else if (scope === 'element') {
+    if (aiWorkbench4State.nodeDrawingData) delete aiWorkbench4State.nodeDrawingData[nodeId];
+    if (aiWorkbench4State.nodeContexts) delete aiWorkbench4State.nodeContexts[nodeId];
+    if (aiWorkbench4State.nodeFunctions) delete aiWorkbench4State.nodeFunctions[nodeId];
+    if (aiWorkbench4State.nodeFailures) delete aiWorkbench4State.nodeFailures[nodeId];
+    if (aiWorkbench4State.nodeCauses) delete aiWorkbench4State.nodeCauses[nodeId];
+    if (aiWorkbench4State.nodeEffects) delete aiWorkbench4State.nodeEffects[nodeId];
+    if (aiWorkbench4State.nodeControls) delete aiWorkbench4State.nodeControls[nodeId];
+    if (aiWorkbench4State.step4FmPointer) delete aiWorkbench4State.step4FmPointer[nodeId];
+    if (aiWorkbench4State.step5FmPointer) delete aiWorkbench4State.step5FmPointer[nodeId];
+    if (aiWorkbench4State.step6FmPointer) delete aiWorkbench4State.step6FmPointer[nodeId];
+    if (aiWorkbench4State.processedNodes) aiWorkbench4State.processedNodes.delete(nodeId);
+    if (aiWorkbench4State.ingestedNodes) aiWorkbench4State.ingestedNodes.delete(nodeId);
+    const el = document.getElementById('wb4RawDrawingInput'); if (el) el.value = '';
+    goToWb4Step(1);
+    if (typeof showToast === 'function') showToast(`🗑️ Cleared ALL steps for "${elementName}". Restarting at Step 1.`, 'info');
+  } else if (scope === 'all_elements') {
+    aiWorkbench4State.nodeDrawingData = {};
+    aiWorkbench4State.nodeContexts = {};
+    aiWorkbench4State.nodeFunctions = {};
+    aiWorkbench4State.nodeFailures = {};
+    aiWorkbench4State.nodeCauses = {};
+    aiWorkbench4State.nodeEffects = {};
+    aiWorkbench4State.nodeControls = {};
+    aiWorkbench4State.step4FmPointer = {};
+    aiWorkbench4State.step5FmPointer = {};
+    aiWorkbench4State.step6FmPointer = {};
+    aiWorkbench4State.processedNodes = new Set();
+    aiWorkbench4State.ingestedNodes = new Set();
+    const el = document.getElementById('wb4RawDrawingInput'); if (el) el.value = '';
+    goToWb4Step(1);
+    if (typeof showToast === 'function') showToast('🗑️ Cleared Workbench 4.0 data for ALL components and elements.', 'info');
+  }
+
+  if (typeof syncWorkbenchStateToProjectData === 'function') syncWorkbenchStateToProjectData();
+}
+
+function clearWb3NodeState() {
+  showWorkbenchClearScopeModal('WB3');
+}
+
+window.showWorkbenchClearScopeModal = showWorkbenchClearScopeModal;
+window.executeWorkbenchClearScope = executeWorkbenchClearScope;
+window.executeWb3ClearScope = executeWb3ClearScope;
+window.executeWb4ClearScope = executeWb4ClearScope;
+window.clearWb3NodeState = clearWb3NodeState;
+window.clearWb4NodeState = clearWb4NodeState;
 
 function renderWb3StructureNavBar() {
   const nav = document.getElementById('wb3StructureNavBar');
@@ -26705,8 +34053,12 @@ function loadWb3NodeContext(nodeId) {
     }
   }
 
-  const savedJoints = saved.joints || ['Welding', 'Nut-Bolt'];
+  const savedJoints = Array.isArray(saved.joints) ? saved.joints : [];
   document.querySelectorAll('.wb3-joint-chk').forEach(chk => { chk.checked = savedJoints.includes(chk.value); });
+  const wb3CustomJointInput = document.getElementById('wb3CustomJointCharsInput');
+  if (wb3CustomJointInput) {
+    wb3CustomJointInput.value = saved.customJointChars || '';
+  }
 
   // Load component characteristics and types strictly from saved state
   const savedCompChars = Array.isArray(saved.componentCharacteristics) ? saved.componentCharacteristics : (Array.isArray(saved.componentTypes) ? saved.componentTypes : []);
@@ -26729,7 +34081,20 @@ function loadWb3NodeContext(nodeId) {
   });
   const customFeaturesInput = document.getElementById('wb3CompCustomFeaturesInput');
   if (customFeaturesInput) {
-    customFeaturesInput.value = saved.customComponentFeatures || '';
+    customFeaturesInput.value = '';
+  }
+  window.wb3ComponentCustomFeatures = [];
+  if (saved.customComponentFeatures) {
+    saved.customComponentFeatures.split(/[,;\n]/).forEach(t => {
+      const tr = t.trim();
+      if (tr) window.wb3ComponentCustomFeatures.push({ name: tr, spec: 'Custom feature specifications & tolerance limits' });
+    });
+  }
+  if (Array.isArray(saved.customComponentFeaturesList)) {
+    window.wb3ComponentCustomFeatures = saved.customComponentFeaturesList.map(f => typeof f === 'string' ? { name: f, spec: 'Custom feature specifications & tolerance limits' } : f);
+  }
+  if (typeof renderWb3ConsideredCharacteristicsTable === 'function') {
+    renderWb3ConsideredCharacteristicsTable();
   }
 
   // Root Level Strict Function Types Box (Root Element Only)
@@ -26790,6 +34155,7 @@ function saveCurrentWb3Inputs() {
 
   const joints = [];
   document.querySelectorAll('.wb3-joint-chk:checked').forEach(chk => joints.push(chk.value));
+  const customJointChars = document.getElementById('wb3CustomJointCharsInput')?.value?.trim() || prevCtx.customJointChars || '';
 
   const componentTypes = [];
   let customComponentTypes = '';
@@ -26801,7 +34167,8 @@ function saveCurrentWb3Inputs() {
     document.querySelectorAll('.wb3-comp-type-chk:checked').forEach(chk => componentTypes.push(chk.value));
     customComponentTypes = document.getElementById('wb3CompCustomTypesInput')?.value?.trim() || '';
     document.querySelectorAll('.wb3-comp-feature-chk:checked').forEach(chk => componentFeatures.push(chk.value));
-    customComponentFeatures = document.getElementById('wb3CompCustomFeaturesInput')?.value?.trim() || '';
+    const customFeatsRaw = (window.wb3ComponentCustomFeatures || []).map(f => typeof f === 'string' ? f : f.name).join(', ');
+    customComponentFeatures = customFeatsRaw;
     componentCharacteristics = Array.isArray(window.wb3ComponentSelectedChars) ? [...window.wb3ComponentSelectedChars] : [];
     if (componentCharacteristics.length > 0 && componentTypes.length === 0) {
       componentCharacteristics.forEach(c => { if (!componentTypes.includes(c.name)) componentTypes.push(c.name); });
@@ -26815,9 +34182,11 @@ function saveCurrentWb3Inputs() {
 
   aiWorkbench3State.nodeContexts[nodeId] = {
     itemName, partNumber, itemType, itemDesc, joints,
+    customJointChars,
     componentTypes, customComponentTypes,
     componentCharacteristics,
     componentFeatures, customComponentFeatures,
+    customComponentFeaturesList: window.wb3ComponentCustomFeatures || [],
     material, gdt, env,
     controlsList, requirementsNeeded,
     topReqsRaw, topReqsParsed,
@@ -27040,10 +34409,12 @@ function setWb3ExecutionMode(mode) {
   aiWorkbench3State.executionMode = mode;
   const btnManual = document.getElementById('wb3ModeBtnManual');
   const btnApi = document.getElementById('wb3ModeBtnApi');
+  const compArea = document.getElementById('wb3CompanionArea');
 
   if (mode === 'API') {
     if (btnApi) { btnApi.style.background = '#7c3aed'; btnApi.style.color = '#fff'; }
     if (btnManual) { btnManual.style.background = 'transparent'; btnManual.style.color = '#94a3b8'; }
+    if (compArea) compArea.style.display = 'none';
     ['Step2', 'Step3'].forEach(step => {
       const manArea = document.getElementById(`wb3${step}ManualArea`);
       const apiArea = document.getElementById(`wb3${step}ApiArea`);
@@ -27056,9 +34427,13 @@ function setWb3ExecutionMode(mode) {
     if (s5api) s5api.style.display = 'inline-flex';
     const s6api = document.getElementById('wb3Step6ApiAllBtn');
     if (s6api) s6api.style.display = 'inline-flex';
+    if (typeof showToast === 'function') {
+      showToast('⚡ WB3 Mode: Direct API (Automatic execution)', 'info');
+    }
   } else {
     if (btnManual) { btnManual.style.background = '#0284c7'; btnManual.style.color = '#fff'; }
     if (btnApi) { btnApi.style.background = 'transparent'; btnApi.style.color = '#94a3b8'; }
+    if (compArea) compArea.style.display = 'inline-flex';
     ['Step2', 'Step3'].forEach(step => {
       const manArea = document.getElementById(`wb3${step}ManualArea`);
       const apiArea = document.getElementById(`wb3${step}ApiArea`);
@@ -27071,6 +34446,9 @@ function setWb3ExecutionMode(mode) {
     if (s5api) s5api.style.display = 'none';
     const s6api = document.getElementById('wb3Step6ApiAllBtn');
     if (s6api) s6api.style.display = 'none';
+    if (typeof showToast === 'function') {
+      showToast('📋 WB3 Mode: Manual (Chat Companion / Prompts)', 'info');
+    }
   }
 }
 
@@ -27714,14 +35092,18 @@ function generateWb3Step4FmPromptText(nodeId, fmIndex, isFirstCall) {
   const isRoot = (ctx && ctx.structure && node.id === ctx.structure.id);
   const parentNode = (ctx && ctx.structure && !isRoot) ? getParentStructureNode(ctx.structure, nodeId) : null;
 
-  // Current node functions (what this FM violates)
+  // Specific function violated by this failure mode
   const nodeFnsFromCtx = (ctx && ctx.functions) ? (ctx.functions || []).filter(f => f.structId === nodeId) : [];
   const nodeFnsFromState = aiWorkbench3State.nodeFunctions[nodeId] || [];
-  const nodeFns = nodeFnsFromCtx.length > 0
+  const allNodeFns = nodeFnsFromCtx.length > 0
     ? nodeFnsFromCtx
     : nodeFnsFromState.map(f => ({ id: f.tempId || f.id, name: f.name, type: f.type }));
-  const nodeFnsText = nodeFns.length > 0
-    ? '\nFunctions violated: ' + nodeFns.map(f => `[${f.id || f.tempId}] "${f.name}"`).join(', ') + '\n'
+
+  const targetFnId = fm.functionTempId || fm.functionId || fm.funcId || fm.fnTempId || '';
+  const linkedFn = allNodeFns.find(f => (f.tempId && f.tempId === targetFnId) || (f.id && f.id === targetFnId) || (fm.functionName && f.name === fm.functionName));
+  const violatedFns = linkedFn ? [linkedFn] : (targetFnId ? allNodeFns.filter(f => (f.tempId && f.tempId === targetFnId) || (f.id && f.id === targetFnId)) : (allNodeFns.length > 0 ? [allNodeFns[0]] : []));
+  const nodeFnsText = violatedFns.length > 0
+    ? '\nFunction violated: ' + violatedFns.map(f => `[${f.id || f.tempId}] "${f.name}"`).join(', ') + '\n'
     : '';
 
   // ── ROOT ELEMENT ────────────────────────────────────────────────────────────
@@ -27748,10 +35130,17 @@ TOP-LEVEL SYSTEMIC EFFECTS CRITERIA (SUBJECT TO APPLICABILITY FOR THIS SPECIFIC 
 3. Own / Component Manufacturing Plant: scrap / quarantine / sorting (subject to applicability)
 *Do NOT invent fake or forced plant entries if the failure only impacts the vehicle end user.*
 
-EXACT AIAG-VDA SEVERITY (S) SCALE:
-- S = 10: Safety-Related Effect (crash hazard, injury to occupants/pedestrians, catastrophic loss of control without warning).
-- S = 9: Regulatory Non-Compliance | S = 8-7: Primary Function Loss/Degradation
-- S = 6-5: Secondary Function Loss/Degradation | S = 4-3: Customer Annoyance | S = 2-1: Minor / No Effect
+STRICTLY FOLLOW AIAG-VDA SEVERITY (S) SCALE AS PER BELOW RULE:
+   - S=10: Safety-Related Effect (crash hazard, injury, catastrophic loss of control).
+   - S=9: Regulatory Non-Compliance (fails government standards/mandates).
+   - S=8: Failure of Primary Function (loss of main function, vehicle disabled, stranded).
+   - S=7: Degradation of Primary Function (limp-home mode, sluggish steering).
+   - S=6: Failure of Secondary Function (loss of HVAC, wipers, lighting).
+   - S=5: Degradation of Secondary Function (reduced cooling, noisy wipers).
+   - S=4: Moderate Annoyance (>75% of customers).
+   - S=3: Minor Annoyance (~50% of customers).
+   - S=2: Very Minor Annoyance (<25%).
+   - S=1: No Effect.
 ${getWb3AnalysisModeDirectives(4)}
 CRITICAL RULES:
 1. Multiple effects per level permitted. Keep each effect standalone (no clubbing).
@@ -27835,12 +35224,32 @@ OUTPUT ONLY VALID JSON:
     ? parentFnsMap[parentFnKeys[0]].name : 'Parent Function';
 
   if (!isFirstCall) {
-    return `DFMEA Step 4 N+1 Linkage — continuation.
-FM ${fmIndex + 1}/${fms.length}: [${fm.tempId}] "${fm.name}" | ${fm.failureType}${nodeFnsText}
-N+1 FAILURE MODES:
-${parentHierarchyText}
-Apply same linkage rules as FM 1. Output JSON only:
-{ "failureTempId": "${fm.tempId}", "isRootSystem": false, "linkedParentFailureModes": [{ "parentFmId": "${exFirstFm}", "parentFmName": "${exFirstFmName}", "parentFunction": "${exFirstFnName}", "chainSeverity": 0 }] }`;
+    return `DFMEA Step 4 N+1 Failure Network Linkage — continuation.
+FOCUSED ELEMENT (Level N): "${userCtx.itemName || node.name}"
+SPECIFIC FAILURE MODE UNDER ANALYSIS (FM ${fmIndex + 1}/${fms.length}):
+- Temp ID: "${fm.tempId}"
+- Name: "${fm.name}"
+- Failure Type: "${fm.failureType}"${nodeFnsText}
+PARENT ELEMENT (Level N+1): "${parentNode.name}" [${parentNode.partNo || 'PN-001'}]
+
+🧠 MEMORY RECALL INSTRUCTION:
+Refer to the N+1 Parent Functions and Failure Modes provided in the initial prompt and stored in your active session memory.
+Identify which N+1 parent failure mode(s) from memory are PHYSICALLY CAUSED by this component failure mode ("${fm.name}").
+Apply the same AIAG-VDA failure linkage and multi-chain severity rules. ZERO new effect text generation.
+
+OUTPUT ONLY VALID JSON:
+{
+  "failureTempId": "${fm.tempId}",
+  "isRootSystem": false,
+  "linkedParentFailureModes": [
+    {
+      "parentFmId": "${exFirstFm}",
+      "parentFmName": "${exFirstFmName}",
+      "parentFunction": "${exFirstFnName}",
+      "chainSeverity": 0
+    }
+  ]
+}`;
   }
 
   return `You are an Automotive Reliability & Safety Engineer performing AIAG-VDA DFMEA Step 4 Failure Network Linkage.
@@ -27857,6 +35266,10 @@ AVAILABLE N+1 PARENT FUNCTIONS & FAILURE MODES (THE ONLY VALID EFFECTS FOR LEVEL
 Below is the verified hierarchy of functions and failure modes of the parent element, including their total upstream chain severity:
 
 ${parentHierarchyText}
+
+🧠 MEMORY & LINKAGE CONTEXT (AI: STORE IN SESSION MEMORY):
+Store all of the above N+1 Parent Functions and Failure Modes in your active session context.
+For all subsequent failure modes in this loop/session, you must link directly against these in-memory N+1 failure mode IDs without requiring them to be re-transmitted.
 
 🔴 STRICT AIAG-VDA FAILURE NETWORK RULES:
 1. ZERO NEW EFFECT GENERATION:
@@ -27906,20 +35319,82 @@ function parseWb3Step4FmJson(nodeId, fmIndex) {
     const parsed = JSON.parse(raw);
 
     const fms = aiWorkbench3State.nodeFailures[nodeId] || [];
-    const fm = fms[fmIndex];
-    if (!fm) return;
+    if (fms.length === 0) return;
 
     const ctx = getActiveFmeaData();
     const node = (ctx && ctx.structure) ? getStructureNodeById(ctx.structure, nodeId) : null;
     const isRoot = (ctx && ctx.structure && node && node.id === ctx.structure.id);
     const parentNode = (ctx && ctx.structure && !isRoot) ? getParentStructureNode(ctx.structure, nodeId) : null;
+    const pNodeId = parentNode ? parentNode.id : '';
+
+    // Check if Claude returned a batch array of multiple failure modes
+    const itemsArray = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.failureModes) ? parsed.failureModes : (Array.isArray(parsed.results) ? parsed.results : null));
+
+    if (itemsArray && itemsArray.length > 1 && (itemsArray[0].linkedParentFailureModes || itemsArray[0].effects || itemsArray[0].failureTempId)) {
+      let parsedCount = 0;
+      itemsArray.forEach((item, idx) => {
+        let targetFm = fms.find(f => f.tempId === item.failureTempId || f.id === item.failureTempId);
+        if (!targetFm && idx < fms.length) targetFm = fms[idx];
+        if (!targetFm) return;
+
+        let rawEffects = [];
+        if (Array.isArray(item.linkedParentFailureModes) && item.linkedParentFailureModes.length > 0) {
+          rawEffects = item.linkedParentFailureModes.map((link, j) => {
+            const chainSev = getUpstreamFailureChainSeverity(pNodeId, link.parentFmId) || parseInt(link.chainSeverity || link.severity, 10) || 5;
+            return {
+              tempId: link.parentFmId || `eff-link-${Date.now()}-${j + 1}`,
+              category: 'N+1 Parent Failure Mode',
+              desc: link.parentFmName || link.desc || link.name || 'Parent Failure Mode',
+              severity: chainSev,
+              existingLibraryId: link.parentFmId || '',
+              parentFunction: link.parentFunction || '',
+              causalRationale: link.causalRationale || ''
+            };
+          });
+        } else if (Array.isArray(item.effects)) {
+          rawEffects = item.effects;
+        }
+
+        if (rawEffects.length > 0) {
+          const prefix = `eff-wb3-${nodeId.slice(0, 4)}-${targetFm.tempId.replace(/[^a-zA-Z0-9]/g, '')}-`;
+          targetFm.effectsList = rawEffects.map((e, j) => {
+            let sev = parseInt(e.severity, 10) || 5;
+            if (e.category === 'N+1 Parent Failure Mode' || !isRoot) {
+              const upstream = getUpstreamFailureChainSeverity(pNodeId, e.existingLibraryId || e.tempId);
+              if (upstream > sev) sev = upstream;
+            }
+            return {
+              tempId: e.tempId || `${prefix}${j + 1}`,
+              category: e.category || (!isRoot ? 'N+1 Parent Failure Mode' : 'End User Level'),
+              desc: e.desc || e.description || '',
+              severity: sev,
+              existingLibraryId: e.existingLibraryId || '',
+              parentFunction: e.parentFunction || '',
+              causalRationale: e.causalRationale || ''
+            };
+          });
+          targetFm.severity = Math.max(...targetFm.effectsList.map(e => e.severity));
+          if (targetFm.effectsList.length > 0 && targetFm.effectsList[0].existingLibraryId) {
+            targetFm.linkedHigherFailureId = targetFm.effectsList[0].existingLibraryId;
+          }
+          parsedCount++;
+        }
+      });
+
+      if (input) input.value = '';
+      if (typeof showToast === 'function') showToast(`🎉 Batch parsed effects for ${parsedCount} Failure Modes!`, 'success');
+      renderWb3Step4MicroNav();
+      return;
+    }
+
+    // Single Failure Mode parsing
+    const fm = fms[fmIndex] || fms[0];
+    if (!fm) return;
 
     let effectsList = [];
 
-    // CASE 1: Non-Root Element with linkedParentFailureModes
     if (Array.isArray(parsed.linkedParentFailureModes) && parsed.linkedParentFailureModes.length > 0) {
       effectsList = parsed.linkedParentFailureModes.map((link, i) => {
-        const pNodeId = parentNode ? parentNode.id : '';
         const chainSev = getUpstreamFailureChainSeverity(pNodeId, link.parentFmId) || parseInt(link.chainSeverity || link.severity, 10) || 5;
         return {
           tempId: link.parentFmId || `eff-link-${Date.now()}-${i + 1}`,
@@ -27944,7 +35419,6 @@ function parseWb3Step4FmJson(nodeId, fmIndex) {
 
     const prefix = `eff-wb3-${nodeId.slice(0, 4)}-${fm.tempId.replace(/[^a-zA-Z0-9]/g, '')}-`;
     fm.effectsList = effectsList.map((e, i) => {
-      const pNodeId = parentNode ? parentNode.id : '';
       let sev = parseInt(e.severity, 10) || 5;
       if (e.category === 'N+1 Parent Failure Mode' || !isRoot) {
         const upstream = getUpstreamFailureChainSeverity(pNodeId, e.existingLibraryId || e.tempId);
@@ -27961,7 +35435,6 @@ function parseWb3Step4FmJson(nodeId, fmIndex) {
       };
     });
 
-    // Multi-Chain Severity: Find max of each chain, then get max of result of all chains
     const maxSev = Math.max(...fm.effectsList.map(e => e.severity));
     fm.severity = maxSev;
 
@@ -28215,12 +35688,18 @@ function renderWb3Step5MicroNav() {
   const fms = aiWorkbench3State.nodeFailures[nodeId] || [];
   const pointer = aiWorkbench3State.step5FmPointer[nodeId] || 0;
   const nav = document.getElementById('wb3Step5MicroNav');
+  const promptArea = document.getElementById('wb3Step5FmPromptArea');
+  const causesListArea = document.getElementById('wb3Step5CausesListArea');
   if (!nav) return;
 
   if (fms.length === 0) {
     nav.innerHTML = '<div style="text-align:center; padding:18px; color:#64748b; font-size:11px;">No failure modes yet. Complete Steps 3 & 4 first.</div>';
+    if (promptArea) promptArea.style.display = 'none';
+    if (causesListArea) causesListArea.innerHTML = '';
     return;
   }
+
+  if (promptArea) promptArea.style.display = 'block';
 
   const fm = fms[pointer];
   const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
@@ -28334,9 +35813,10 @@ ${catalogueContinuationRule}Output JSON only:
 
     let jointSection = '';
     if (isAssyOnly || isMixed) {
-      const selJoints = (userCtx.joints && userCtx.joints.length > 0) ? userCtx.joints : ['Welding', 'Nut-Bolt'];
+      const selJoints = Array.isArray(userCtx.joints) ? userCtx.joints : [];
+      const customJointChars = userCtx.customJointChars || '';
       if (typeof buildWb3JointCharacteristicsPromptText === 'function') {
-        jointSection = buildWb3JointCharacteristicsPromptText(selJoints);
+        jointSection = buildWb3JointCharacteristicsPromptText(selJoints, customJointChars);
       }
     }
 
@@ -28349,6 +35829,7 @@ ${catalogueContinuationRule}Output JSON only:
       let selCompFeatures = [];
       let selCustomFeatures = '';
 
+      let activeChars = [];
       if (isMixed) {
         if (Array.isArray(userCtx.subComponents) && userCtx.subComponents.length > 0) {
           const typesSet = new Set();
@@ -28357,7 +35838,12 @@ ${catalogueContinuationRule}Output JSON only:
           const customFeatsArr = [];
 
           userCtx.subComponents.forEach(sc => {
-            if (Array.isArray(sc.componentTypes) && sc.componentTypes.length > 0) {
+            if (Array.isArray(sc.componentCharacteristics) && sc.componentCharacteristics.length > 0) {
+              sc.componentCharacteristics.forEach(ch => {
+                activeChars.push(ch);
+                if (ch.name) typesSet.add(ch.name);
+              });
+            } else if (Array.isArray(sc.componentTypes) && sc.componentTypes.length > 0) {
               sc.componentTypes.forEach(t => typesSet.add(t));
             }
             if (sc.customTypes && typeof sc.customTypes === 'string') {
@@ -28376,16 +35862,16 @@ ${catalogueContinuationRule}Output JSON only:
           selCustomFeatures = customFeatsArr.join(', ');
         }
       } else {
-        // Pure Component mode: strictly read from userCtx (saved in Step 1) without unwanted auto-detect overwrite
+        // Pure Component mode: strictly read from userCtx (saved in Step 1)
         selCompTypes = Array.isArray(userCtx.componentTypes) ? [...userCtx.componentTypes] : [];
         selCustomTypes = userCtx.customComponentTypes || '';
         selCompFeatures = Array.isArray(userCtx.componentFeatures) ? [...userCtx.componentFeatures] : [];
         selCustomFeatures = userCtx.customComponentFeatures || '';
+        activeChars = Array.isArray(userCtx.componentCharacteristics) && userCtx.componentCharacteristics.length > 0
+          ? userCtx.componentCharacteristics
+          : (window.wb3ComponentSelectedChars || []);
       }
 
-      const activeChars = Array.isArray(userCtx.componentCharacteristics) && userCtx.componentCharacteristics.length > 0
-        ? userCtx.componentCharacteristics
-        : (window.wb3ComponentSelectedChars || []);
       if (activeChars.length > 0) {
         const charLines = activeChars.map(c => `  • [${c.category || 'Component'}] ${c.name}${c.spec ? ' (Specifications: ' + c.spec + ')' : ''}`).join('\n');
         compSection = `\nLINKED COMPONENT CHARACTERISTICS & SPECIFICATIONS (AIAG-VDA ROOT CAUSE DERIVATION):\n${charLines}\nDIRECTIVE: Formulate specific failure causes addressing deficiencies in the above measurable specifications.\n`;
@@ -28414,21 +35900,24 @@ ${catalogueContinuationRule}Output JSON only:
       if (comps.length > 0) {
         mixedConstituents = '\nCONSTITUENT COMPONENTS (MIXED ARCHITECTURE):\n' +
           comps.map((c, i) => {
-            const allTypes = [...(Array.isArray(c.componentTypes) ? c.componentTypes : [])];
-            if (c.customTypes) c.customTypes.split(/[,;\n]/).forEach(t => { if (t.trim()) allTypes.push(t.trim()); });
+            const allChars = Array.isArray(c.componentCharacteristics) && c.componentCharacteristics.length > 0
+              ? c.componentCharacteristics.map(ch => `${ch.name}${ch.spec ? ' (Spec: ' + ch.spec + ')' : ''}`)
+              : [...(Array.isArray(c.componentTypes) ? c.componentTypes : [])];
+            if (c.customTypes) c.customTypes.split(/[,;\n]/).forEach(t => { if (t.trim()) allChars.push(t.trim()); });
             const allFeats = [...(Array.isArray(c.componentFeatures) ? c.componentFeatures : [])];
             if (c.customFeatures) c.customFeatures.split(/[,;\n]/).forEach(f => { if (f.trim()) allFeats.push(f.trim()); });
-            const typesTag = allTypes.length > 0 ? ` [Types: ${allTypes.join(', ')}]` : '';
+            const charsTag = allChars.length > 0 ? ` [Characteristics: ${allChars.join(', ')}]` : '';
             const featsTag = allFeats.length > 0 ? ` [Features: ${allFeats.join(', ')}]` : '';
-            return `  ${i + 1}. "${c.name}" (${c.partNumber || 'N/A'})${typesTag}${featsTag}: ${c.desc}${c.material ? ' | Mat: ' + c.material : ''}`;
+            return `  ${i + 1}. "${c.name}" (${c.partNumber || 'N/A'})${charsTag}${featsTag}: ${c.desc}${c.material ? ' | Mat: ' + c.material : ''}`;
           }).join('\n') +
           '\nDIRECTIVES FOR MIXED ELEMENT: Derive failure causes addressing BOTH joint connection characteristics (connection mechanics) AND individual constituent component characteristics & features strictly according to the constituent components listed above.\n';
       }
     }
 
-    const characteristicRuleBanner = `\n\n════════════════════════════════════════════════════════════════════════════════\nSTRICT AIAG-VDA RULE — LOGICALLY RELEVANT CHARACTERISTIC CAUSES ONLY:\n1. Every Failure Cause (FC) MUST be formulated as a SPECIFIC CHARACTERISTIC SPECIFICATION DEFICIT chosen strictly from the applicable user-selected characteristics and features above.\n2. LOGICAL LINKAGE RULE: Link ONLY those characteristics and features that are logically, physically, and mechanistically relevant to the specific Failure Mode (FM), failure mechanism, and component function under consideration. NEVER force or fabricate illogical combinations.\n3. NO GENERIC TERMS: NEVER generate vague or generic causes (do NOT write "part wears out", "excessive vibration", "overheating", "high stress", or "environmental degradation").\n4. Every cause MUST pinpoint the exact engineering characteristic deficiency with its measurable specification (e.g. >= ____ or <= ____ or = ____ +/- ____).\n════════════════════════════════════════════════════════════════════════════════\n`;
+    const hasAnyCharacteristics = !!(jointSection || mixedConstituents || compSection || featuresSection);
+    const characteristicRuleBanner = hasAnyCharacteristics ? `\n\n════════════════════════════════════════════════════════════════════════════════\nSTRICT AIAG-VDA RULE — LOGICALLY RELEVANT CHARACTERISTIC CAUSES ONLY:\n1. Every Failure Cause (FC) MUST be formulated as a SPECIFIC CHARACTERISTIC SPECIFICATION DEFICIT chosen strictly from the applicable user-selected characteristics and features above.\n2. LOGICAL LINKAGE RULE: Link ONLY those characteristics and features that are logically, physically, and mechanistically relevant to the specific Failure Mode (FM), failure mechanism, and component function under consideration. NEVER force or fabricate illogical combinations.\n3. NO GENERIC TERMS: NEVER generate vague or generic causes (do NOT write "part wears out", "excessive vibration", "overheating", "high stress", or "environmental degradation").\n4. Every cause MUST pinpoint the exact engineering characteristic deficiency with its measurable specification (e.g. >= ____ or <= ____ or = ____ +/- ____).\n════════════════════════════════════════════════════════════════════════════════\n` : '';
 
-    jointHint = `${jointSection}${mixedConstituents}${compSection}${featuresSection}${characteristicRuleBanner}`;
+    jointHint = hasAnyCharacteristics ? `${jointSection}${mixedConstituents}${compSection}${featuresSection}${characteristicRuleBanner}` : '';
 
     
   }
@@ -28667,69 +36156,120 @@ async function runWb3Step5AllApi(options = {}) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// WB3 STEP 6: CONTROLS
+// WB3 STEP 6: CONTROLS (DEDUPLICATED BY UNIQUE CAUSE)
 // ══════════════════════════════════════════════════════════════════════════════
+
+function getWb3UniqueCauses(nodeId) {
+  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
+  const uniqueMap = new Map();
+
+  causes.forEach(c => {
+    const rawText = (c.details || c.desc || '').trim();
+    const key = rawText.toLowerCase();
+    if (!key) return;
+
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, {
+        uniqueKey: key,
+        tempId: c.tempId,
+        details: rawText,
+        characteristics: c.characteristics || 'Design Characteristic',
+        spec: c.spec || 'Spec >= ____',
+        occurrence: c.occurrence || 3,
+        detection: c.detection || 2,
+        ap: c.ap || 'M',
+        linkedFmTempIds: c.failureTempId ? [c.failureTempId] : [],
+        linkedCauseTempIds: [c.tempId]
+      });
+    } else {
+      const existing = uniqueMap.get(key);
+      if (c.failureTempId && !existing.linkedFmTempIds.includes(c.failureTempId)) {
+        existing.linkedFmTempIds.push(c.failureTempId);
+      }
+      if (!existing.linkedCauseTempIds.includes(c.tempId)) {
+        existing.linkedCauseTempIds.push(c.tempId);
+      }
+    }
+  });
+
+  return Array.from(uniqueMap.values());
+}
 
 function ingestWb3UserControlsList(nodeId, controlsText) {
   if (!controlsText || !controlsText.trim()) return;
   const lines = controlsText.split('\n').map(l => l.trim()).filter(l => l);
   if (!aiWorkbench3State.nodeControls[nodeId]) aiWorkbench3State.nodeControls[nodeId] = {};
-  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
+  const uniqueCauses = getWb3UniqueCauses(nodeId);
 
   const prevControls = lines.filter(l => /^prev/i.test(l) || /^pc/i.test(l) || /^prevention/i.test(l));
   const detControls = lines.filter(l => /^det/i.test(l) || /^dc/i.test(l) || /^detection/i.test(l));
   const allControls = lines;
 
-  causes.forEach(c => {
-    aiWorkbench3State.nodeControls[nodeId][c.tempId] = {
-      prevention: prevControls.length > 0 ? prevControls.join('; ') : allControls.slice(0, Math.ceil(allControls.length / 2)).join('; '),
-      detection: detControls.length > 0 ? detControls.join('; ') : allControls.slice(Math.ceil(allControls.length / 2)).join('; '),
-      prevList: prevControls.length > 0 ? prevControls : allControls.slice(0, Math.ceil(allControls.length / 2)),
-      detList: detControls.length > 0 ? detControls : allControls.slice(Math.ceil(allControls.length / 2))
-    };
+  const controlPayload = {
+    prevention: prevControls.length > 0 ? prevControls.join('; ') : allControls.slice(0, Math.ceil(allControls.length / 2)).join('; '),
+    detection: detControls.length > 0 ? detControls.join('; ') : allControls.slice(Math.ceil(allControls.length / 2)).join('; '),
+    prevList: prevControls.length > 0 ? prevControls : allControls.slice(0, Math.ceil(allControls.length / 2)),
+    detList: detControls.length > 0 ? detControls : allControls.slice(Math.ceil(allControls.length / 2))
+  };
+
+  uniqueCauses.forEach(uc => {
+    uc.linkedCauseTempIds.forEach(tid => {
+      aiWorkbench3State.nodeControls[nodeId][tid] = { ...controlPayload };
+    });
   });
   renderWb3ControlsList();
-  if (typeof showToast === 'function') showToast(`📋 Controls from Step 1 list assigned to ${causes.length} causes!`, 'success');
+  if (typeof showToast === 'function') showToast(`📋 Controls assigned across ${uniqueCauses.length} unique causes!`, 'success');
 }
 
 function renderWb3Step6MicroNav() {
   const nodeId = aiWorkbench3State.currentNodeId;
-  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
-  const pointer = aiWorkbench3State.step6FmPointer[nodeId] || 0;
+  const uniqueCauses = getWb3UniqueCauses(nodeId);
+  const pointer = Math.min(aiWorkbench3State.step6FmPointer[nodeId] || 0, Math.max(0, uniqueCauses.length - 1));
+  aiWorkbench3State.step6FmPointer[nodeId] = pointer;
+
   const nav = document.getElementById('wb3Step6MicroNav');
+  const promptArea = document.getElementById('wb3Step6PromptArea');
   if (!nav) return;
 
-  if (causes.length === 0) {
+  if (uniqueCauses.length === 0) {
     nav.innerHTML = '<div style="text-align:center; padding:18px; color:#64748b; font-size:11px;">No causes yet. Complete Step 5 first.</div>';
+    if (promptArea) promptArea.style.display = 'none';
     return;
   }
 
-  const cause = causes[pointer];
+  if (promptArea) promptArea.style.display = 'grid';
+
+  const cause = uniqueCauses[pointer];
   const ctrlMap = aiWorkbench3State.nodeControls[nodeId] || {};
-  const allDone = causes.every(c => !!ctrlMap[c.tempId]);
-  const currentDone = !!ctrlMap[cause ? cause.tempId : ''];
+  const isDone = (uc) => uc && uc.linkedCauseTempIds.some(tid => !!ctrlMap[tid]);
+  const allDone = uniqueCauses.every(uc => isDone(uc));
+  const currentDone = isDone(cause);
+
+  const fms = aiWorkbench3State.nodeFailures[nodeId] || [];
+  const linkedFmCount = cause ? cause.linkedFmTempIds.length : 0;
+  const fmTag = linkedFmCount > 1 ? `<span style="background:#334155; color:#38bdf8; font-size:9.5px; padding:1px 5px; border-radius:3px; margin-left:4px;">Linked to ${linkedFmCount} FMs</span>` : '';
 
   nav.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px; background:#0f172a; border:1px solid #1e293b; border-radius:8px; margin-bottom:12px;">
       <div style="display:flex; align-items:center; gap:12px;">
         <button onclick="goToWb3Step6Cause(${pointer - 1})" ${pointer === 0 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:11px; cursor:${pointer === 0 ? 'not-allowed' : 'pointer'};">◀ Prev</button>
         <div style="text-align:center;">
-          <div style="font-size:12px; font-weight:800; color:#10b981;">Cause ${pointer + 1} / ${causes.length}</div>
+          <div style="font-size:12px; font-weight:800; color:#10b981;">Unique Cause ${pointer + 1} / ${uniqueCauses.length} ${fmTag}</div>
           <div style="font-size:10px; color:#64748b; margin-top:2px;">${escapeHtml(cause ? cause.details.slice(0, 70) + (cause.details.length > 70 ? '…' : '') : '')} ${currentDone ? '<span style="color:#10b981;">✓ Done</span>' : ''}</div>
         </div>
-        <button onclick="goToWb3Step6Cause(${pointer + 1})" ${pointer >= causes.length - 1 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:11px; cursor:${pointer >= causes.length - 1 ? 'not-allowed' : 'pointer'};">Next ▶</button>
+        <button onclick="goToWb3Step6Cause(${pointer + 1})" ${pointer >= uniqueCauses.length - 1 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:11px; cursor:${pointer >= uniqueCauses.length - 1 ? 'not-allowed' : 'pointer'};">Next ▶</button>
       </div>
       <div style="display:flex; gap:8px;">
         <button onclick="copyWb3Step6CausePrompt(${pointer})" style="padding:5px 12px; background:#10b981; border:none; border-radius:6px; color:#000; font-size:11px; font-weight:700; cursor:pointer;">📋 Copy Prompt for Cause ${pointer + 1}</button>
-        <button id="wb3Step6ApiAllBtn" onclick="runWb3Step6AllApi()" style="display:none; padding:5px 12px; background:#7c3aed; border:none; border-radius:6px; color:#fff; font-size:11px; font-weight:700; cursor:pointer;">⚡ Run All ${causes.length} Causes via API</button>
+        <button id="wb3Step6ApiAllBtn" onclick="runWb3Step6AllApi()" style="display:none; padding:5px 12px; background:#7c3aed; border:none; border-radius:6px; color:#fff; font-size:11px; font-weight:700; cursor:pointer;">⚡ Run All ${uniqueCauses.length} Causes via API</button>
         ${allDone ? '<span style="color:#10b981; font-weight:700; font-size:11px;">✅ All Done</span>' : ''}
       </div>
     </div>
     <div style="margin-bottom:8px;">
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        ${causes.map((c, i) => {
-          const done = !!ctrlMap[c.tempId];
-          return `<button onclick="goToWb3Step6Cause(${i})" style="padding:2px 8px; font-size:10px; border-radius:4px; border:1px solid ${i === pointer ? '#10b981' : (done ? '#059669' : '#334155')}; background:${i === pointer ? '#1e293b' : (done ? '#064e3b' : '#0f172a')}; color:${i === pointer ? '#10b981' : (done ? '#10b981' : '#64748b')}; cursor:pointer;" title="${escapeHtml(c.details)}">${done ? '✓' : ''} ${i + 1}</button>`;
+        ${uniqueCauses.map((c, i) => {
+          const done = isDone(c);
+          return `<button onclick="goToWb3Step6Cause(${i})" style="padding:2px 8px; font-size:10px; border-radius:4px; border:1px solid ${i === pointer ? '#10b981' : (done ? '#059669' : '#334155')}; background:${i === pointer ? '#1e293b' : (done ? '#064e3b' : '#0f172a')}; color:${i === pointer ? '#10b981' : (done ? '#10b981' : '#64748b')}; cursor:pointer;" title="${escapeHtml(c.details)} (${c.linkedFmTempIds.length} FMs)">${done ? '✓' : ''} ${i + 1}</button>`;
         }).join('')}
       </div>
     </div>
@@ -28747,8 +36287,8 @@ function renderWb3Step6MicroNav() {
 
 function goToWb3Step6Cause(idx) {
   const nodeId = aiWorkbench3State.currentNodeId;
-  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
-  if (idx < 0 || idx >= causes.length) return;
+  const uniqueCauses = getWb3UniqueCauses(nodeId);
+  if (idx < 0 || idx >= uniqueCauses.length) return;
   aiWorkbench3State.step6FmPointer[nodeId] = idx;
   renderWb3Step6MicroNav();
 }
@@ -28761,11 +36301,15 @@ function generateWb3Step6CausePromptText(nodeId, causeIndex, isFirstCall) {
   const userCtx = aiWorkbench3State.nodeContexts[nodeId] || {};
   const isCatalogue = !!userCtx.isCatalogueItem;
   const catalogueTag = isCatalogue ? ' [CATALOGUE SELECTION — NOT DESIGN RESPONSIBLE]' : '';
-  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
-  const cause = causes[causeIndex];
+  const uniqueCauses = getWb3UniqueCauses(nodeId);
+  const cause = uniqueCauses[causeIndex];
   if (!cause) return '';
+
   const fms = aiWorkbench3State.nodeFailures[nodeId] || [];
-  const parentFm = fms.find(f => f.tempId === cause.failureTempId);
+  const parentFmNames = cause.linkedFmTempIds.map(fid => {
+    const fm = fms.find(f => f.tempId === fid);
+    return fm ? fm.name : fid;
+  });
 
   const masterControls = (fmeaData && fmeaData.libraries && fmeaData.libraries.controls)
     ? fmeaData.libraries.controls
@@ -28775,7 +36319,8 @@ function generateWb3Step6CausePromptText(nodeId, causeIndex, isFirstCall) {
       masterControls.map(c => `[${c.id}] ${c.type}: "${c.desc}"`).join('\n') + '\n'
     : '';
 
-  const causeLine = `Cause ${causeIndex + 1}/${causes.length}: [${cause.tempId}] | FM: "${parentFm ? parentFm.name : cause.failureTempId}" | Mechanism: "${cause.details}" | Char: "${cause.characteristics}" | Spec: "${cause.spec}"`;
+  const fmListStr = parentFmNames.length > 0 ? parentFmNames.slice(0, 3).join('; ') + (parentFmNames.length > 3 ? ` (+${parentFmNames.length - 3} more)` : '') : 'General';
+  const causeLine = `Cause ${causeIndex + 1}/${uniqueCauses.length}: [${cause.tempId}] | Linked FM(s): "${fmListStr}" | Mechanism: "${cause.details}" | Char: "${cause.characteristics}" | Spec: "${cause.spec}"`;
 
   // ── CONTINUATION CALL ──
   if (!isFirstCall) {
@@ -28804,7 +36349,6 @@ Output JSON only:
 { "causeTempId": "${cause.tempId}", "preventionControls": [{ "desc": "<PC>", "existingLibraryId": "" }], "detectionControls": [{ "desc": "<DC>", "existingLibraryId": "" }] }`;
 }
 
-
 function copyWb3Step6CausePrompt(causeIndex) {
   const nodeId = aiWorkbench3State.currentNodeId;
   const prompt = generateWb3Step6CausePromptText(nodeId, causeIndex, true);
@@ -28823,8 +36367,8 @@ function parseWb3Step6CauseJson(nodeId, causeIndex) {
   try {
     const raw = sanitizeJsonString(input.value);
     const parsed = JSON.parse(raw);
-    const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
-    const cause = causes[causeIndex];
+    const uniqueCauses = getWb3UniqueCauses(nodeId);
+    const cause = uniqueCauses[causeIndex];
     if (!cause) return;
 
     let prevList = [];
@@ -28833,18 +36377,23 @@ function parseWb3Step6CauseJson(nodeId, causeIndex) {
     if (Array.isArray(parsed.detectionControls)) detList = parsed.detectionControls.map(d => typeof d === 'string' ? d : (d.desc || d));
 
     if (!aiWorkbench3State.nodeControls[nodeId]) aiWorkbench3State.nodeControls[nodeId] = {};
-    aiWorkbench3State.nodeControls[nodeId][cause.tempId] = {
+    const controlPayload = {
       prevention: prevList.join('; ') || 'Standard design guideline',
       detection: detList.join('; ') || 'DVP&R bench test',
       prevList,
       detList
     };
 
+    // Propagate across all linked cause IDs that share this exact root cause
+    cause.linkedCauseTempIds.forEach(tid => {
+      aiWorkbench3State.nodeControls[nodeId][tid] = { ...controlPayload };
+    });
+
     if (input) input.value = '';
-    if (typeof showToast === 'function') showToast(`✅ Controls added for Cause ${causeIndex + 1}!`, 'success');
+    if (typeof showToast === 'function') showToast(`✅ Controls added for Cause ${causeIndex + 1} (propagated to ${cause.linkedCauseTempIds.length} FM linkages)!`, 'success');
 
     const nextIdx = causeIndex + 1;
-    if (nextIdx < causes.length) aiWorkbench3State.step6FmPointer[nodeId] = nextIdx;
+    if (nextIdx < uniqueCauses.length) aiWorkbench3State.step6FmPointer[nodeId] = nextIdx;
     renderWb3Step6MicroNav();
     renderWb3ControlsList();
   } catch (err) {
@@ -28857,20 +36406,37 @@ function renderWb3ControlsList() {
   const container = document.getElementById('wb3ControlsContainer');
   const countEl = document.getElementById('wb3ControlsCount');
   if (!container) return;
-  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
+  const uniqueCauses = getWb3UniqueCauses(nodeId);
+  const fms = aiWorkbench3State.nodeFailures[nodeId] || [];
   const ctrlMap = aiWorkbench3State.nodeControls[nodeId] || {};
-  if (countEl) countEl.textContent = causes.length;
-  if (causes.length === 0) {
+  if (countEl) countEl.textContent = uniqueCauses.length;
+  if (uniqueCauses.length === 0) {
     container.innerHTML = '<div style="text-align:center; padding:18px; color:#64748b; font-size:11px;">No causes to assign controls to. Complete Step 5 first.</div>';
     return;
   }
-  container.innerHTML = causes.map(c => {
-    const ctrls = ctrlMap[c.tempId] || { prevention: 'Not defined', detection: 'Not defined', prevList: [], detList: [] };
+  container.innerHTML = uniqueCauses.map(c => {
+    // Find representative control from any of the linked cause IDs
+    let ctrls = null;
+    for (const tid of c.linkedCauseTempIds) {
+      if (ctrlMap[tid]) { ctrls = ctrlMap[tid]; break; }
+    }
+    if (!ctrls) ctrls = { prevention: 'Not defined', detection: 'Not defined', prevList: [], detList: [] };
+
     const prevArr = (ctrls.prevList && ctrls.prevList.length > 0) ? ctrls.prevList : [ctrls.prevention];
     const detArr = (ctrls.detList && ctrls.detList.length > 0) ? ctrls.detList : [ctrls.detection];
+
+    const linkedFmNames = c.linkedFmTempIds.map(fid => {
+      const fm = fms.find(f => f.tempId === fid);
+      return fm ? fm.name : fid;
+    });
+    const fmBadges = linkedFmNames.map(name => `<span style="background:#1e293b; color:#94a3b8; padding:1px 6px; border-radius:3px; font-size:9.5px; border:1px solid #334155;">⚡ ${escapeHtml(name)}</span>`).join(' ');
+
     return `
       <div style="background:#020617; border:1px solid #1e293b; border-radius:6px; padding:10px; font-size:11px; margin-bottom:8px;">
-        <div style="font-weight:700; color:#f8fafc; margin-bottom:6px;">🔩 Cause: <span style="color:#f59e0b;">${escapeHtml(c.details)}</span></div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; gap:8px;">
+          <div style="font-weight:700; color:#f8fafc;">🔩 Root Cause: <span style="color:#f59e0b;">${escapeHtml(c.details)}</span></div>
+          <div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end;">${fmBadges}</div>
+        </div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:10.5px;">
           <div style="background:#0f172a; padding:6px; border-radius:4px; border:1px solid #10b981;">
             <span style="font-weight:700; color:#10b981;">🛡️ Prevention Controls (${prevArr.length}):</span>
@@ -28892,30 +36458,30 @@ async function runWb3Step6AllApi() {
     return;
   }
   const nodeId = aiWorkbench3State.currentNodeId;
-  const causes = aiWorkbench3State.nodeCauses[nodeId] || [];
-  if (causes.length === 0) { alert("No causes to process."); return; }
+  const uniqueCauses = getWb3UniqueCauses(nodeId);
+  if (uniqueCauses.length === 0) { alert("No causes to process."); return; }
 
   if (!aiWorkbench3State.nodeControls[nodeId]) aiWorkbench3State.nodeControls[nodeId] = {};
   const statusEl = document.getElementById('wb3Step6ApiStatus');
   if (statusEl) { statusEl.style.display = 'block'; statusEl.style.color = '#38bdf8'; }
 
   const resumeFrom = (aiWorkbench3State.step6FmPointer[nodeId] || 0);
-  const startIdx = (resumeFrom >= causes.length) ? 0 : resumeFrom;
+  const startIdx = (resumeFrom >= uniqueCauses.length) ? 0 : resumeFrom;
   if (startIdx > 0 && statusEl) {
-    statusEl.textContent = `⏩ Resuming controls from cause ${startIdx + 1}/${causes.length}...`;
+    statusEl.textContent = `⏩ Resuming controls from unique cause ${startIdx + 1}/${uniqueCauses.length}...`;
     statusEl.style.color = '#f59e0b';
   }
 
   wb3SetApiLock(true);
   let failed = false;
   try {
-  for (let i = startIdx; i < causes.length; i++) {
+  for (let i = startIdx; i < uniqueCauses.length; i++) {
     aiWorkbench3State.step6FmPointer[nodeId] = i;
-    if (statusEl) statusEl.textContent = `Processing controls for cause ${i + 1}/${causes.length}...`;
+    if (statusEl) statusEl.textContent = `Processing controls for unique cause ${i + 1}/${uniqueCauses.length}...`;
     const prompt = generateWb3Step6CausePromptText(nodeId, i, i === startIdx);
     const result = await executeWb3ApiQuery(prompt, 'wb3Step6ApiStatus', null);
     if (!result) {
-      if (statusEl) { statusEl.textContent = `❌ Failed at cause ${i + 1}/${causes.length}. Fix the issue and click Generate again to resume.`; statusEl.style.color = '#f87171'; }
+      if (statusEl) { statusEl.textContent = `❌ Failed at cause ${i + 1}/${uniqueCauses.length}. Fix the issue and click Generate again to resume.`; statusEl.style.color = '#f87171'; }
       if (typeof showToast === 'function') showToast(`❌ Step 6 halted at cause ${i + 1}. Resolve and click Generate to resume.`, 'error');
       failed = true;
       break;
@@ -28923,22 +36489,26 @@ async function runWb3Step6AllApi() {
     try {
       const raw = sanitizeJsonString(result);
       const parsed = JSON.parse(raw);
-      const cause = causes[i];
+      const cause = uniqueCauses[i];
       const prevList = Array.isArray(parsed.preventionControls) ? parsed.preventionControls.map(p => typeof p === 'string' ? p : (p.desc || p)) : [];
       const detList = Array.isArray(parsed.detectionControls) ? parsed.detectionControls.map(d => typeof d === 'string' ? d : (d.desc || d)) : [];
-      aiWorkbench3State.nodeControls[nodeId][cause.tempId] = {
+      const controlPayload = {
         prevention: prevList.join('; '),
         detection: detList.join('; '),
         prevList,
         detList
       };
+      // Propagate across all linked failure modes for this unique cause
+      cause.linkedCauseTempIds.forEach(tid => {
+        aiWorkbench3State.nodeControls[nodeId][tid] = { ...controlPayload };
+      });
     } catch (err) {
       console.warn(`Cause ${i + 1} controls parse error:`, err);
     }
   }
   if (!failed) {
     aiWorkbench3State.step6FmPointer[nodeId] = 0;
-    if (statusEl) { statusEl.textContent = `✅ All ${causes.length} causes controls done! Auto-advancing...`; statusEl.style.color = '#34d399'; }
+    if (statusEl) { statusEl.textContent = `✅ All ${uniqueCauses.length} unique causes controls done! Auto-advancing...`; statusEl.style.color = '#34d399'; }
     renderWb3Step6MicroNav();
     renderWb3ControlsList();
     if (typeof showToast === 'function') showToast(`✅ Step 6 complete! Auto-advancing to next step...`, 'success');
@@ -29341,6 +36911,18 @@ function buildWb3SubfilePackage(targetNodeId = null) {
     };
   });
 
+  if (isRoot) {
+    if (typeof fmeaData !== 'undefined') {
+      fmeaData.libraries = fmeaData.libraries || {};
+      fmeaData.libraries.mainEffectFunctions = fmeaData.libraries.mainEffectFunctions || [];
+      pkgFunctions.forEach(fn => {
+        if (!fmeaData.libraries.mainEffectFunctions.some(mf => (mf.name || '').trim().toLowerCase() === (fn.name || '').trim().toLowerCase())) {
+          fmeaData.libraries.mainEffectFunctions.push({ id: fn.id, name: fn.name });
+        }
+      });
+    }
+  }
+
   const fnIdMap = {};
   stateFns.forEach((fn, idx) => {
     fnIdMap[fn.tempId || fn.id] = pkgFunctions[idx].id;
@@ -29428,13 +37010,15 @@ function buildWb3SubfilePackage(targetNodeId = null) {
       // F. Create new effect
       if (!assignedEffId) {
         assignedEffId = `eff-${tsPrefix}-${++effCounter}`;
+        const isRootEff = (isRoot || !parentNode);
         localEffects.push({
           id: assignedEffId,
           category: e.category || 'End User Level',
           desc: e.desc || 'System consequence',
           severity: parseInt(e.severity, 10) || 8,
-          structId: nodeId,
-          systemName: node.name || ''
+          structId: isRootEff ? 'main-effect-node' : nodeId,
+          systemId: isRootEff ? 'main-effect-node' : nodeId,
+          systemName: isRootEff ? 'Main Effect Node' : (node.name || '')
         });
       }
 
@@ -29608,6 +37192,57 @@ function buildWb3SubfilePackage(targetNodeId = null) {
     causeControls[assignedCauseId] = ctrlList;
   });
 
+  // ── 5B. CHARACTERISTICS (EXTRACTED & REGISTERED TO LIBRARY) ──
+  const localCharacteristics = [];
+  const wb3CharSet = new Set();
+
+  const compChars = (aiWorkbench3State.nodeContexts[nodeId] && aiWorkbench3State.nodeContexts[nodeId].componentCharacteristics) || (window.wb3ComponentSelectedChars) || [];
+  compChars.forEach(cc => {
+    const cName = (cc.name || cc.desc || '').trim();
+    if (!cName || wb3CharSet.has(cName.toLowerCase())) return;
+    wb3CharSet.add(cName.toLowerCase());
+    localCharacteristics.push({
+      id: `char-${tsPrefix}-${localCharacteristics.length + 1}`,
+      name: cName,
+      spec: cc.spec || '',
+      category: cc.category || 'Design / Component',
+      classSymbol: cc.classSymbol || 'None',
+      structId: nodeId,
+      systemElement: node.name || '',
+      variants: ['ALL'],
+      applicability: 'ALL',
+      origin: 'DFMEA-WB3'
+    });
+  });
+
+  localCauses.forEach(c => {
+    const rawChars = (c.characteristics || c.characteristicName || '').trim();
+    if (rawChars && rawChars !== '-') {
+      const parts = rawChars.split(/,|\n|;/).map(s => s.trim()).filter(Boolean);
+      c.characteristicIds = c.characteristicIds || [];
+      parts.forEach(pName => {
+        let existing = localCharacteristics.find(lc => lc.name.toLowerCase() === pName.toLowerCase());
+        if (!existing) {
+          existing = {
+            id: `char-${tsPrefix}-${localCharacteristics.length + 1}`,
+            name: pName,
+            spec: c.spec || '',
+            classSymbol: c.classSymbol || 'None',
+            structId: nodeId,
+            systemElement: node.name || '',
+            variants: ['ALL'],
+            applicability: 'ALL',
+            origin: 'DFMEA-WB3'
+          };
+          localCharacteristics.push(existing);
+        }
+        if (!c.characteristicIds.includes(existing.id)) {
+          c.characteristicIds.push(existing.id);
+        }
+      });
+    }
+  });
+
   // ── 6. REQUIREMENTS ──
   const pkgRequirements = [];
   const reqIdMap = {};
@@ -29666,7 +37301,8 @@ function buildWb3SubfilePackage(targetNodeId = null) {
     libraries: {
       effects: localEffects,
       causes: localCauses,
-      controls: localControls
+      controls: localControls,
+      characteristics: localCharacteristics
     },
     failureModeEffects,
     failureModeCauses,
@@ -30299,7 +37935,7 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
 
     if (mode === 'gemini') {
       if (compIcon) compIcon.textContent = '✨';
-      if (compText) compText.textContent = 'Gemini Companion';
+      if (compText) compText.textContent = 'Gemini';
       if (compBtn) {
         compBtn.style.borderColor = '#a855f7';
         compBtn.style.background = 'rgba(168,85,247,0.15)';
@@ -30314,7 +37950,7 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
       }
     } else if (mode === 'copilot') {
       if (compIcon) compIcon.textContent = '🚀';
-      if (compText) compText.textContent = 'Copilot Companion';
+      if (compText) compText.textContent = 'Copilot';
       if (compBtn) {
         compBtn.style.borderColor = '#06b6d4';
         compBtn.style.background = 'rgba(6,182,212,0.15)';
@@ -30329,7 +37965,7 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
       }
     } else if (mode === 'deepseek') {
       if (compIcon) compIcon.textContent = '🐳';
-      if (compText) compText.textContent = 'DeepSeek Companion';
+      if (compText) compText.textContent = 'DeepSeek';
       if (compBtn) {
         compBtn.style.borderColor = '#0ea5e9';
         compBtn.style.background = 'rgba(14,165,233,0.18)';
@@ -30344,7 +37980,7 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
       }
     } else if (mode === 'kimi') {
       if (compIcon) compIcon.textContent = '🌙';
-      if (compText) compText.textContent = 'Kimi Companion';
+      if (compText) compText.textContent = 'Kimi';
       if (compBtn) {
         compBtn.style.borderColor = '#a855f7';
         compBtn.style.background = 'rgba(168,85,247,0.18)';
@@ -30359,11 +37995,11 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
       }
     } else if (mode === 'claude') {
       if (compIcon) compIcon.textContent = '🎭';
-      if (compText) compText.textContent = 'Claude Companion';
+      if (compText) compText.textContent = 'Claude';
       if (compBtn) {
-        compBtn.style.borderColor = '#f97316';
-        compBtn.style.background = 'rgba(249,115,22,0.18)';
-        compBtn.style.color = '#fb923c';
+        compBtn.style.borderColor = '#f59e0b';
+        compBtn.style.background = 'rgba(245,158,11,0.18)';
+        compBtn.style.color = '#fbbf24';
         compBtn.title = 'Open Claude Companion window';
       }
       if (autoPilotBtn) {
@@ -30374,11 +38010,11 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
       }
     } else if (mode === 'qwen') {
       if (compIcon) compIcon.textContent = '🌐';
-      if (compText) compText.textContent = 'Qwen Companion';
+      if (compText) compText.textContent = 'Qwen';
       if (compBtn) {
-        compBtn.style.borderColor = '#6366f1';
-        compBtn.style.background = 'rgba(99,102,241,0.18)';
-        compBtn.style.color = '#818cf8';
+        compBtn.style.borderColor = '#10b981';
+        compBtn.style.background = 'rgba(16,185,129,0.18)';
+        compBtn.style.color = '#34d399';
         compBtn.title = 'Open Qwen Companion window';
       }
       if (autoPilotBtn) {
@@ -30388,12 +38024,11 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
         showToast('🌐 Switched mode to Qwen Companion', 'info');
       }
     } else {
-      // chatgpt
       if (compIcon) compIcon.textContent = '🤖';
-      if (compText) compText.textContent = 'ChatGPT Companion';
+      if (compText) compText.textContent = 'ChatGPT';
       if (compBtn) {
         compBtn.style.borderColor = '#38bdf8';
-        compBtn.style.background = 'rgba(56,189,248,0.15)';
+        compBtn.style.background = 'linear-gradient(135deg, rgba(14,165,233,0.18) 0%, rgba(2,132,199,0.3) 100%)';
         compBtn.style.color = '#38bdf8';
         compBtn.title = 'Open ChatGPT Companion window';
       }
@@ -30401,7 +38036,7 @@ function onWb3AiModeChange(selectedMode = null, notify = true) {
         autoPilotBtn.title = 'Automate Steps 2 through 5 using ChatGPT Web Companion and automatically halt after Step 5 for your review';
       }
       if (notify && typeof showToast === 'function') {
-        showToast('🟢 Switched mode to ChatGPT Companion', 'info');
+        showToast('🤖 Switched mode to ChatGPT Companion', 'info');
       }
     }
 
@@ -30420,18 +38055,31 @@ function updateWb3JointCharacteristicsPreview() {
   if (!box) return;
   const selectedJoints = [];
   document.querySelectorAll('.wb3-joint-chk:checked').forEach(chk => selectedJoints.push(chk.value));
+  const customJointCharsVal = document.getElementById('wb3CustomJointCharsInput')?.value?.trim() || '';
 
-  if (selectedJoints.length === 0) {
-    box.innerHTML = '<span style="color:#64748b; font-style:italic;">No joints selected. Check joints above to view characteristics.</span>';
-    return;
-  }
+  const previewParts = [];
 
-  box.innerHTML = selectedJoints.map(j => {
+  selectedJoints.forEach(j => {
     const resolved = (typeof resolveWb3JointKey === 'function') ? resolveWb3JointKey(j) : j;
     const rawChars = WB3_JOINT_CHARACTERISTICS[resolved] || WB3_JOINT_CHARACTERISTICS[j];
     const text = Array.isArray(rawChars) ? rawChars.join(' • ') : String(rawChars);
-    return `<div style="margin-bottom:4px;"><strong style="color:#38bdf8;">${escapeHtml(resolved || j)}:</strong> <span style="color:#cbd5e1;">${escapeHtml(text)}</span></div>`;
-  }).join('');
+    previewParts.push(`<div style="margin-bottom:4px;"><strong style="color:#38bdf8;">${escapeHtml(resolved || j)}:</strong> <span style="color:#cbd5e1;">${escapeHtml(text)}</span></div>`);
+  });
+
+  if (customJointCharsVal) {
+    customJointCharsVal.split(/[,;\n]/).forEach(c => {
+      const ct = c.trim();
+      if (ct) {
+        previewParts.push(`<div style="margin-bottom:4px;"><strong style="color:#a78bfa;">✍️ User-Defined Assembly Characteristic:</strong> <span style="color:#cbd5e1;">${escapeHtml(ct)}</span></div>`);
+      }
+    });
+  }
+
+  if (previewParts.length === 0) {
+    box.innerHTML = '<span style="color:#64748b; font-style:italic;">No joints or custom assembly characteristics selected. Check joints or enter custom characteristics above to view characteristics.</span>';
+  } else {
+    box.innerHTML = previewParts.join('');
+  }
 }
 
 function updateWb3ComponentCharacteristicsPreview() {
@@ -30557,6 +38205,11 @@ function resetWb3ComponentForm() {
   if (typeof initWb3ModalConstituentCharacteristicsSelector === 'function') {
     initWb3ModalConstituentCharacteristicsSelector([]);
   }
+  window.wb3ModalConstituentCustomFeatures = [];
+  window.wb3ModalConstituentCustomFeatureSpecs = {};
+  if (typeof renderWb3ModalConsideredCharacteristicsTable === 'function') {
+    renderWb3ModalConsideredCharacteristicsTable();
+  }
 }
 
 function autoDetectModalCompTypes() {
@@ -30612,7 +38265,8 @@ function saveWb3ConstituentComponent() {
   const selectedModalFeatures = [];
   document.querySelectorAll('.wb3-modal-comp-feature-chk:checked').forEach(chk => selectedModalFeatures.push(chk.value));
   const componentFeatures = selectedModalFeatures;
-  const customFeatures = (document.getElementById('wb3ModalCompCustomFeaturesInput')?.value || '').trim();
+  const customFeatures = (window.wb3ModalConstituentCustomFeatures || []).map(f => typeof f === 'string' ? f : f.name).join(', ');
+  const customFeaturesList = Array.isArray(window.wb3ModalConstituentCustomFeatures) ? [...window.wb3ModalConstituentCustomFeatures] : [];
 
   if (editIdx >= 0 && editIdx < userCtx.subComponents.length) {
     userCtx.subComponents[editIdx] = {
@@ -30625,7 +38279,8 @@ function saveWb3ConstituentComponent() {
       customTypes,
       componentCharacteristics,
       componentFeatures,
-      customFeatures
+      customFeatures,
+      customFeaturesList
     };
     if (typeof showToast === 'function') showToast(`✓ Updated component: ${name}`, 'success');
   } else {
@@ -30690,7 +38345,20 @@ function editWb3ConstituentComponent(idx) {
     chk.checked = assignedFeatures.includes(chk.value);
   });
   const customFeatsInp = document.getElementById('wb3ModalCompCustomFeaturesInput');
-  if (customFeatsInp) customFeatsInp.value = comp.customFeatures || '';
+  if (customFeatsInp) customFeatsInp.value = '';
+  window.wb3ModalConstituentCustomFeatures = [];
+  if (comp.customFeatures) {
+    comp.customFeatures.split(/[,;\n]/).forEach(f => {
+      const tr = f.trim();
+      if (tr) window.wb3ModalConstituentCustomFeatures.push({ name: tr, spec: 'Custom constituent feature specifications & tolerances' });
+    });
+  }
+  if (Array.isArray(comp.customFeaturesList)) {
+    window.wb3ModalConstituentCustomFeatures = comp.customFeaturesList.map(f => typeof f === 'string' ? { name: f, spec: 'Custom constituent feature specifications & tolerances' } : f);
+  }
+  if (typeof renderWb3ModalConsideredCharacteristicsTable === 'function') {
+    renderWb3ModalConsideredCharacteristicsTable();
+  }
 
   nameInp?.focus();
 }
@@ -30882,24 +38550,24 @@ function updateWb3StartFromHereButton() {
 
   if (btnText) {
     if (isAll) {
-      btnText.textContent = `Start From Here (All Levels, Steps ${startStep}–5)`;
+      btnText.textContent = `Start All (Steps ${startStep}–5)`;
       if (autoPilotBtn) autoPilotBtn.title = `Run automation starting from Step ${startStep} across all structure tree levels through Step 5`;
     } else {
       if (startStep === 2) {
-        btnText.textContent = 'Start From Here (Steps 2–5)';
+        btnText.textContent = 'Start (Steps 2–5)';
       } else if (startStep === 5) {
-        btnText.textContent = 'Start From Here (Step 5)';
+        btnText.textContent = 'Start (Step 5)';
       } else {
-        btnText.textContent = `Start From Here (Steps ${startStep}–5)`;
+        btnText.textContent = `Start (Steps ${startStep}–5)`;
       }
-      if (autoPilotBtn) autoPilotBtn.title = `Run automation starting from Step ${startStep} through Step 5 (verifies last step is parsed successfully)`;
+      if (autoPilotBtn) autoPilotBtn.title = `Run automation starting from Step ${startStep} through Step 5`;
     }
   }
 
   if (runStepOnlyText) {
-    runStepOnlyText.textContent = `Run Step ${startStep} Only`;
+    runStepOnlyText.textContent = `Step ${startStep} Only`;
     if (runStepOnlyBtn) {
-      runStepOnlyBtn.title = `Run automation for Step ${startStep} (${stepName}) only and halt without continuing to subsequent steps`;
+      runStepOnlyBtn.title = `Run automation for Step ${startStep} (${stepName}) only`;
       runStepOnlyBtn.style.display = (currentStep >= 2 && currentStep <= 5) ? 'inline-flex' : 'none';
     }
   }
@@ -31183,8 +38851,8 @@ function startWb3AutoPilotWithOptions(options = {}) {
   aiWorkbench3State.executionScope = options.scope || 'complete_all';
   aiWorkbench3State.resumePolicy = options.itemScope || 'ungenerated';
 
-  const mode = getWb3AiMode();
-  if (mode === 'api') {
+  const isApi = (aiWorkbench3State && aiWorkbench3State.executionMode === 'API') || (getWb3AiMode() === 'api');
+  if (isApi) {
     runWb3AutoSteps2To5Api(startStep, options);
   } else {
     startWb3ChatCompanionAutomation(startStep, options);
@@ -31976,6 +39644,7 @@ async function startWb3ChatCompanionAutomation(startStep = 2, options = {}) {
 
         let processedEffectsCount = 0;
 
+        let justOpenedNewStep4Window = true;
         for (let i = 0; i < fms.length; i++) {
           if (!aiWorkbench3State.autoPilotRunning) break;
           const fm = fms[i];
@@ -31989,13 +39658,15 @@ async function startWb3ChatCompanionAutomation(startStep = 2, options = {}) {
           // Trigger fresh chat window after every 10 effects generated
           if (processedEffectsCount > 0 && processedEffectsCount % 10 === 0) {
             await resetWb3ChatCompanionForNewChat(`Step 4: ${processedEffectsCount} Effects Processed`);
+            justOpenedNewStep4Window = true;
             if (!aiWorkbench3State.autoPilotRunning) break;
           }
 
           aiWorkbench3State.step4FmPointer[nodeId] = i;
           renderWb3Step4MicroNav();
 
-          const promptFm = generateWb3Step4FmPromptText(nodeId, i, i === 0);
+          const promptFm = generateWb3Step4FmPromptText(nodeId, i, justOpenedNewStep4Window);
+          justOpenedNewStep4Window = false;
           const jsonFm = await queryCompanion(promptFm, `${levelPrefix}Step 4 FM ${i + 1}/${fms.length} ("${fms[i].name.slice(0, 25)}")`);
           if (!aiWorkbench3State.autoPilotRunning) break;
 
@@ -32514,17 +40185,6 @@ function renderAiWorkbenchStep(step) {
     else if (step === 3) btnNext.innerHTML = "⚠️ Confirm Requirements & Generate Failure Modes";
     else if (step === 4) btnNext.innerHTML = "💾 Confirm & Save All to FMEA Database";
   }
-}
-
-function getFlatStructureNodes(root) {
-  const list = [];
-  if (!root) return list;
-  function traverse(node) {
-    list.push(node);
-    if (node.children) node.children.forEach(traverse);
-  }
-  traverse(root);
-  return list;
 }
 
 function renderAiWorkbenchElementSelectionTree() {
@@ -36356,13 +44016,19 @@ function resolveFailureModeFromEffectObj(eff, allProjectModes, currFmId, isPfmea
   if (exact) return exact;
 
   // 6. Substring match ONLY within compatible scope (never cross PFMEA/DFMEA boundary on loose substring)
+  const effectParts = cleanLower.split(/;|\n/).map(s => s.trim()).filter(Boolean);
   for (const m of allProjectModes) {
     if (String(m.fm.id) === String(currFmId)) continue;
     if (!isValidCand(m)) continue;
     if (eff.isPFMEA !== undefined && Boolean(eff.isPFMEA) !== Boolean(m.isPFMEA)) continue;
     const mName = (m.fm.name || '').trim().toLowerCase();
-    if (mName.length >= 8) {
-      if (cleanLower.startsWith(mName) || mName.startsWith(cleanLower)) return m;
+    if (mName.length >= 6) {
+      if (cleanLower.startsWith(mName) || mName.startsWith(cleanLower) || cleanLower.includes(mName) || mName.includes(cleanLower)) return m;
+      for (const part of effectParts) {
+        if (part === mName || (part.length >= 6 && (part.startsWith(mName) || mName.startsWith(part) || part.includes(mName) || mName.includes(part)))) {
+          return m;
+        }
+      }
     }
   }
 
@@ -36680,7 +44346,8 @@ function buildFailureNetworkGraph(focusInput) {
     const rawReq = focusFl?.requirement;
     const req = (rawReq && rawReq.trim() && rawReq.trim() !== '-') ? rawReq.trim() : '-';
 
-    const focusSev = (typeof getEffectiveSeverityForFailureMode === 'function') ? getEffectiveSeverityForFailureMode(focusFm.id) : 7;
+    const inherentSev = parseInt(focusFm.sev || focusFm.severity, 10) || 7;
+    const focusSev = (typeof getEffectiveSeverityForFailureMode === 'function') ? getEffectiveSeverityForFailureMode(focusFm.id) : inherentSev;
     const isTargetPfmea = !!(focusTarget.isPFMEA || (focusTarget.scope && focusTarget.scope.isPFMEA));
     const isDfmeaChainInPfmea = isPfmeaContext && !isTargetPfmea;
 
@@ -36703,6 +44370,8 @@ function buildFailureNetworkGraph(focusInput) {
       functionName: funcName,
       requirement: req,
       severity: focusSev,
+      inherentSeverity: inherentSev,
+      chainSeverity: focusSev,
       comments: focusFm.comments || '',
       isFocus: true,
       isPFMEA: isTargetPfmea,
@@ -36874,6 +44543,8 @@ function buildFailureNetworkGraph(focusInput) {
 
         if (!nodesMap.has(higherFmId)) {
           const isHigherPfmea = !!(resolvedHigherMode.isPFMEA || (resolvedHigherMode.scope && resolvedHigherMode.scope.isPFMEA) || resolvedHigherMode.origin === 'PFMEA');
+          const higherInherentSev = parseInt(resolvedHigherMode.fm.sev || resolvedHigherMode.fm.severity || effItem.severity || 7, 10);
+          const higherChainSev = (typeof getEffectiveSeverityForFailureMode === 'function') ? getEffectiveSeverityForFailureMode(higherFmId) : higherInherentSev;
           nodesMap.set(higherFmId, {
             id: higherFmId,
             fmId: higherFmId,
@@ -36884,7 +44555,9 @@ function buildFailureNetworkGraph(focusInput) {
             elementName: resolvedHigherMode.structName || effItem.systemName || 'Higher Subsystem',
             functionName: (resolvedHigherMode.funcName || effItem.functionName || '').trim() || '-',
             requirement: (resolvedHigherMode.fl?.requirement || effItem.requirement || '').trim() || '-',
-            severity: (typeof getEffectiveSeverityForFailureMode === 'function') ? getEffectiveSeverityForFailureMode(higherFmId) : (parseInt(resolvedHigherMode.fm.sev || effItem.severity || 7, 10)),
+            severity: higherChainSev,
+            inherentSeverity: higherInherentSev,
+            chainSeverity: higherChainSev,
             comments: resolvedHigherMode.fm.comments || '',
             isPFMEA: isHigherPfmea,
             width: 270,
@@ -36911,6 +44584,7 @@ function buildFailureNetworkGraph(focusInput) {
           const isEffPfmea = (effItem.isPFMEA !== undefined)
             ? (!!effItem.isPFMEA && (currIsPfmea || effItem.origin === 'PFMEA'))
             : (currIsPfmea && effItem.origin !== 'DFMEA');
+          const topSev = parseInt(effItem.severity || 8, 10);
           nodesMap.set(effNodeId, {
             id: effNodeId,
             label: effDesc,
@@ -36921,7 +44595,9 @@ function buildFailureNetworkGraph(focusInput) {
             elementName: effItem.systemName || 'End User / Vehicle System',
             functionName: (effItem.functionName || '').trim() || '-',
             requirement: (effItem.requirement || '').trim() || '-',
-            severity: parseInt(effItem.severity || 8, 10),
+            severity: topSev,
+            inherentSeverity: topSev,
+            chainSeverity: topSev,
             isPFMEA: isEffPfmea,
             origin: isEffPfmea ? 'PFMEA' : 'DFMEA',
             width: 270,
@@ -36929,6 +44605,57 @@ function buildFailureNetworkGraph(focusInput) {
           });
         }
         addEdge(currFmId, effNodeId, 'UP', 'MODE_TO_EFFECT', 'Highest Effect');
+      }
+    });
+
+    // B. Inverse Cause Linkages: Find ANY failure mode in higher elements whose Cause matches currFmId
+    allProjectModes.forEach(cand => {
+      if (String(cand.fm.id) === String(currFmId)) return;
+      const candIsPFMEA = !!(cand.isPFMEA || (cand.scope && cand.scope.isPFMEA));
+      if (!isPfmeaContext && candIsPFMEA) return;
+      if (isPfmeaContext && currIsPFMEA && !candIsPFMEA) return;
+
+      const candCauses = getAllProjectCausesForFm(cand.fm.id, cand);
+      const currName = (currObj.fm?.name || '').trim().toLowerCase();
+      const causesThisHigherMode = candCauses.some(c => {
+        if (c.linkedLowerFmId && String(c.linkedLowerFmId) === String(currFmId)) return true;
+        if (c.fmId && String(c.fmId) === String(currFmId)) return true;
+        const cDesc = (c.details || c.desc || c.description || c.causeText || '').trim().toLowerCase();
+        return cDesc && currName && (cDesc === currName || (cDesc.length > 5 && currName.includes(cDesc)) || (currName.length > 5 && cDesc.includes(currName)));
+      });
+
+      if (causesThisHigherMode) {
+        const higherFmId = cand.fm.id;
+        const nextLevel = currLevel + 1;
+        if (!nodesMap.has(higherFmId) && !nodesMap.has(String(higherFmId))) {
+          const isHigherPfmea = !!(cand.isPFMEA || (cand.scope && cand.scope.isPFMEA) || cand.origin === 'PFMEA');
+          const higherInherentSev = parseInt(cand.fm.sev || cand.fm.severity || 7, 10);
+          const higherChainSev = (typeof getEffectiveSeverityForFailureMode === 'function') ? getEffectiveSeverityForFailureMode(higherFmId) : higherInherentSev;
+          nodesMap.set(higherFmId, {
+            id: higherFmId,
+            fmId: higherFmId,
+            label: cand.fm.name || 'Higher Mode',
+            type: 'HIGHER_MODE',
+            levelIndex: nextLevel,
+            levelLabel: `Higher Mode (Level N+${nextLevel})`,
+            elementName: cand.structName || 'Higher Subsystem',
+            functionName: (cand.funcName || '').trim() || '-',
+            requirement: (cand.fl?.requirement || '').trim() || '-',
+            severity: higherChainSev,
+            inherentSeverity: higherInherentSev,
+            chainSeverity: higherChainSev,
+            comments: cand.fm.comments || '',
+            isPFMEA: isHigherPfmea,
+            width: 270,
+            height: 100
+          });
+        }
+        addEdge(currFmId, higherFmId, 'UP', 'FAILURE_TO_EFFECT_LINKAGE', 'Causes Higher Mode');
+        if (!visitedUpFms.has(higherFmId) && !visitedUpFms.has(String(higherFmId))) {
+          visitedUpFms.add(higherFmId);
+          visitedUpFms.add(String(higherFmId));
+          upQueue.push({ fmId: higherFmId, level: nextLevel });
+        }
       }
     });
   }
@@ -37131,6 +44858,53 @@ function buildFailureNetworkGraph(focusInput) {
       }
     });
   }
+
+  // ── BACKWARD CHAIN SEVERITY PROPAGATION ──
+  // Every node in the network graph inherits the maximum severity from all reachable higher modes & top effects
+  const upAdjacency = new Map();
+  edges.forEach(e => {
+    const fromKey = String(e.from);
+    const toKey = String(e.to);
+    if (e.direction === 'UP' || e.direction === 'DOWN') {
+      if (!upAdjacency.has(fromKey)) upAdjacency.set(fromKey, []);
+      upAdjacency.get(fromKey).push(toKey);
+    }
+  });
+
+  const memoChainSev = new Map();
+  function computeMaxUpstreamSeverity(currId, visited = new Set()) {
+    const key = String(currId);
+    if (memoChainSev.has(key)) return memoChainSev.get(key);
+    if (visited.has(key)) return 1;
+    visited.add(key);
+
+    const currNode = nodesMap.get(currId) || nodesMap.get(key) || Array.from(nodesMap.values()).find(n => String(n.id) === key);
+    let maxS = currNode ? (currNode.inherentSeverity || currNode.severity || 1) : 1;
+
+    const targets = upAdjacency.get(key) || [];
+    targets.forEach(nextId => {
+      const nextS = computeMaxUpstreamSeverity(nextId, new Set(visited));
+      if (nextS > maxS) maxS = nextS;
+    });
+
+    memoChainSev.set(key, maxS);
+    return maxS;
+  }
+
+  // Topological upstream propagation (Top-to-Bottom severity transfer only)
+  // Severity transfers strictly from top effects down through reachable failure modes and causes.
+  // Nodes in independent or sibling branches only inherit severity from the top effects they actually reach (never bottom-to-top).
+  nodesMap.forEach((node, id) => {
+    const highestChainS = computeMaxUpstreamSeverity(id);
+    node.chainSeverity = highestChainS;
+    node.severity = highestChainS;
+    if (node.type === 'LOWEST_CAUSE' || node.isBottomLevel) {
+      if (typeof calculateAIAGVDA_AP === 'function') {
+        node.ap = calculateAIAGVDA_AP(node.chainSeverity, node.occurrence || 4, node.detection || 3, node.classSymbol || '');
+      }
+      node.rpn = node.chainSeverity * (node.occurrence || 4) * (node.detection || 3);
+    }
+  });
 
   return {
     focusFmId: focusNode.id,
@@ -38506,27 +46280,19 @@ function renderFailureNetworkDiagram() {
     let markerAttr = '';
 
     if (isVertical) {
-      // Flow vertical:
-      let x1, y1, x2, y2, cy1, cy2;
-      if (fromNode.y > toNode.y) {
-        // fromNode is lower than toNode (flowing upward to higher effect)
-        x1 = fromNode.x + fromNode.width / 2;
-        y1 = fromNode.y;
-        x2 = toNode.x + toNode.width / 2;
-        y2 = toNode.y + toNode.height;
-        const deltaY = y2 - y1;
-        cy1 = y1 + deltaY * 0.45;
-        cy2 = y2 - deltaY * 0.45;
-      } else {
-        // fromNode is higher than toNode (flowing downward to lower cause)
-        x1 = fromNode.x + fromNode.width / 2;
-        y1 = fromNode.y + fromNode.height;
-        x2 = toNode.x + toNode.width / 2;
-        y2 = toNode.y;
-        const deltaY = y2 - y1;
-        cy1 = y1 + deltaY * 0.45;
-        cy2 = y2 - deltaY * 0.45;
-      }
+      // Flow vertical: Failure propagates cause → mode → effect (bottom → top on screen).
+      // causeNode is lower on screen (larger Y), effectNode is higher on screen (smaller Y).
+      const causeNode = (fromNode.y >= toNode.y) ? fromNode : toNode;
+      const effectNode = (fromNode.y >= toNode.y) ? toNode : fromNode;
+
+      const x1 = causeNode.x + causeNode.width / 2;
+      const y1 = causeNode.y; // top edge of cause card (flowing upward)
+      const x2 = effectNode.x + effectNode.width / 2;
+      const y2 = effectNode.y + effectNode.height; // bottom edge of higher card
+
+      const deltaY = Math.abs(y1 - y2) || 80;
+      const cy1 = y1 - deltaY * 0.45;
+      const cy2 = y2 + deltaY * 0.45;
       pathD = `M ${x1} ${y1} C ${x1} ${cy1}, ${x2} ${cy2}, ${x2} ${y2}`;
 
       if (edge.direction === 'UP') {
@@ -38535,35 +46301,26 @@ function renderFailureNetworkDiagram() {
         markerAttr = 'marker-end="url(#arrowCauseToMode)"';
       }
     } else {
-      // Flow horizontal:
-      // Left = Top Effects (+k), Center = Focus Mode (0), Right = Lower Causes (-k)
-      let x1, y1, x2, y2, cx1, cx2;
-      if (fromNode.x < toNode.x) {
-        // fromNode is on left, toNode is on right
-        x1 = fromNode.x + fromNode.width;
-        y1 = fromNode.y + fromNode.height / 2;
-        x2 = toNode.x;
-        y2 = toNode.y + toNode.height / 2;
-        const deltaX = x2 - x1;
-        cx1 = x1 + deltaX * 0.45;
-        cx2 = x2 - deltaX * 0.45;
-      } else {
-        // fromNode is on right, toNode is on left
-        x1 = fromNode.x;
-        y1 = fromNode.y + fromNode.height / 2;
-        x2 = toNode.x + toNode.width;
-        y2 = toNode.y + toNode.height / 2;
-        const deltaX = x2 - x1;
-        cx1 = x1 + deltaX * 0.45;
-        cx2 = x2 - deltaX * 0.45;
-      }
+      // Flow horizontal: Failure propagates cause → mode → effect (right → left on screen).
+      // causeNode is on right (larger X), effectNode is on left (smaller X).
+      const causeNode = (fromNode.x >= toNode.x) ? fromNode : toNode;
+      const effectNode = (fromNode.x >= toNode.x) ? toNode : fromNode;
+
+      const x1 = causeNode.x; // left edge of cause card (flowing leftward)
+      const y1 = causeNode.y + causeNode.height / 2;
+      const x2 = effectNode.x + effectNode.width; // right edge of higher card
+      const y2 = effectNode.y + effectNode.height / 2;
+
+      const deltaX = Math.abs(x1 - x2) || 80;
+      const cx1 = x1 - deltaX * 0.45;
+      const cx2 = x2 + deltaX * 0.45;
       pathD = `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`;
 
       const isFromPf = !!(fromNode.isPFMEA || fromNode.origin === 'PFMEA' || (fromNode.levelLabel && fromNode.levelLabel.includes('PFMEA')));
       const isToPf = !!(toNode.isPFMEA || toNode.origin === 'PFMEA' || (toNode.levelLabel && toNode.levelLabel.includes('PFMEA')));
-      const isPfEdge = isFromPf || isToPf;
 
-      if (isPfEdge) {
+      // Override marker for PFMEA cross-boundary edges
+      if (isFromPf || isToPf) {
         markerAttr = 'marker-end="url(#arrowPfmea)"';
       } else if (edge.direction === 'UP') {
         markerAttr = 'marker-end="url(#arrowEffect)"';
@@ -38572,10 +46329,24 @@ function renderFailureNetworkDiagram() {
       }
     }
 
-    const isFromPf = !!(fromNode.isPFMEA || fromNode.origin === 'PFMEA' || (fromNode.levelLabel && fromNode.levelLabel.includes('PFMEA')));
-    const isToPf = !!(toNode.isPFMEA || toNode.origin === 'PFMEA' || (toNode.levelLabel && toNode.levelLabel.includes('PFMEA')));
-    const isPfEdge = isFromPf || isToPf;
+    const isPfEdge = !!(fromNode.isPFMEA || fromNode.origin === 'PFMEA' || (fromNode.levelLabel && fromNode.levelLabel.includes('PFMEA')))
+                  || !!(toNode.isPFMEA || toNode.origin === 'PFMEA' || (toNode.levelLabel && toNode.levelLabel.includes('PFMEA')));
 
+    if (isPfEdge) {
+      markerAttr = 'marker-end="url(#arrowPfmea)"';
+    }
+
+    const edgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    edgeGroup.setAttribute('class', 'failure-net-edge-group');
+    edgeGroup.setAttribute('data-edge-id', edge.id);
+
+    // 1. Fat invisible hit area path for effortless hover
+    const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    hitArea.setAttribute('class', 'failure-net-edge-hitarea');
+    hitArea.setAttribute('d', pathD);
+    edgeGroup.appendChild(hitArea);
+
+    // 2. Visible styled connector line
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('id', `fne-path-${edge.id}`);
     const pathClass = isPfEdge
@@ -38587,10 +46358,319 @@ function renderFailureNetworkDiagram() {
       const markerId = markerAttr.split('"')[1].replace('url(#', '').replace(')', '');
       pathEl.setAttribute('marker-end', `url(#${markerId})`);
     }
+    edgeGroup.appendChild(pathEl);
 
-    svgGroup.appendChild(pathEl);
+    // 3. Delink button at the exact Bézier curve midpoint
+    let midX = 0;
+    let midY = 0;
+    if (isVertical) {
+      const causeNode = (fromNode.y >= toNode.y) ? fromNode : toNode;
+      const effectNode = (fromNode.y >= toNode.y) ? toNode : fromNode;
+      const x1 = causeNode.x + causeNode.width / 2;
+      const y1 = causeNode.y;
+      const x2 = effectNode.x + effectNode.width / 2;
+      const y2 = effectNode.y + effectNode.height;
+      const deltaY = Math.abs(y1 - y2) || 80;
+      const cy1 = y1 - deltaY * 0.45;
+      const cy2 = y2 + deltaY * 0.45;
+      midX = 0.125 * x1 + 0.375 * x1 + 0.375 * x2 + 0.125 * x2;
+      midY = 0.125 * y1 + 0.375 * cy1 + 0.375 * cy2 + 0.125 * y2;
+    } else {
+      const causeNode = (fromNode.x >= toNode.x) ? fromNode : toNode;
+      const effectNode = (fromNode.x >= toNode.x) ? toNode : fromNode;
+      const x1 = causeNode.x;
+      const y1 = causeNode.y + causeNode.height / 2;
+      const x2 = effectNode.x + effectNode.width;
+      const y2 = effectNode.y + effectNode.height / 2;
+      const deltaX = Math.abs(x1 - x2) || 80;
+      const cx1 = x1 - deltaX * 0.45;
+      const cx2 = x2 + deltaX * 0.45;
+      midX = 0.125 * x1 + 0.375 * cx1 + 0.375 * cx2 + 0.125 * x2;
+      midY = 0.125 * y1 + 0.375 * y1 + 0.375 * y2 + 0.125 * y2;
+    }
+
+    const btnG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    btnG.setAttribute('class', 'failure-net-edge-delink-btn');
+    btnG.setAttribute('data-edge-id', edge.id);
+    btnG.setAttribute('transform', `translate(${Math.round(midX)}, ${Math.round(midY)})`);
+    btnG.setAttribute('title', 'Click to delink this chain connection');
+    btnG.setAttribute('cursor', 'pointer');
+    btnG.onmousedown = (e) => {
+      e.stopPropagation();
+    };
+    btnG.onpointerdown = (e) => {
+      e.stopPropagation();
+    };
+    btnG.onclick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      await confirmAndDelinkFailureNetworkEdge(edge.id);
+    };
+
+    const pillW = 66;
+    const pillH = 22;
+    const pillRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    pillRect.setAttribute('x', -pillW / 2);
+    pillRect.setAttribute('y', -pillH / 2);
+    pillRect.setAttribute('width', pillW);
+    pillRect.setAttribute('height', pillH);
+    pillRect.setAttribute('rx', '11');
+    pillRect.setAttribute('fill', '#ef4444');
+    pillRect.setAttribute('stroke', '#ffffff');
+    pillRect.setAttribute('stroke-width', '1.5');
+    pillRect.setAttribute('filter', 'drop-shadow(0 2px 5px rgba(0,0,0,0.55))');
+    pillRect.setAttribute('cursor', 'pointer');
+    pillRect.setAttribute('pointer-events', 'all');
+
+    const btnText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    btnText.setAttribute('x', '0');
+    btnText.setAttribute('y', '0');
+    btnText.setAttribute('text-anchor', 'middle');
+    btnText.setAttribute('dominant-baseline', 'central');
+    btnText.setAttribute('fill', '#ffffff');
+    btnText.setAttribute('font-size', '10.5');
+    btnText.setAttribute('font-weight', '700');
+    btnText.setAttribute('letter-spacing', '0.2px');
+    btnText.setAttribute('cursor', 'pointer');
+    btnText.setAttribute('pointer-events', 'all');
+    btnText.textContent = '✂ Delink';
+
+    btnG.appendChild(pillRect);
+    btnG.appendChild(btnText);
+    edgeGroup.appendChild(btnG);
+
+    svgGroup.appendChild(edgeGroup);
   });
 }
+
+
+/**
+ * Asks for confirmation and delinks a chain edge in the Failure Network Diagram.
+ */
+async function confirmAndDelinkFailureNetworkEdge(edgeId) {
+  if (!checkCanEditFMEA()) return;
+  const graph = activeFailureNetworkState.graph;
+  if (!graph || !graph.edges) return;
+
+  const edge = graph.edges.find(e => String(e.id) === String(edgeId));
+  if (!edge) return;
+
+  const fromNode = graph.nodes.find(n => String(n.id) === String(edge.from)) || {};
+  const toNode = graph.nodes.find(n => String(n.id) === String(edge.to)) || {};
+
+  const fromLabel = fromNode ? (fromNode.label || fromNode.name || 'Source Node') : 'Source';
+  const toLabel = toNode ? (toNode.label || toNode.name || 'Target Node') : 'Target';
+
+  const confirmMsg = `Are you sure you want to delink this chain connection?\n\n"${fromLabel}"\n      ⇕\n"${toLabel}"`;
+  const isConfirmed = await confirm(confirmMsg, 'Confirm Delink', 'warning');
+  if (!isConfirmed) return;
+
+  const ctx = getActiveFmeaData();
+  let delinked = false;
+
+  const fromId = String(edge.from);
+  const toId = String(edge.to);
+
+  // Helper to remove matching links from any failureNetworkLinks array
+  const cleanFmLinks = (linkList, srcA, tgtB) => {
+    if (!Array.isArray(linkList)) return linkList;
+    return linkList.filter(l => {
+      const s = String(l.sourceFmId || '');
+      const t = String(l.targetFmId || '');
+      const eff = String(l.targetEffectId || '');
+      const match1 = (s === srcA && (t === tgtB || eff === tgtB));
+      const match2 = (s === tgtB && (t === srcA || eff === srcA));
+      return !(match1 || match2);
+    });
+  };
+
+  // Case 1: Function Network Link (FUNCTION_REQ mode)
+  const isFuncNetwork = (activeFailureNetworkState.chainType === 'FUNCTION_REQ' || fromNode.isFunc || toNode.isFunc);
+  if (isFuncNetwork) {
+    const funcA = String(fromNode.funcId || edge.sourceFuncId || edge.from).replace(/^func-/, '');
+    const funcB = String(toNode.funcId || edge.targetFuncId || edge.to).replace(/^func-/, '');
+
+    const cleanFnLinks = (linkList) => {
+      if (!Array.isArray(linkList)) return linkList;
+      return linkList.filter(l => {
+        const s = String(l.sourceFuncId || '');
+        const t = String(l.targetFuncId || '');
+        return !((s === funcA && t === funcB) || (s === funcB && t === funcA));
+      });
+    };
+
+    if (Array.isArray(ctx.functionNetworkLinks)) {
+      ctx.functionNetworkLinks = cleanFnLinks(ctx.functionNetworkLinks);
+    }
+    if (typeof fmeaData !== 'undefined' && Array.isArray(fmeaData.functionNetworkLinks)) {
+      fmeaData.functionNetworkLinks = cleanFnLinks(fmeaData.functionNetworkLinks);
+    }
+    if (typeof fmeaData !== 'undefined' && Array.isArray(fmeaData.pfmeas)) {
+      fmeaData.pfmeas.forEach(p => {
+        if (Array.isArray(p.functionNetworkLinks)) p.functionNetworkLinks = cleanFnLinks(p.functionNetworkLinks);
+      });
+    }
+    delinked = true;
+  }
+  // Case 2: Mode to Leaf Effect (Highest Effect)
+  else if (toNode.type === 'TOP_EFFECT' || toId.startsWith('fe-node-') || edge.type === 'MODE_TO_EFFECT') {
+    const fmId = String(fromNode.fmId || fromNode.id || edge.sourceFmId || fromId);
+    const effId = String(edge.targetEffectId || toNode.effectId || toId).replace(/^fe-node-[^-]+-/, '');
+    const effLabel = (toNode.label || toNode.name || '').trim().toLowerCase();
+
+    if (ctx.failureModeEffects && ctx.failureModeEffects[fmId]) {
+      ctx.failureModeEffects[fmId] = ctx.failureModeEffects[fmId].filter(id => {
+        const strId = String(id);
+        return strId !== effId && strId !== toId;
+      });
+    }
+
+    ctx.failureNetworkLinks = cleanFmLinks(ctx.failureNetworkLinks, fmId, effId);
+    if (typeof fmeaData !== 'undefined') {
+      fmeaData.failureNetworkLinks = cleanFmLinks(fmeaData.failureNetworkLinks, fmId, effId);
+      if (Array.isArray(fmeaData.pfmeas)) {
+        fmeaData.pfmeas.forEach(p => {
+          p.failureNetworkLinks = cleanFmLinks(p.failureNetworkLinks, fmId, effId);
+        });
+      }
+    }
+
+    // Clean embedded fm.effects
+    const cleanEmbeddedEffects = (root) => {
+      if (!root || !Array.isArray(root.functionLines)) return;
+      root.functionLines.forEach(fl => {
+        if (!Array.isArray(fl.failureModes)) return;
+        fl.failureModes.forEach(fm => {
+          if (String(fm.id) === fmId && Array.isArray(fm.effects)) {
+            fm.effects = fm.effects.filter(e => {
+              const eId = typeof e === 'object' ? String(e.id || '') : String(e);
+              const eDesc = (typeof e === 'object' ? (e.desc || e.details || e.name || '') : '').trim().toLowerCase();
+              if (effId && eId === effId) return false;
+              if (effLabel && eDesc && eDesc === effLabel) return false;
+              return true;
+            });
+          }
+        });
+      });
+    };
+    cleanEmbeddedEffects(ctx);
+    if (typeof fmeaData !== 'undefined') cleanEmbeddedEffects(fmeaData);
+    delinked = true;
+  }
+  // Case 3: Leaf Cause to Mode (Root Cause / Mechanism)
+  else if (fromNode.type === 'LOWEST_CAUSE' || fromId.startsWith('fc-node-') || edge.type === 'CAUSE_TO_MODE') {
+    const fmId = String(toNode.fmId || toNode.id || edge.targetFmId || toId);
+    const causeId = String(edge.sourceCauseId || fromNode.causeId || fromId).replace(/^fc-node-[^-]+-/, '');
+    const causeLabel = (fromNode.label || fromNode.name || '').trim().toLowerCase();
+
+    if (ctx.failureModeCauses && ctx.failureModeCauses[fmId]) {
+      ctx.failureModeCauses[fmId] = ctx.failureModeCauses[fmId].filter(id => {
+        const strId = String(id);
+        return strId !== causeId && strId !== fromId;
+      });
+    }
+
+    ctx.failureNetworkLinks = cleanFmLinks(ctx.failureNetworkLinks, causeId, fmId);
+    if (typeof fmeaData !== 'undefined') {
+      fmeaData.failureNetworkLinks = cleanFmLinks(fmeaData.failureNetworkLinks, causeId, fmId);
+      if (Array.isArray(fmeaData.pfmeas)) {
+        fmeaData.pfmeas.forEach(p => {
+          p.failureNetworkLinks = cleanFmLinks(p.failureNetworkLinks, causeId, fmId);
+        });
+      }
+    }
+
+    // Clean embedded fm.causes
+    const cleanEmbeddedCauses = (root) => {
+      if (!root || !Array.isArray(root.functionLines)) return;
+      root.functionLines.forEach(fl => {
+        if (!Array.isArray(fl.failureModes)) return;
+        fl.failureModes.forEach(fm => {
+          if (String(fm.id) === fmId && Array.isArray(fm.causes)) {
+            fm.causes = fm.causes.filter(c => {
+              const cId = typeof c === 'object' ? String(c.id || '') : String(c);
+              const cDesc = (typeof c === 'object' ? (c.details || c.desc || c.name || c.causeText || '') : '').trim().toLowerCase();
+              if (causeId && cId === causeId) return false;
+              if (causeLabel && cDesc && cDesc === causeLabel) return false;
+              return true;
+            });
+          }
+        });
+      });
+    };
+    cleanEmbeddedCauses(ctx);
+    if (typeof fmeaData !== 'undefined') cleanEmbeddedCauses(fmeaData);
+    delinked = true;
+  }
+  // Case 4: Mode to Mode Linkage (Higher / Lower Failure Modes)
+  else {
+    const fmA = String(fromNode.fmId || fromNode.id || edge.sourceFmId || fromId);
+    const fmB = String(toNode.fmId || toNode.id || edge.targetFmId || toId);
+
+    ctx.failureNetworkLinks = cleanFmLinks(ctx.failureNetworkLinks, fmA, fmB);
+    if (typeof fmeaData !== 'undefined') {
+      fmeaData.failureNetworkLinks = cleanFmLinks(fmeaData.failureNetworkLinks, fmA, fmB);
+      if (Array.isArray(fmeaData.pfmeas)) {
+        fmeaData.pfmeas.forEach(p => {
+          p.failureNetworkLinks = cleanFmLinks(p.failureNetworkLinks, fmA, fmB);
+        });
+      }
+    }
+
+    if (ctx.failureModeCauses) {
+      if (ctx.failureModeCauses[fmA]) ctx.failureModeCauses[fmA] = ctx.failureModeCauses[fmA].filter(id => String(id) !== fmB);
+      if (ctx.failureModeCauses[fmB]) ctx.failureModeCauses[fmB] = ctx.failureModeCauses[fmB].filter(id => String(id) !== fmA);
+    }
+    if (ctx.failureModeEffects) {
+      if (ctx.failureModeEffects[fmA]) ctx.failureModeEffects[fmA] = ctx.failureModeEffects[fmA].filter(id => String(id) !== fmB);
+      if (ctx.failureModeEffects[fmB]) ctx.failureModeEffects[fmB] = ctx.failureModeEffects[fmB].filter(id => String(id) !== fmA);
+    }
+
+    const cleanCrossModeLinks = (root) => {
+      if (!root || !Array.isArray(root.functionLines)) return;
+      root.functionLines.forEach(fl => {
+        if (!Array.isArray(fl.failureModes)) return;
+        fl.failureModes.forEach(fm => {
+          const mId = String(fm.id);
+          if (mId === fmA) {
+            if (Array.isArray(fm.causes)) fm.causes = fm.causes.filter(c => String(c.linkedLowerFmId || c.fmId || c.id || '') !== fmB);
+            if (Array.isArray(fm.effects)) fm.effects = fm.effects.filter(e => String(e.targetFmId || e.id || '') !== fmB);
+            if (String(fm.dfmeaFmId || '') === fmB) fm.dfmeaFmId = null;
+          } else if (mId === fmB) {
+            if (Array.isArray(fm.causes)) fm.causes = fm.causes.filter(c => String(c.linkedLowerFmId || c.fmId || c.id || '') !== fmA);
+            if (Array.isArray(fm.effects)) fm.effects = fm.effects.filter(e => String(e.targetFmId || e.id || '') !== fmA);
+            if (String(fm.dfmeaFmId || '') === fmA) fm.dfmeaFmId = null;
+          }
+        });
+      });
+    };
+    cleanCrossModeLinks(ctx);
+    if (typeof fmeaData !== 'undefined') cleanCrossModeLinks(fmeaData);
+    delinked = true;
+  }
+
+  if (typeof saveProjectToLocalStorage === 'function') {
+    saveProjectToLocalStorage();
+  }
+  if (typeof performAutoSave === 'function') {
+    performAutoSave('Network Chain Delinked');
+  }
+
+  showToast(`🔗 Delinked connection between "${fromLabel}" and "${toLabel}".`, 'info');
+
+  // Re-render open network diagram
+  if (typeof refreshActiveFailureNetworkIfOpen === 'function') {
+    refreshActiveFailureNetworkIfOpen();
+  } else if (typeof renderFailureNetworkDiagram === 'function') {
+    renderFailureNetworkDiagram();
+  }
+
+  // Also update FMEA Table
+  if (typeof renderFMEATable === 'function') {
+    renderFMEATable();
+  }
+}
+window.confirmAndDelinkFailureNetworkEdge = confirmAndDelinkFailureNetworkEdge;
 
 function getNodeClass(node) {
   const isPf = !!(node.isPFMEA || node.origin === 'PFMEA' || (node.levelLabel && node.levelLabel.includes('PFMEA')) || (node.typeLabel && node.typeLabel.includes('PFMEA')) || (node.scopeName && node.scopeName.includes('PFMEA')));
@@ -38732,8 +46812,12 @@ function buildNodeCardInnerHTML(node) {
   // Badges (Severity, Occurrence, Detection, Controls)
   let badgeHtml = '';
   if (isEffect || isFocus) {
-    const sevStyle = (typeof getSeverityColorStyle === 'function') ? getSeverityColorStyle(node.severity) : 'background:#fee2e2; color:#991b1b;';
-    badgeHtml += `<span style="${sevStyle} font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; border:1px solid rgba(0,0,0,0.15);">S: ${node.severity || 7}</span>`;
+    const dispSev = node.chainSeverity || node.severity || 7;
+    const sevStyle = (typeof getSeverityColorStyle === 'function') ? getSeverityColorStyle(dispSev) : 'background:#fee2e2; color:#991b1b;';
+    const badgeText = (node.chainSeverity && node.inherentSeverity)
+      ? (node.type === 'TOP_EFFECT' && node.chainSeverity === node.inherentSeverity ? `${node.chainSeverity}` : `${node.chainSeverity}(${node.inherentSeverity})`)
+      : `${dispSev}`;
+    badgeHtml += `<span style="${sevStyle} font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; border:1px solid rgba(0,0,0,0.15);">S: ${badgeText}</span>`;
   }
   if (isCause) {
     const occStyle = (typeof getOccurrenceColorStyle === 'function') ? getOccurrenceColorStyle(node.occurrence) : 'background:#fef3c7; color:#92400e;';
@@ -38802,10 +46886,14 @@ function inspectFailureNetworkNode(nodeId) {
 
   let riskSection = '';
   if (isEffect || isFocus) {
+    const dispSev = node.chainSeverity || node.severity || 7;
+    const sevValText = (node.chainSeverity && node.inherentSeverity)
+      ? (node.type === 'TOP_EFFECT' && node.chainSeverity === node.inherentSeverity ? `${node.chainSeverity}` : `${node.chainSeverity}(${node.inherentSeverity})`)
+      : `${dispSev}`;
     riskSection += `
       <div style="display:flex; justify-content:space-between; padding:6px 10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:6px; margin-bottom:8px;">
         <span style="font-weight:700; color:#f87171;">Severity (S) Rating:</span>
-        <span style="font-weight:900; color:#f87171; font-size:14px;">${node.severity || 7} / 10</span>
+        <span style="font-weight:900; color:#f87171; font-size:14px;">${sevValText} / 10</span>
       </div>
     `;
   }
@@ -39057,7 +47145,7 @@ function setupFailureNetworkCanvasInteractions() {
 
   container.addEventListener('mousedown', (e) => {
     closeFailureNetContextMenu();
-    if (e.target.closest('.failure-net-node') || e.target.closest('button')) return;
+    if (e.target.closest('.failure-net-node') || e.target.closest('button') || e.target.closest('.failure-net-edge-delink-btn') || e.target.closest('.failure-net-edge-group')) return;
     activeFailureNetworkState.isPanning = true;
     activeFailureNetworkState.startPanX = e.clientX - activeFailureNetworkState.panX;
     activeFailureNetworkState.startPanY = e.clientY - activeFailureNetworkState.panY;
@@ -39451,6 +47539,13 @@ function generateFailureChainsReportHtml(allModes) {
   const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : (typeof fmeaData !== 'undefined' ? fmeaData : {});
   const projName = escapeHtml(ctx?.projectInfo?.name || fmeaData?.projectInfo?.name || 'JOST FMEA Project');
   const dateStr = new Date().toLocaleDateString();
+  const curRev = typeof getContextRevision === 'function' ? getContextRevision() : (typeof fmeaData !== 'undefined' ? fmeaData.currentRevision : null);
+  const revNum = (curRev && (curRev.revNumber || curRev.number)) || (fmeaData && (fmeaData.headerInfo?.revNumber || fmeaData.header?.revNumber)) || '1.0';
+  const cleanRevNum = String(revNum).replace(/\s*\((in progress|draft|frozen)\)/i, '').trim();
+  const isOngoing = curRev
+    ? (curRev.status === 'In Progress' || curRev.status === 'Draft' || (curRev.status && curRev.status.toLowerCase() !== 'frozen'))
+    : (!fmeaData?.status || fmeaData?.status?.toLowerCase() !== 'frozen');
+  const revLabel = `Rev ${cleanRevNum}${isOngoing ? ' (In Progress)' : ''}`;
 
   // Navigation Links
   const navLinksHtml = allModes.map((item, idx) => {
@@ -39961,6 +48056,7 @@ function generateFailureChainsReportHtml(allModes) {
         <h1>Failure Network Analysis &amp; Propagation Report</h1>
         <div class="doc-meta">
           Project: <strong>${projName}</strong> &bull; 
+          Revision: <strong>${escapeHtml(revLabel)}</strong> &bull; 
           AIAG &amp; VDA FMEA Standard (Step 4 &mdash; Failure Analysis) &bull; 
           Generated: <strong>${dateStr}</strong>
         </div>
@@ -40040,6 +48136,13 @@ function generateFunctionChainsReportHtml(allModes) {
   const ctx = (typeof getActiveFmeaData === 'function') ? getActiveFmeaData() : (typeof fmeaData !== 'undefined' ? fmeaData : {});
   const projName = escapeHtml(ctx?.projectInfo?.name || fmeaData?.projectInfo?.name || 'JOST FMEA Project');
   const dateStr = new Date().toLocaleDateString();
+  const curRev = typeof getContextRevision === 'function' ? getContextRevision() : (typeof fmeaData !== 'undefined' ? fmeaData.currentRevision : null);
+  const revNum = (curRev && (curRev.revNumber || curRev.number)) || (fmeaData && (fmeaData.headerInfo?.revNumber || fmeaData.header?.revNumber)) || '1.0';
+  const cleanRevNum = String(revNum).replace(/\s*\((in progress|draft|frozen)\)/i, '').trim();
+  const isOngoing = curRev
+    ? (curRev.status === 'In Progress' || curRev.status === 'Draft' || (curRev.status && curRev.status.toLowerCase() !== 'frozen'))
+    : (!fmeaData?.status || fmeaData?.status?.toLowerCase() !== 'frozen');
+  const revLabel = `Rev ${cleanRevNum}${isOngoing ? ' (In Progress)' : ''}`;
 
   // Navigation Links
   const navLinksHtml = allModes.map((item, idx) => {
@@ -40535,6 +48638,7 @@ function generateFunctionChainsReportHtml(allModes) {
         <h1>Function &amp; Requirement Network Analysis Report</h1>
         <div class="doc-meta">
           Project: <strong>${projName}</strong> &bull; 
+          Revision: <strong>${escapeHtml(revLabel)}</strong> &bull; 
           AIAG &amp; VDA FMEA Standard (Step 3 &mdash; Function Analysis) &bull; 
           Generated: <strong>${dateStr}</strong>
         </div>
@@ -40625,12 +48729,12 @@ window.toggleFailureNetChainType = toggleFailureNetChainType;
   window.renderFunctionChainLibraryList = renderFunctionChainLibraryList;
   window.getDescendantsOfStructureNode = getDescendantsOfStructureNode;
   window.getRelevantSystemChain = getRelevantSystemChain;
-  window.closeLinkFunctionModal = closeLinkFunctionModal;
-  window.confirmLinkFunctions = confirmLinkFunctions;
-  window.filterLinkFunctionList = filterLinkFunctionList;
-  window.toggleLinkFunctionSelection = toggleLinkFunctionSelection;
-  window.toggleLinkFunctionQuickAdd = toggleLinkFunctionQuickAdd;
-  window.submitLinkFunctionQuickAdd = submitLinkFunctionQuickAdd;
+  if (typeof closeLinkFunctionModal !== 'undefined') window.closeLinkFunctionModal = closeLinkFunctionModal;
+  if (typeof confirmLinkFunctions !== 'undefined') window.confirmLinkFunctions = confirmLinkFunctions;
+  if (typeof filterLinkFunctionList !== 'undefined') window.filterLinkFunctionList = filterLinkFunctionList;
+  if (typeof toggleLinkFunctionSelection !== 'undefined') window.toggleLinkFunctionSelection = toggleLinkFunctionSelection;
+  if (typeof toggleLinkFunctionQuickAdd !== 'undefined') window.toggleLinkFunctionQuickAdd = toggleLinkFunctionQuickAdd;
+  if (typeof submitLinkFunctionQuickAdd !== 'undefined') window.submitLinkFunctionQuickAdd = submitLinkFunctionQuickAdd;
 window.zoomFailureNetwork = zoomFailureNetwork;
 window.resetFailureNetworkZoom = resetFailureNetworkZoom;
 window.fitFailureNetworkView = fitFailureNetworkView;
@@ -40680,6 +48784,14 @@ const AI_STRUCTURE_PRESETS = {
 };
 
 function openAiStructureImportModal() {
+  if (!isAiFeaturesEnabled() || !isAiFeatureModuleEnabled('workbench')) {
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert("Access Restricted: AI Structure Generator is currently disabled by System Admin policy.", "Admin Policy Enforcement", "warning");
+    } else {
+      alert("Access Restricted: AI Structure Generator is currently disabled by System Admin policy.");
+    }
+    return;
+  }
   const modal = document.getElementById('aiStructureImportModal');
   if (!modal) return;
   modal.style.display = 'block';
@@ -41054,7 +49166,7 @@ function parseAndNormalizeAiStructure(raw) {
       material: String(node.material || node.mat || '').trim(),
       gdt: String(node.gdt || node.tolerances || '').trim(),
       env: String(node.env || node.environment || '').trim(),
-      joints: Array.isArray(node.joints) ? node.joints : (cleanType === 'Assembly' ? ['Welding', 'Nut-Bolt'] : []),
+      joints: Array.isArray(node.joints) ? node.joints : [],
       isCatalogueItem: isCat,
       children: []
     };
@@ -41200,7 +49312,7 @@ function ingestAiStructureIntoProject(overrideStructure) {
         material: item.material || '',
         gdt: item.gdt || '',
         env: item.env || '',
-        joints: item.joints || (item.type === 'Assembly' ? ['Welding', 'Nut-Bolt'] : []),
+        joints: Array.isArray(item.joints) ? item.joints : [],
         isCatalogueItem: !!item.isCatalogueItem,
         controlsList: '',
         requirementsNeeded: false
@@ -41279,11 +49391,18 @@ window.activeFnLinkState = null;
 function refreshActiveFailureNetworkIfOpen() {
   const fnModal = document.getElementById('failureNetworkModal');
   if (!fnModal || fnModal.style.display === 'none') return;
-  if (!activeFailureNetworkState.focusTarget && !activeFailureNetworkState.focusFmId) return;
+  if (!activeFailureNetworkState.focusTarget && !activeFailureNetworkState.focusFmId && !activeFailureNetworkState.focusFuncId) return;
 
-  const target = activeFailureNetworkState.focusTarget || activeFailureNetworkState.focusFmId;
   const currentInspected = activeFailureNetworkState.inspectedNodeId;
-  openFailureNetworkModal(target, null, true);
+  if (activeFailureNetworkState.chainType === 'FUNCTION_REQ') {
+    const target = activeFailureNetworkState.focusTarget || activeFailureNetworkState.focusFuncId;
+    if (typeof openFunctionNetworkModal === 'function') {
+      openFunctionNetworkModal(target, null, true);
+    }
+  } else {
+    const target = activeFailureNetworkState.focusTarget || activeFailureNetworkState.focusFmId;
+    openFailureNetworkModal(target, null, true);
+  }
   if (currentInspected) {
     setTimeout(() => { inspectFailureNetworkNode(currentInspected); }, 60);
   }
@@ -41975,119 +50094,126 @@ window.jumpToFailureModeInFMEATable = jumpToFailureModeInFMEATable;
 // 43. MASTER COMPONENT CHARACTERISTICS CATALOGUE & SELECTION SYSTEM
 // ══════════════════════════════════════════════════════════════════════════
 
-var MASTER_COMPONENT_CHARACTERISTICS_DATA = [
-  {
-    category: "🔩 Fasteners & Connectors",
-    items: [
-      { name: "Nuts", spec: "Thread size/pitch, proof load, prevailing torque, plating" },
-      { name: "Bolts", spec: "Tensile grade, thread pitch, under-head radius, clamp torque" },
-      { name: "Screws", spec: "Thread profile, drive type, head style, torque-to-yield" },
-      { name: "Studs", spec: "Double-end thread pitch, engagement length, yield strength" },
-      { name: "Washers (flat)", spec: "Inside/outside diameter, nominal thickness, hardness" },
-      { name: "Washers (spring)", spec: "Free height, deflection rate, spring hardness, set resistance" },
-      { name: "Washers (lock)", spec: "Tooth style, locking bite angle, surface hardness" },
-      { name: "Rivets", spec: "Shank diameter, grip range, shear strength, head type" },
-      { name: "Pins (cotter)", spec: "Prong diameter, eye shape, split length, material ductility" },
-      { name: "Pins (split)", spec: "Outer diameter, chamfer angle, insertion force, shear limit" },
-      { name: "Pins (dowel)", spec: "Precision diameter tolerance m6/h6, surface finish Ra, hardness" },
-      { name: "Clips", spec: "Retention force, spring thickness, insertion effort" },
-      { name: "Clamps", spec: "Band width, clamping diameter range, tightening torque" },
-      { name: "Cable ties", spec: "Tensile loop rating, bundle diameter, UV/thermal resistance" }
-    ]
-  },
-  {
-    category: "⚙️ Mechanical & Structural",
-    items: [
-      { name: "Shafts", spec: "Outer diameter, total runout, shoulder fillet radius, case depth" },
-      { name: "Gears", spec: "Module/DP, tooth profile accuracy, pitch runout, surface hardness" },
-      { name: "Sprockets", spec: "Tooth pitch, bottom diameter, hardness, axial runout" },
-      { name: "Bearings (ball)", spec: "Bore/OD tolerance, dynamic load rating, radial clearance" },
-      { name: "Bearings (roller)", spec: "Contact angle, dynamic/static capacity, roller crowned profile" },
-      { name: "Bearings (sleeve)", spec: "Wall thickness, interference press fit, lubricity/PV limit" },
-      { name: "Bushings", spec: "Inside/outside diameter, concentricity, flanged collar thickness" },
-      { name: "Spacers", spec: "Parallelism of end faces, length tolerance, compressive yield" },
-      { name: "Springs (coil)", spec: "Wire diameter, mean coil diameter, active coils, spring rate k" },
-      { name: "Springs (leaf)", spec: "Leaf thickness/width, camber arch height, fatigue endurance" },
-      { name: "Springs (torsion)", spec: "Leg length/angle, torsional rate, maximum allowable windup" },
-      { name: "Plates", spec: "Plate thickness, flatness, yield strength, edge distance" },
-      { name: "Brackets", spec: "Flange thickness, internal bend radius, mounting hole true position" },
-      { name: "Frames", spec: "Section modulus, weld penetration, diagonal squareness tolerance" },
-      { name: "Beams", spec: "Web/flange thickness, deflection limit L/360, moment of inertia" }
-    ]
-  },
-  {
-    category: "💧 Hydraulic & Pneumatic",
-    items: [
-      { name: "Hoses", spec: "Inside diameter, burst pressure rating, minimum bend radius, impulse life" },
-      { name: "Tubes", spec: "Wall thickness, outer diameter, flare angle, pressure test rating" },
-      { name: "Pipes", spec: "Schedule/wall thickness, threading class, hydrostatic proof pressure" },
-      { name: "Fittings", spec: "Thread sealing type (NPT/ORFS/JIC), proof pressure, hex size" },
-      { name: "Couplings", spec: "Disconnection force, spillage volume, locking ball engagement" },
-      { name: "Adapters", spec: "Port angle, thread conversion, sealing washer face flatness" },
-      { name: "Seals", spec: "Durometer Shore A, lip radial load, extrusion gap tolerance" },
-      { name: "Gaskets", spec: "Bolt clamp stress, compressibility percentage, recovery rate" },
-      { name: "O-rings", spec: "Cross section width, inner diameter, squeeze percentage, compression set" },
-      { name: "Cylinders", spec: "Bore diameter, stroke length, rod buckling load, cushion profile" },
-      { name: "Pistons", spec: "Groove clearance, skirt diameter, piston ring land width" },
-      { name: "Actuators", spec: "Maximum thrust/force, response time, stroke repeatability" },
-      { name: "Valves (check)", spec: "Cracking pressure, reverse leakage rate, reseat pressure" },
-      { name: "Valves (relief)", spec: "Set pressure tolerance, full-flow pressure, flow capacity" },
-      { name: "Valves (directional)", spec: "Spool overlap, internal cross-port leakage, shifting response" }
-    ]
-  },
-  {
-    category: "🔌 Electrical & Electronic",
-    items: [
-      { name: "Wires", spec: "AWG cross-section conductor area, insulation dielectric voltage" },
-      { name: "Cables", spec: "Shielding coverage percentage, jacket sheath thickness, impedance" },
-      { name: "Harnesses", spec: "Branch breakout lengths, conduit wrapping, bend radius clearance" },
-      { name: "Connectors", spec: "Contact resistance, pin retention force, mating cycle life, IP rating" },
-      { name: "Terminals", spec: "Crimp height and pull-off force, plating thickness, crimp barrel width" },
-      { name: "Plugs", spec: "Keying index, latch locking force, moisture sealing gasket integrity" },
-      { name: "Switches", spec: "Actuation travel distance, contact bounce time, contact rating" },
-      { name: "Relays", spec: "Pick-up/drop-out voltage, contact resistance, coil suppression diode" },
-      { name: "Fuses", spec: "Continuous current rating, I^2t clearing energy, interrupt capacity" },
-      { name: "Sensors (temperature)", spec: "Measurement range, response time constant tau, resistance curve" },
-      { name: "Sensors (pressure)", spec: "Full scale accuracy, proof/burst pressure, offset zero-drift" },
-      { name: "Sensors (proximity)", spec: "Sensing distance, hysteresis band, switching frequency" },
-      { name: "Motors", spec: "Rated torque/speed, stall current, winding insulation class, back-EMF" },
-      { name: "Solenoids", spec: "Pull-in force at rated airgap, duty cycle, coil resistance" }
-    ]
-  },
-  {
-    category: "🛡️ Safety & Support",
-    items: [
-      { name: "Guards", spec: "Safety probe mesh aperture, impact energy absorption, clearance distance" },
-      { name: "Shields", spec: "Thermal insulation barrier rating, debris deflection angle, mounting stiffness" },
-      { name: "Covers", spec: "Enclosure ingress protection rating, fastener torque retention" },
-      { name: "Caps", spec: "Push-on retention force, contamination ingress seal, chemical resistance" },
-      { name: "Plugs (protective)", spec: "Thread engagement / snap fit, fluid tightness, removal tab profile" },
-      { name: "Dust boots", spec: "Flex fatigue cycles, convolution geometry, tear resistance" },
-      { name: "Insulation", spec: "Thermal conductivity k-value, acoustic insertion loss, flame retardance" },
-      { name: "Padding", spec: "Compression deflection, rebound resilience, density" },
-      { name: "Dampers", spec: "Damping coefficient c, stroke length, rebound/compression ratio" },
-      { name: "Labels", spec: "Adhesion peel strength, legibility after weathering/solvent rub, contrast" },
-      { name: "Tags", spec: "Tear resistance, weather resistance, fastening wire gauge" },
-      { name: "Indicators", spec: "Luminous intensity / pointer travel scale, visibility angle" }
-    ]
-  },
-  {
-    category: "🌍 Environmental & Miscellaneous",
-    items: [
-      { name: "Filters (oil)", spec: "Micron rating beta ratio, burst pressure, bypass valve pressure" },
-      { name: "Filters (air)", spec: "Initial flow restriction, dust holding capacity, sealing lip flatness" },
-      { name: "Filters (hydraulic)", spec: "Collapse pressure rating, particle efficiency beta_x(c), dirt capacity" },
-      { name: "Lubrication fittings (grease nipples)", spec: "Check ball spring force, thread sealing, hex drive size" },
-      { name: "Adhesives", spec: "Lap shear strength, open cure time, glass transition temperature Tg" },
-      { name: "Tapes", spec: "Adhesion to steel, backing tensile strength, total thickness" },
-      { name: "Sealants", spec: "Gap filling capability, tack-free time, elongation at break" },
-      { name: "Rubber mounts", spec: "Static/dynamic stiffness ratio, durometer, shear bond strength" },
-      { name: "Vibration isolators", spec: "Natural frequency fn, transmissibility at resonance Q, load rating" }
-    ]
+function getMasterComponentCharacteristicsData() {
+  if (Array.isArray(window.MASTER_COMPONENT_CHARACTERISTICS_DATA) && window.MASTER_COMPONENT_CHARACTERISTICS_DATA.length > 0) {
+    return window.MASTER_COMPONENT_CHARACTERISTICS_DATA;
   }
-];
-
-
+  const defaultData = [
+    {
+      category: "🔩 Fasteners & Connectors",
+      items: [
+        { name: "Nuts", spec: "Thread size/pitch, proof load, prevailing torque, plating" },
+        { name: "Bolts", spec: "Tensile grade, thread pitch, under-head radius, clamp torque" },
+        { name: "Screws", spec: "Thread profile, drive type, head style, torque-to-yield" },
+        { name: "Studs", spec: "Double-end thread pitch, engagement length, yield strength" },
+        { name: "Washers (flat)", spec: "Inside/outside diameter, nominal thickness, hardness" },
+        { name: "Washers (spring)", spec: "Free height, deflection rate, spring hardness, set resistance" },
+        { name: "Washers (lock)", spec: "Tooth style, locking bite angle, surface hardness" },
+        { name: "Rivets", spec: "Shank diameter, grip range, shear strength, head type" },
+        { name: "Pins (cotter)", spec: "Prong diameter, eye shape, split length, material ductility" },
+        { name: "Pins (split)", spec: "Outer diameter, chamfer angle, insertion force, shear limit" },
+        { name: "Pins (dowel)", spec: "Precision diameter tolerance m6/h6, surface finish Ra, hardness" },
+        { name: "Clips", spec: "Retention force, spring thickness, insertion effort" },
+        { name: "Clamps", spec: "Band width, clamping diameter range, tightening torque" },
+        { name: "Cable ties", spec: "Tensile loop rating, bundle diameter, UV/thermal resistance" }
+      ]
+    },
+    {
+      category: "⚙️ Mechanical & Structural",
+      items: [
+        { name: "Shafts", spec: "Outer diameter, total runout, shoulder fillet radius, case depth" },
+        { name: "Gears", spec: "Module/DP, tooth profile accuracy, pitch runout, surface hardness" },
+        { name: "Sprockets", spec: "Tooth pitch, bottom diameter, hardness, axial runout" },
+        { name: "Bearings (ball)", spec: "Bore/OD tolerance, dynamic load rating, radial clearance" },
+        { name: "Bearings (roller)", spec: "Contact angle, dynamic/static capacity, roller crowned profile" },
+        { name: "Bearings (sleeve)", spec: "Wall thickness, interference press fit, lubricity/PV limit" },
+        { name: "Bushings", spec: "Inside/outside diameter, concentricity, flanged collar thickness" },
+        { name: "Spacers", spec: "Parallelism of end faces, length tolerance, compressive yield" },
+        { name: "Springs (coil)", spec: "Wire diameter, mean coil diameter, active coils, spring rate k" },
+        { name: "Springs (leaf)", spec: "Leaf thickness/width, camber arch height, fatigue endurance" },
+        { name: "Springs (torsion)", spec: "Leg length/angle, torsional rate, maximum allowable windup" },
+        { name: "Plates", spec: "Plate thickness, flatness, yield strength, edge distance" },
+        { name: "Brackets", spec: "Flange thickness, internal bend radius, mounting hole true position" },
+        { name: "Frames", spec: "Section modulus, weld penetration, diagonal squareness tolerance" },
+        { name: "Beams", spec: "Web/flange thickness, deflection limit L/360, moment of inertia" }
+      ]
+    },
+    {
+      category: "💧 Hydraulic & Pneumatic",
+      items: [
+        { name: "Hoses", spec: "Inside diameter, burst pressure rating, minimum bend radius, impulse life" },
+        { name: "Tubes", spec: "Wall thickness, outer diameter, flare angle, pressure test rating" },
+        { name: "Pipes", spec: "Schedule/wall thickness, threading class, hydrostatic proof pressure" },
+        { name: "Fittings", spec: "Thread sealing type (NPT/ORFS/JIC), proof pressure, hex size" },
+        { name: "Couplings", spec: "Disconnection force, spillage volume, locking ball engagement" },
+        { name: "Adapters", spec: "Port angle, thread conversion, sealing washer face flatness" },
+        { name: "Seals", spec: "Durometer Shore A, lip radial load, extrusion gap tolerance" },
+        { name: "Gaskets", spec: "Bolt clamp stress, compressibility percentage, recovery rate" },
+        { name: "O-rings", spec: "Cross section width, inner diameter, squeeze percentage, compression set" },
+        { name: "Cylinders", spec: "Bore diameter, stroke length, rod buckling load, cushion profile" },
+        { name: "Pistons", spec: "Groove clearance, skirt diameter, piston ring land width" },
+        { name: "Actuators", spec: "Maximum thrust/force, response time, stroke repeatability" },
+        { name: "Valves (check)", spec: "Cracking pressure, reverse leakage rate, reseat pressure" },
+        { name: "Valves (relief)", spec: "Set pressure tolerance, full-flow pressure, flow capacity" },
+        { name: "Valves (directional)", spec: "Spool overlap, internal cross-port leakage, shifting response" }
+      ]
+    },
+    {
+      category: "🔌 Electrical & Electronic",
+      items: [
+        { name: "Wires", spec: "AWG cross-section conductor area, insulation dielectric voltage" },
+        { name: "Cables", spec: "Shielding coverage percentage, jacket sheath thickness, impedance" },
+        { name: "Harnesses", spec: "Branch breakout lengths, conduit wrapping, bend radius clearance" },
+        { name: "Connectors", spec: "Contact resistance, pin retention force, mating cycle life, IP rating" },
+        { name: "Terminals", spec: "Crimp height and pull-off force, plating thickness, crimp barrel width" },
+        { name: "Plugs", spec: "Keying index, latch locking force, moisture sealing gasket integrity" },
+        { name: "Switches", spec: "Actuation travel distance, contact bounce time, contact rating" },
+        { name: "Relays", spec: "Pick-up/drop-out voltage, contact resistance, coil suppression diode" },
+        { name: "Fuses", spec: "Continuous current rating, I^2t clearing energy, interrupt capacity" },
+        { name: "Sensors (temperature)", spec: "Measurement range, response time constant tau, resistance curve" },
+        { name: "Sensors (pressure)", spec: "Full scale accuracy, proof/burst pressure, offset zero-drift" },
+        { name: "Sensors (proximity)", spec: "Sensing distance, hysteresis band, switching frequency" },
+        { name: "Motors", spec: "Rated torque/speed, stall current, winding insulation class, back-EMF" },
+        { name: "Solenoids", spec: "Pull-in force at rated airgap, duty cycle, coil resistance" }
+      ]
+    },
+    {
+      category: "🛡️ Safety & Support",
+      items: [
+        { name: "Guards", spec: "Safety probe mesh aperture, impact energy absorption, clearance distance" },
+        { name: "Shields", spec: "Thermal insulation barrier rating, debris deflection angle, mounting stiffness" },
+        { name: "Covers", spec: "Enclosure ingress protection rating, fastener torque retention" },
+        { name: "Caps", spec: "Push-on retention force, contamination ingress seal, chemical resistance" },
+        { name: "Plugs (protective)", spec: "Thread engagement / snap fit, fluid tightness, removal tab profile" },
+        { name: "Dust boots", spec: "Flex fatigue cycles, convolution geometry, tear resistance" },
+        { name: "Insulation", spec: "Thermal conductivity k-value, acoustic insertion loss, flame retardance" },
+        { name: "Padding", spec: "Compression deflection, rebound resilience, density" },
+        { name: "Dampers", spec: "Damping coefficient c, stroke length, rebound/compression ratio" },
+        { name: "Labels", spec: "Adhesion peel strength, legibility after weathering/solvent rub, contrast" },
+        { name: "Tags", spec: "Tear resistance, weather resistance, fastening wire gauge" },
+        { name: "Indicators", spec: "Luminous intensity / pointer travel scale, visibility angle" }
+      ]
+    },
+    {
+      category: "🌍 Environmental & Miscellaneous",
+      items: [
+        { name: "Filters (oil)", spec: "Micron rating beta ratio, burst pressure, bypass valve pressure" },
+        { name: "Filters (air)", spec: "Initial flow restriction, dust holding capacity, sealing lip flatness" },
+        { name: "Filters (hydraulic)", spec: "Collapse pressure rating, particle efficiency beta_x(c), dirt capacity" },
+        { name: "Lubrication fittings (grease nipples)", spec: "Check ball spring force, thread sealing, hex drive size" },
+        { name: "Adhesives", spec: "Lap shear strength, open cure time, glass transition temperature Tg" },
+        { name: "Tapes", spec: "Adhesion to steel, backing tensile strength, total thickness" },
+        { name: "Sealants", spec: "Gap filling capability, tack-free time, elongation at break" },
+        { name: "Rubber mounts", spec: "Static/dynamic stiffness ratio, durometer, shear bond strength" },
+        { name: "Vibration isolators", spec: "Natural frequency fn, transmissibility at resonance Q, load rating" }
+      ]
+    }
+  ];
+  window.MASTER_COMPONENT_CHARACTERISTICS_DATA = defaultData;
+  return defaultData;
+}
+window.getMasterComponentCharacteristicsData = getMasterComponentCharacteristicsData;
+var MASTER_COMPONENT_CHARACTERISTICS_DATA = getMasterComponentCharacteristicsData();
 
 // ══════════════════════════════════════════════════════════════════════════
 // WB3 COMPONENT & MIXED CONSTITUENT CHARACTERISTICS (TYPE ➔ SUBTYPE) CONTROLLERS
@@ -42110,7 +50236,7 @@ function normalizeCharacteristicsInput(input) {
         spec: item.spec || findSpecForSubtypeName(item.name) || ''
       });
     } else if (typeof item === 'string' && item.trim()) {
-      item.split(/[,;\n]/).forEach(token => {
+      item.split(/[,;\r\n]/).forEach(token => {
         const trimmed = token.trim();
         if (trimmed) {
           results.push({
@@ -42134,8 +50260,9 @@ function normalizeCharacteristicsInput(input) {
 }
 
 function findCategoryForSubtypeName(name) {
+  const data = getMasterComponentCharacteristicsData();
   const lower = name.toLowerCase();
-  for (const cat of MASTER_COMPONENT_CHARACTERISTICS_DATA) {
+  for (const cat of data) {
     for (const it of cat.items) {
       if (it.name.toLowerCase() === lower || lower.includes(it.name.toLowerCase()) || it.name.toLowerCase().includes(lower)) {
         return cat.category;
@@ -42146,8 +50273,9 @@ function findCategoryForSubtypeName(name) {
 }
 
 function findSpecForSubtypeName(name) {
+  const data = getMasterComponentCharacteristicsData();
   const lower = name.toLowerCase();
-  for (const cat of MASTER_COMPONENT_CHARACTERISTICS_DATA) {
+  for (const cat of data) {
     for (const it of cat.items) {
       if (it.name.toLowerCase() === lower) {
         return it.spec;
@@ -42170,19 +50298,31 @@ function renderWb3ComponentCategoryTabs() {
   const container = document.getElementById('wb3CompCategoryTabs');
   if (!container) return;
 
+  const data = getMasterComponentCharacteristicsData();
   const current = window.wb3ActiveComponentCategory || 'ALL';
   let html = `<button type="button" class="wb3-type-btn ${current === 'ALL' ? 'active' : ''}" onclick="setWb3ComponentCategory('ALL')">🌟 All Categories</button>`;
 
-  MASTER_COMPONENT_CHARACTERISTICS_DATA.forEach(cat => {
+  data.forEach((cat, idx) => {
     const isActive = (cat.category === current);
-    html += `<button type="button" class="wb3-type-btn ${isActive ? 'active' : ''}" onclick="setWb3ComponentCategory('${escapeHtml(cat.category)}')">${escapeHtml(cat.category)}</button>`;
+    html += `<button type="button" class="wb3-type-btn ${isActive ? 'active' : ''}" onclick="setWb3ComponentCategoryByIndex(${idx})">${escapeHtml(cat.category)}</button>`;
   });
 
   container.innerHTML = html;
 }
 
+function setWb3ComponentCategoryByIndex(idx) {
+  const data = getMasterComponentCharacteristicsData();
+  if (idx >= 0 && idx < data.length) {
+    window.wb3ActiveComponentCategory = data[idx].category;
+  } else {
+    window.wb3ActiveComponentCategory = 'ALL';
+  }
+  renderWb3ComponentCategoryTabs();
+  renderWb3ComponentSubtypesGrid();
+}
+
 function setWb3ComponentCategory(catName) {
-  window.wb3ActiveComponentCategory = catName;
+  window.wb3ActiveComponentCategory = catName || 'ALL';
   renderWb3ComponentCategoryTabs();
   renderWb3ComponentSubtypesGrid();
 }
@@ -42195,6 +50335,9 @@ function renderWb3ComponentSelectedCharsBadges() {
   if (badgeEl) {
     badgeEl.textContent = `${selected.length} Linked`;
   }
+  if (typeof renderWb3ConsideredCharacteristicsTable === 'function') {
+    renderWb3ConsideredCharacteristicsTable();
+  }
 
   if (!container) return;
 
@@ -42205,7 +50348,8 @@ function renderWb3ComponentSelectedCharsBadges() {
 
   container.innerHTML = selected.map((item, idx) => {
     const icon = (item.category && item.category.split(' ')[0]) || '🏷️';
-    const tooltip = item.spec ? `${item.category}\nSpec: ${item.spec}` : item.category;
+    const tooltip = item.spec ? `${item.category}
+Spec: ${item.spec}` : item.category;
     return `
       <span class="wb3-linked-badge" title="${escapeHtml(tooltip)}">
         <span>${icon}</span>
@@ -42228,15 +50372,18 @@ function renderWb3ComponentSubtypesGrid() {
   const container = document.getElementById('wb3CompSubtypeGrid');
   if (!container) return;
 
+  const data = getMasterComponentCharacteristicsData();
   const currentCat = window.wb3ActiveComponentCategory || 'ALL';
   const searchInput = document.getElementById('wb3CompSubtypeSearchInput');
   const term = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
   let candidateItems = [];
-  MASTER_COMPONENT_CHARACTERISTICS_DATA.forEach(cat => {
+  data.forEach((cat, catIdx) => {
     if (currentCat === 'ALL' || cat.category === currentCat) {
-      cat.items.forEach(it => {
+      cat.items.forEach((it, itemIdx) => {
         candidateItems.push({
+          catIdx,
+          itemIdx,
           category: cat.category,
           name: it.name,
           spec: it.spec
@@ -42263,18 +50410,22 @@ function renderWb3ComponentSubtypesGrid() {
   container.innerHTML = candidateItems.map(it => {
     const isSelected = selectedNames.has(it.name.toLowerCase());
     const icon = it.category.split(' ')[0] || '';
-    const safeCat = it.category.replace(/'/g, "\'");
-    const safeName = it.name.replace(/'/g, "\'");
-    const safeSpec = (it.spec || '').replace(/'/g, "\'");
     return `
       <div class="wb3-subtype-chip ${isSelected ? 'selected' : ''}" 
            title="${escapeHtml(it.category + ': ' + it.spec)}"
-           onclick="toggleWb3ComponentSubtype('${safeCat}', '${safeName}', '${safeSpec}')">
+           onclick="toggleWb3ComponentSubtypeByIndex(${it.catIdx}, ${it.itemIdx})">
         <span>${icon} ${escapeHtml(it.name)}</span>
         <span style="font-size:10px; font-weight:bold; color:${isSelected ? '#10b981' : '#475569'};">${isSelected ? '✓' : '+'}</span>
       </div>
     `;
   }).join('');
+}
+
+function toggleWb3ComponentSubtypeByIndex(catIdx, itemIdx) {
+  const data = getMasterComponentCharacteristicsData();
+  if (!data[catIdx] || !data[catIdx].items[itemIdx]) return;
+  const item = data[catIdx].items[itemIdx];
+  toggleWb3ComponentSubtype(data[catIdx].category, item.name, item.spec);
 }
 
 function toggleWb3ComponentSubtype(category, name, spec) {
@@ -42301,7 +50452,7 @@ function addWb3CompCustomSubtype() {
     ? window.wb3ActiveComponentCategory
     : '⚙️ Mechanical & Structural';
 
-  raw.split(/[,;\n]/).forEach(token => {
+  raw.split(/[,;\r\n]/).forEach(token => {
     const trimmed = token.trim();
     if (trimmed) {
       toggleWb3ComponentSubtype(cat, trimmed, 'Custom characteristic specification');
@@ -42334,19 +50485,31 @@ function renderWb3ModalConstituentCategoryTabs() {
   const container = document.getElementById('wb3ModalCompCategoryTabs');
   if (!container) return;
 
+  const data = getMasterComponentCharacteristicsData();
   const current = window.wb3ModalActiveConstituentCategory || 'ALL';
   let html = `<button type="button" class="wb3-type-btn ${current === 'ALL' ? 'active' : ''}" onclick="setWb3ModalConstituentCategory('ALL')">🌟 All Categories</button>`;
 
-  MASTER_COMPONENT_CHARACTERISTICS_DATA.forEach(cat => {
+  data.forEach((cat, idx) => {
     const isActive = (cat.category === current);
-    html += `<button type="button" class="wb3-type-btn ${isActive ? 'active' : ''}" onclick="setWb3ModalConstituentCategory('${escapeHtml(cat.category)}')">${escapeHtml(cat.category)}</button>`;
+    html += `<button type="button" class="wb3-type-btn ${isActive ? 'active' : ''}" onclick="setWb3ModalConstituentCategoryByIndex(${idx})">${escapeHtml(cat.category)}</button>`;
   });
 
   container.innerHTML = html;
 }
 
+function setWb3ModalConstituentCategoryByIndex(idx) {
+  const data = getMasterComponentCharacteristicsData();
+  if (idx >= 0 && idx < data.length) {
+    window.wb3ModalActiveConstituentCategory = data[idx].category;
+  } else {
+    window.wb3ModalActiveConstituentCategory = 'ALL';
+  }
+  renderWb3ModalConstituentCategoryTabs();
+  renderWb3ModalConstituentSubtypesGrid();
+}
+
 function setWb3ModalConstituentCategory(catName) {
-  window.wb3ModalActiveConstituentCategory = catName;
+  window.wb3ModalActiveConstituentCategory = catName || 'ALL';
   renderWb3ModalConstituentCategoryTabs();
   renderWb3ModalConstituentSubtypesGrid();
 }
@@ -42359,6 +50522,9 @@ function renderWb3ModalConstituentSelectedCharsBadges() {
   if (badgeEl) {
     badgeEl.textContent = `${selected.length} Linked`;
   }
+  if (typeof renderWb3ModalConsideredCharacteristicsTable === 'function') {
+    renderWb3ModalConsideredCharacteristicsTable();
+  }
 
   if (!container) return;
 
@@ -42369,7 +50535,8 @@ function renderWb3ModalConstituentSelectedCharsBadges() {
 
   container.innerHTML = selected.map((item, idx) => {
     const icon = (item.category && item.category.split(' ')[0]) || '🏷️';
-    const tooltip = item.spec ? `${item.category}\nSpec: ${item.spec}` : item.category;
+    const tooltip = item.spec ? `${item.category}
+Spec: ${item.spec}` : item.category;
     return `
       <span class="wb3-linked-badge" title="${escapeHtml(tooltip)}">
         <span>${icon}</span>
@@ -42392,15 +50559,18 @@ function renderWb3ModalConstituentSubtypesGrid() {
   const container = document.getElementById('wb3ModalCompSubtypeGrid');
   if (!container) return;
 
+  const data = getMasterComponentCharacteristicsData();
   const currentCat = window.wb3ModalActiveConstituentCategory || 'ALL';
   const searchInput = document.getElementById('wb3ModalCompSubtypeSearchInput');
   const term = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
   let candidateItems = [];
-  MASTER_COMPONENT_CHARACTERISTICS_DATA.forEach(cat => {
+  data.forEach((cat, catIdx) => {
     if (currentCat === 'ALL' || cat.category === currentCat) {
-      cat.items.forEach(it => {
+      cat.items.forEach((it, itemIdx) => {
         candidateItems.push({
+          catIdx,
+          itemIdx,
           category: cat.category,
           name: it.name,
           spec: it.spec
@@ -42427,18 +50597,22 @@ function renderWb3ModalConstituentSubtypesGrid() {
   container.innerHTML = candidateItems.map(it => {
     const isSelected = selectedNames.has(it.name.toLowerCase());
     const icon = it.category.split(' ')[0] || '';
-    const safeCat = it.category.replace(/'/g, "\'");
-    const safeName = it.name.replace(/'/g, "\'");
-    const safeSpec = (it.spec || '').replace(/'/g, "\'");
     return `
       <div class="wb3-subtype-chip ${isSelected ? 'selected' : ''}" 
            title="${escapeHtml(it.category + ': ' + it.spec)}"
-           onclick="toggleWb3ModalConstituentSubtype('${safeCat}', '${safeName}', '${safeSpec}')">
+           onclick="toggleWb3ModalConstituentSubtypeByIndex(${it.catIdx}, ${it.itemIdx})">
         <span>${icon} ${escapeHtml(it.name)}</span>
         <span style="font-size:10px; font-weight:bold; color:${isSelected ? '#10b981' : '#475569'};">${isSelected ? '✓' : '+'}</span>
       </div>
     `;
   }).join('');
+}
+
+function toggleWb3ModalConstituentSubtypeByIndex(catIdx, itemIdx) {
+  const data = getMasterComponentCharacteristicsData();
+  if (!data[catIdx] || !data[catIdx].items[itemIdx]) return;
+  const item = data[catIdx].items[itemIdx];
+  toggleWb3ModalConstituentSubtype(data[catIdx].category, item.name, item.spec);
 }
 
 function toggleWb3ModalConstituentSubtype(category, name, spec) {
@@ -42465,7 +50639,7 @@ function addWb3ModalConstituentCustomSubtype() {
     ? window.wb3ModalActiveConstituentCategory
     : '⚙️ Mechanical & Structural';
 
-  raw.split(/[,;\n]/).forEach(token => {
+  raw.split(/[,;\r\n]/).forEach(token => {
     const trimmed = token.trim();
     if (trimmed) {
       toggleWb3ModalConstituentSubtype(cat, trimmed, 'Custom constituent characteristic');
@@ -42479,6 +50653,345 @@ function clearWb3ModalConstituentCharacteristics() {
   window.wb3ModalConstituentSelectedChars = [];
   renderWb3ModalConstituentSelectedCharsBadges();
   renderWb3ModalConstituentSubtypesGrid();
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WB3 CONSIDERED CHARACTERISTICS & FEATURES TABLE ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+
+const MASTER_FEATURE_SPECIFICATIONS_MAP = {
+  'Hole': 'Diameter tolerance (e.g. ±0.1mm), cylindricality, depth, perpendicularity, breakout burr height limit',
+  'Counterbore': 'Counterbore diameter, seat depth, bottom corner radius, concentricity to pilot hole',
+  'Countersink': 'Included angle (90°/120°), major diameter, chamfer depth, angular runout',
+  'Slot': 'Width tolerance, length, corner radii, straightness, parallel wall tolerance',
+  'Thread – Sealing': 'Taper profile (NPT/BSPT), thread flank engagement, crest/root truncation, sealing compound compatibility',
+  'Thread – Fastening': 'Pitch diameter tolerance (6g/6H), thread engagement length, lead pitch accuracy, prevailing torque',
+  'Bending': 'Bend angle, internal bend radius (min R/t ratio), springback compensation, neutral axis shift',
+  'Forming': 'Form profile tolerance, thinning percentage limit, draw radius, stretch flange elongation',
+  'Flanging': 'Flange height, bend line radius, edge stretch cracking limit, flanging clearance',
+  'Embossing': 'Emboss depth, draft angle, relief radius, wall thinning, coin sharpness',
+  'Drawing': 'Draw depth-to-diameter ratio, punch/die radius, blank holder force, sidewall wrinkling/puckering',
+  'Beading': 'Bead width, bead depth, crown radius, stiffening deflection resistance',
+  'Notch': 'Notch radius, root angle, stress concentration factor Kt, edge shear condition',
+  'Cut-out': 'Edge perpendicularity, rollover depth, burnish band percentage, fracture angle, burr height',
+  'Chamfer': 'Chamfer angle (e.g. 45°), width/depth, transition edge sharpness / deburr',
+  'Fillet / Radius': 'Fillet radius R, blend smoothness, tangent transition, undercut/gouge absence',
+  'Flatness': 'Flatness tolerance zone (GD&T ⏥), allowable wave pitch, dish/bow limit',
+  'Surface Finish': 'Surface roughness Ra/Rz, lay direction, waviness Wt, peak count RPc',
+  'Painting': 'Dry film thickness (DFT), cross-hatch adhesion class, orange peel DOI, cure cross-linking',
+  'Coating': 'Plating thickness (e.g. Zinc-Nickel 8-12µm), salt spray corrosion hours, passivation sealing',
+  'Clearance': 'Dynamic operating gap, thermal growth allowance, assembly clearance envelope',
+  'Alignment': 'Concentricity (◎), coaxiality, parallelism (∥), angular alignment, dowel pin position (⌖)',
+  'Overall Dimensions': 'Envelope length/width/height tolerances, datum feature references, cumulative stack-up',
+  'Lubrication': 'Lubricant grade / viscosity, grease fill volume/weight, surface coverage %, passage clearance'
+};
+
+window.wb3ComponentCustomFeatures = window.wb3ComponentCustomFeatures || [];
+window.wb3ComponentCustomFeatureSpecs = window.wb3ComponentCustomFeatureSpecs || {};
+window.wb3ModalConstituentCustomFeatures = window.wb3ModalConstituentCustomFeatures || [];
+window.wb3ModalConstituentCustomFeatureSpecs = window.wb3ModalConstituentCustomFeatureSpecs || {};
+
+function addWb3CompCustomFeature() {
+  const input = document.getElementById('wb3CompCustomFeaturesInput');
+  if (!input || !input.value.trim()) return;
+
+  const raw = input.value.trim();
+  raw.split(/[,;\r\n]/).forEach(token => {
+    const trimmed = token.trim();
+    if (trimmed) {
+      if (!window.wb3ComponentCustomFeatures) window.wb3ComponentCustomFeatures = [];
+      const existing = window.wb3ComponentCustomFeatures.find(f => (typeof f === 'string' ? f : f.name).toLowerCase() === trimmed.toLowerCase());
+      if (!existing) {
+        window.wb3ComponentCustomFeatures.push({
+          name: trimmed,
+          spec: 'Custom feature specifications & tolerance limits'
+        });
+      }
+    }
+  });
+
+  input.value = '';
+  renderWb3ConsideredCharacteristicsTable();
+}
+
+function addWb3ModalConstituentCustomFeature() {
+  const input = document.getElementById('wb3ModalCompCustomFeaturesInput');
+  if (!input || !input.value.trim()) return;
+
+  const raw = input.value.trim();
+  raw.split(/[,;\r\n]/).forEach(token => {
+    const trimmed = token.trim();
+    if (trimmed) {
+      if (!window.wb3ModalConstituentCustomFeatures) window.wb3ModalConstituentCustomFeatures = [];
+      const existing = window.wb3ModalConstituentCustomFeatures.find(f => (typeof f === 'string' ? f : f.name).toLowerCase() === trimmed.toLowerCase());
+      if (!existing) {
+        window.wb3ModalConstituentCustomFeatures.push({
+          name: trimmed,
+          spec: 'Custom constituent feature specifications & tolerances'
+        });
+      }
+    }
+  });
+
+  input.value = '';
+  renderWb3ModalConsideredCharacteristicsTable();
+}
+
+function renderWb3ConsideredCharacteristicsTable() {
+  const tbody = document.getElementById('wb3ConsideredCharsTableBody');
+  const countBadge = document.getElementById('wb3ConsideredCharsTotalCount');
+  if (!tbody) return;
+
+  const selectedChars = window.wb3ComponentSelectedChars || [];
+  const selectedFeats = [];
+  document.querySelectorAll('.wb3-comp-feature-chk:checked').forEach(chk => selectedFeats.push(chk.value));
+  const customFeats = window.wb3ComponentCustomFeatures || [];
+
+  const totalCount = selectedChars.length + selectedFeats.length + customFeats.length;
+  if (countBadge) countBadge.textContent = `${totalCount} Items`;
+
+  if (totalCount === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:14px; color:#64748b; font-size:10.5px; font-style:italic;">No characteristics or features selected yet. Select Subtypes or check Product Features above to populate this table.</td></tr>';
+    return;
+  }
+
+  let rowsHtml = '';
+  let rowIdx = 1;
+
+  // 1. Component Characteristics (Type -> Subtype)
+  selectedChars.forEach((c, idx) => {
+    const catName = c.category ? c.category.replace(/^[^\w\s]+/, '').trim() : 'Component';
+    rowsHtml += `
+      <tr style="border-bottom:1px solid #1e293b; background:rgba(16,185,129,0.02);">
+        <td style="padding:6px 8px; text-align:center; color:#64748b; font-weight:700;">${rowIdx++}</td>
+        <td style="padding:6px 8px;"><span class="badge" style="background:#064e3b; color:#34d399; border:1px solid #059669; font-size:9.5px; padding:2px 6px; border-radius:4px;">🏷️ Subtype (${escapeHtml(catName)})</span></td>
+        <td style="padding:6px 8px;"><strong style="color:#f8fafc; font-size:11px;">${escapeHtml(c.name)}</strong></td>
+        <td style="padding:4px 8px;">
+          <input type="text" value="${escapeHtml(c.spec || '')}" 
+                 onchange="updateWb3ConsideredCharSpec(${idx}, this.value)" 
+                 placeholder="Enter measurable engineering specification..."
+                 style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10px; padding:3px 6px;">
+        </td>
+        <td style="padding:6px 8px; text-align:center;">
+          <button type="button" class="btn btn-xs" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:1px 6px; font-size:10px; border-radius:3px; cursor:pointer;" onclick="removeWb3ConsideredChar(${idx})" title="Unlink characteristic">✕</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  // 2. Product / Process Features
+  selectedFeats.forEach(f => {
+    const defaultSpec = MASTER_FEATURE_SPECIFICATIONS_MAP[f] || 'Measurable geometry, tolerance, and process specification limits';
+    const currentSpec = (window.wb3ComponentCustomFeatureSpecs && window.wb3ComponentCustomFeatureSpecs[f]) || defaultSpec;
+    rowsHtml += `
+      <tr style="border-bottom:1px solid #1e293b; background:rgba(2,132,199,0.02);">
+        <td style="padding:6px 8px; text-align:center; color:#64748b; font-weight:700;">${rowIdx++}</td>
+        <td style="padding:6px 8px;"><span class="badge" style="background:#0c4a6e; color:#38bdf8; border:1px solid #0284c7; font-size:9.5px; padding:2px 6px; border-radius:4px;">🔬 Product Feature</span></td>
+        <td style="padding:6px 8px;"><strong style="color:#f8fafc; font-size:11px;">${escapeHtml(f)}</strong></td>
+        <td style="padding:4px 8px;">
+          <input type="text" value="${escapeHtml(currentSpec)}" 
+                 onchange="updateWb3ConsideredFeatureSpec('${escapeHtml(f)}', this.value)" 
+                 placeholder="Enter measurable feature specification..."
+                 style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10px; padding:3px 6px;">
+        </td>
+        <td style="padding:6px 8px; text-align:center;">
+          <button type="button" class="btn btn-xs" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:1px 6px; font-size:10px; border-radius:3px; cursor:pointer;" onclick="removeWb3ConsideredFeature('${escapeHtml(f)}')" title="Uncheck feature">✕</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  // 3. Custom Features
+  customFeats.forEach((cf, idx) => {
+    const cfName = typeof cf === 'string' ? cf : cf.name;
+    const cfSpec = (typeof cf === 'object' && cf.spec) ? cf.spec : 'Custom feature specifications & tolerance limits';
+    rowsHtml += `
+      <tr style="border-bottom:1px solid #1e293b; background:rgba(147,51,234,0.02);">
+        <td style="padding:6px 8px; text-align:center; color:#64748b; font-weight:700;">${rowIdx++}</td>
+        <td style="padding:6px 8px;"><span class="badge" style="background:#3b0764; color:#d8b4fe; border:1px solid #9333ea; font-size:9.5px; padding:2px 6px; border-radius:4px;">✨ Custom Feature</span></td>
+        <td style="padding:6px 8px;"><strong style="color:#f8fafc; font-size:11px;">${escapeHtml(cfName)}</strong></td>
+        <td style="padding:4px 8px;">
+          <input type="text" value="${escapeHtml(cfSpec)}" 
+                 onchange="updateWb3ConsideredCustomFeatureSpec(${idx}, this.value)" 
+                 placeholder="Enter custom specification..."
+                 style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10px; padding:3px 6px;">
+        </td>
+        <td style="padding:6px 8px; text-align:center;">
+          <button type="button" class="btn btn-xs" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:1px 6px; font-size:10px; border-radius:3px; cursor:pointer;" onclick="removeWb3ConsideredCustomFeature(${idx})" title="Remove custom feature">✕</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = rowsHtml;
+}
+
+function updateWb3ConsideredCharSpec(idx, val) {
+  if (window.wb3ComponentSelectedChars && window.wb3ComponentSelectedChars[idx]) {
+    window.wb3ComponentSelectedChars[idx].spec = val.trim();
+  }
+}
+
+function removeWb3ConsideredChar(idx) {
+  removeWb3ComponentSubtype(idx);
+  renderWb3ConsideredCharacteristicsTable();
+}
+
+function updateWb3ConsideredFeatureSpec(featName, val) {
+  window.wb3ComponentCustomFeatureSpecs = window.wb3ComponentCustomFeatureSpecs || {};
+  window.wb3ComponentCustomFeatureSpecs[featName] = val.trim();
+}
+
+function removeWb3ConsideredFeature(featName) {
+  document.querySelectorAll('.wb3-comp-feature-chk').forEach(chk => {
+    if (chk.value === featName) chk.checked = false;
+  });
+  renderWb3ConsideredCharacteristicsTable();
+}
+
+function updateWb3ConsideredCustomFeatureSpec(idx, val) {
+  if (window.wb3ComponentCustomFeatures && window.wb3ComponentCustomFeatures[idx]) {
+    if (typeof window.wb3ComponentCustomFeatures[idx] === 'string') {
+      window.wb3ComponentCustomFeatures[idx] = { name: window.wb3ComponentCustomFeatures[idx], spec: val.trim() };
+    } else {
+      window.wb3ComponentCustomFeatures[idx].spec = val.trim();
+    }
+  }
+}
+
+function removeWb3ConsideredCustomFeature(idx) {
+  if (window.wb3ComponentCustomFeatures && window.wb3ComponentCustomFeatures[idx]) {
+    window.wb3ComponentCustomFeatures.splice(idx, 1);
+    renderWb3ConsideredCharacteristicsTable();
+  }
+}
+
+// Modal equivalents for Constituent Component
+function renderWb3ModalConsideredCharacteristicsTable() {
+  const tbody = document.getElementById('wb3ModalConsideredCharsTableBody');
+  const countBadge = document.getElementById('wb3ModalConsideredCharsTotalCount');
+  if (!tbody) return;
+
+  const selectedChars = window.wb3ModalConstituentSelectedChars || [];
+  const selectedFeats = [];
+  document.querySelectorAll('.wb3-modal-comp-feature-chk:checked').forEach(chk => selectedFeats.push(chk.value));
+  const customFeats = window.wb3ModalConstituentCustomFeatures || [];
+
+  const totalCount = selectedChars.length + selectedFeats.length + customFeats.length;
+  if (countBadge) countBadge.textContent = `${totalCount} Items`;
+
+  if (totalCount === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:14px; color:#64748b; font-size:10.5px; font-style:italic;">No characteristics or features selected yet. Select Subtypes or check Product Features above to populate this table.</td></tr>';
+    return;
+  }
+
+  let rowsHtml = '';
+  let rowIdx = 1;
+
+  selectedChars.forEach((c, idx) => {
+    const catName = c.category ? c.category.replace(/^[^\w\s]+/, '').trim() : 'Component';
+    rowsHtml += `
+      <tr style="border-bottom:1px solid #1e293b; background:rgba(16,185,129,0.02);">
+        <td style="padding:6px 8px; text-align:center; color:#64748b; font-weight:700;">${rowIdx++}</td>
+        <td style="padding:6px 8px;"><span class="badge" style="background:#064e3b; color:#34d399; border:1px solid #059669; font-size:9.5px; padding:2px 6px; border-radius:4px;">🏷️ Subtype (${escapeHtml(catName)})</span></td>
+        <td style="padding:6px 8px;"><strong style="color:#f8fafc; font-size:11px;">${escapeHtml(c.name)}</strong></td>
+        <td style="padding:4px 8px;">
+          <input type="text" value="${escapeHtml(c.spec || '')}" 
+                 onchange="updateWb3ModalConsideredCharSpec(${idx}, this.value)" 
+                 placeholder="Enter measurable engineering specification..."
+                 style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10px; padding:3px 6px;">
+        </td>
+        <td style="padding:6px 8px; text-align:center;">
+          <button type="button" class="btn btn-xs" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:1px 6px; font-size:10px; border-radius:3px; cursor:pointer;" onclick="removeWb3ModalConsideredChar(${idx})" title="Unlink characteristic">✕</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  selectedFeats.forEach(f => {
+    const defaultSpec = MASTER_FEATURE_SPECIFICATIONS_MAP[f] || 'Measurable geometry, tolerance, and process specification limits';
+    const currentSpec = (window.wb3ModalConstituentCustomFeatureSpecs && window.wb3ModalConstituentCustomFeatureSpecs[f]) || defaultSpec;
+    rowsHtml += `
+      <tr style="border-bottom:1px solid #1e293b; background:rgba(2,132,199,0.02);">
+        <td style="padding:6px 8px; text-align:center; color:#64748b; font-weight:700;">${rowIdx++}</td>
+        <td style="padding:6px 8px;"><span class="badge" style="background:#0c4a6e; color:#38bdf8; border:1px solid #0284c7; font-size:9.5px; padding:2px 6px; border-radius:4px;">🔬 Product Feature</span></td>
+        <td style="padding:6px 8px;"><strong style="color:#f8fafc; font-size:11px;">${escapeHtml(f)}</strong></td>
+        <td style="padding:4px 8px;">
+          <input type="text" value="${escapeHtml(currentSpec)}" 
+                 onchange="updateWb3ModalConsideredFeatureSpec('${escapeHtml(f)}', this.value)" 
+                 placeholder="Enter measurable feature specification..."
+                 style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10px; padding:3px 6px;">
+        </td>
+        <td style="padding:6px 8px; text-align:center;">
+          <button type="button" class="btn btn-xs" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:1px 6px; font-size:10px; border-radius:3px; cursor:pointer;" onclick="removeWb3ModalConsideredFeature('${escapeHtml(f)}')" title="Uncheck feature">✕</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  customFeats.forEach((cf, idx) => {
+    const cfName = typeof cf === 'string' ? cf : cf.name;
+    const cfSpec = (typeof cf === 'object' && cf.spec) ? cf.spec : 'Custom constituent feature specifications & tolerances';
+    rowsHtml += `
+      <tr style="border-bottom:1px solid #1e293b; background:rgba(147,51,234,0.02);">
+        <td style="padding:6px 8px; text-align:center; color:#64748b; font-weight:700;">${rowIdx++}</td>
+        <td style="padding:6px 8px;"><span class="badge" style="background:#3b0764; color:#d8b4fe; border:1px solid #9333ea; font-size:9.5px; padding:2px 6px; border-radius:4px;">✨ Custom Feature</span></td>
+        <td style="padding:6px 8px;"><strong style="color:#f8fafc; font-size:11px;">${escapeHtml(cfName)}</strong></td>
+        <td style="padding:4px 8px;">
+          <input type="text" value="${escapeHtml(cfSpec)}" 
+                 onchange="updateWb3ModalConsideredCustomFeatureSpec(${idx}, this.value)" 
+                 placeholder="Enter custom specification..."
+                 style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10px; padding:3px 6px;">
+        </td>
+        <td style="padding:6px 8px; text-align:center;">
+          <button type="button" class="btn btn-xs" style="background:transparent; border:1px solid #ef4444; color:#ef4444; padding:1px 6px; font-size:10px; border-radius:3px; cursor:pointer;" onclick="removeWb3ModalConsideredCustomFeature(${idx})" title="Remove custom feature">✕</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = rowsHtml;
+}
+
+function updateWb3ModalConsideredCharSpec(idx, val) {
+  if (window.wb3ModalConstituentSelectedChars && window.wb3ModalConstituentSelectedChars[idx]) {
+    window.wb3ModalConstituentSelectedChars[idx].spec = val.trim();
+  }
+}
+
+function removeWb3ModalConsideredChar(idx) {
+  removeWb3ModalConstituentSubtype(idx);
+  renderWb3ModalConsideredCharacteristicsTable();
+}
+
+function updateWb3ModalConsideredFeatureSpec(featName, val) {
+  window.wb3ModalConstituentCustomFeatureSpecs = window.wb3ModalConstituentCustomFeatureSpecs || {};
+  window.wb3ModalConstituentCustomFeatureSpecs[featName] = val.trim();
+}
+
+function removeWb3ModalConsideredFeature(featName) {
+  document.querySelectorAll('.wb3-modal-comp-feature-chk').forEach(chk => {
+    if (chk.value === featName) chk.checked = false;
+  });
+  renderWb3ModalConsideredCharacteristicsTable();
+}
+
+function updateWb3ModalConsideredCustomFeatureSpec(idx, val) {
+  if (window.wb3ModalConstituentCustomFeatures && window.wb3ModalConstituentCustomFeatures[idx]) {
+    if (typeof window.wb3ModalConstituentCustomFeatures[idx] === 'string') {
+      window.wb3ModalConstituentCustomFeatures[idx] = { name: window.wb3ModalConstituentCustomFeatures[idx], spec: val.trim() };
+    } else {
+      window.wb3ModalConstituentCustomFeatures[idx].spec = val.trim();
+    }
+  }
+}
+
+function removeWb3ModalConsideredCustomFeature(idx) {
+  if (window.wb3ModalConstituentCustomFeatures && window.wb3ModalConstituentCustomFeatures[idx]) {
+    window.wb3ModalConstituentCustomFeatures.splice(idx, 1);
+    renderWb3ModalConsideredCharacteristicsTable();
+  }
 }
 
 
@@ -42665,3 +51178,4179 @@ function toggleCollapseAllTree(collapse = true) {
   const container = document.getElementById('modalTreeContainer');
   if (container && root) container.innerHTML = buildTreeHTML(root, true);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UNIFIED WORKBENCH SELECTOR & LAUNCHER
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openSelectedWorkbench() {
+  if (!isAiFeaturesEnabled() || !isAiFeatureModuleEnabled('workbench')) {
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert("Access Restricted: The AI Workbench module is currently disabled by System Admin policy.", "Admin Policy Enforcement", "warning");
+    } else {
+      alert("Access Restricted: The AI Workbench module is currently disabled by System Admin policy.");
+    }
+    return;
+  }
+  const sel = document.getElementById('globalWorkbenchSelect');
+  const val = sel ? sel.value : 'wb4';
+  if (val === 'wb4') {
+    if (typeof openAiWorkbench4Modal === 'function') openAiWorkbench4Modal();
+  } else if (val === 'wb3') {
+    if (typeof openAiWorkbench3Modal === 'function') openAiWorkbench3Modal();
+  } else if (val === 'wb2') {
+    if (typeof openAiWorkbench2Modal === 'function') openAiWorkbench2Modal();
+  } else if (val === 'wb1') {
+    if (typeof openAiWorkbenchModal === 'function') openAiWorkbenchModal();
+  }
+}
+window.openSelectedWorkbench = openSelectedWorkbench;
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 📐 AI WORKBENCH 4.0: DRAWING-DRIVEN DFMEA & CHARACTERISTIC FAILURE CHAIN ENGINE
+// ══════════════════════════════════════════════════════════════════════════════
+
+const MASTER_DRAWING_EXTRACTION_PROMPT = `COMPLETE DFMEA INPUT DATASET EXTRACTION PROMPT
+
+You are a Senior Automotive Systems Engineer, Design Engineer, Manufacturing Engineer, Reliability Engineer, Validation Engineer, Assembly Engineer, Quality Engineer and AIAG-VDA DFMEA Specialist.
+Your task is to analyze the provided engineering drawing and create a COMPLETE DFMEA INPUT DATASET.
+
+IMPORTANT:
+The objective is NOT to create a DFMEA.
+Give output in text format following the MANDATORY OUTPUT REQUIREMENT FORMAT below.
+Do NOT create:
+Failure Modes
+Failure Effects
+Failure Causes
+Prevention Controls
+Detection Controls
+Severity
+Occurrence
+Detection
+Action Priority
+
+The objective is to extract and interpret ALL information required to later create a world-class AIAG-VDA DFMEA.
+
+====================================================
+MANDATORY OUTPUT REQUIREMENT FORMAT
+(Structure your output strictly using these markdown section headings and key-value templates. Do NOT output empty sections or sections with 'None' / 'N/A'.)
+====================================================
+
+### PRODUCT CHARACTERISTICS
+Part Name: <Exact Name>
+Product Type: <Assembly / Subassembly / Component>
+Name/Description: <Description>
+Drawing Number: <Drawing Number>
+Drawing Type: <Assembly Drawing / Component Drawing / Casting / etc.>
+Weight Requirement: <Weight with units>
+Production Variant: <List variants, e.g. C3NSL, C4NSL, C5NSL>
+Structural Members Identified: <List: Loader Arm, Cross Tube, Pins, etc.>
+Product Identification Features: <Machine Sign, Serial Sign, etc.>
+
+### FUNCTIONAL CHARACTERISTICS
+- <Characteristic description of routing, retention, positioning, or mechanism>
+- <Characteristic description...>
+
+### INTERFACE CHARACTERISTICS
+Hydraulic Interfaces:
+- <Interface name, port, hose, or fitting with torque if shown>
+Mechanical Interfaces:
+- <Bolted joint, pin interface, bearing box, retention face>
+Electrical Interfaces:
+- <Harness interface, sensor mounting, connector>
+Vehicle / Product Interfaces:
+- <Tool carrier interface, chassis mounting, loader arm interface>
+
+### DIMENSIONAL CHARACTERISTICS
+Characteristic: <Characteristic / Feature Name>
+Drawing Requirement: <Dimension ± Tolerance, Angle, Limit>
+Engineering Intent: <Intent: alignment, clamp load, clearance, sealing>
+
+Characteristic: <Characteristic / Feature Name>
+Drawing Requirement: <Dimension ± Tolerance>
+Engineering Intent: <Intent>
+
+### GD&T CHARACTERISTICS
+Controlled Feature: <Feature Name>
+GD&T Type: <Position / Flatness / Perpendicularity / Profile>
+Requirement Value: <Value with Datum References, e.g. Position Ø0.4 [A|B|C]>
+Engineering Intent: <Assembly alignment / seal integrity>
+
+### HOLE CHARACTERISTICS
+Characteristic: <Hole Identifier / Name>
+Hole Type: <Clearance / Threaded / Pivot / Locating>
+Hole Interface Purpose: <Interface purpose>
+Engineering Intent: <Intent>
+
+### WELD CHARACTERISTICS
+Characteristic: <Joint Location / Name>
+Weld Type & Symbol: <Fillet / Groove / Plug>
+Requirement: <Size, Length, Specification, Quality Standard>
+Engineering Intent: <Structural load transfer / seal>
+
+### MATERIAL CHARACTERISTICS
+- <Material Grade, Standard, Spec, Heat Treatment, Hardness>
+
+### SURFACE / COATING CHARACTERISTICS
+- <Paint requirement, Surface treatment, Plating, Appearance limit, Deformation limit>
+
+### INSPECTION CHARACTERISTICS
+Torque Verification Requirements:
+- <Fastener / joint torque requirement with tolerance & safety critical status>
+Traceability Requirements:
+- <Traceability requirement, serialization, torque logging>
+Fit-up Requirements:
+- <Fit-up check, drop-by-weight test, free rotation check>
+Verification Requirements:
+- <Visual verification, plug check, routing verification>
+
+### SPECIAL CHARACTERISTICS
+Characteristic: <Feature Name>
+Classification: <Safety Critical Joint / Critical @1 / Significant @2 / CC / SC>
+Requirement: <Exact requirement and torque/tolerance>
+
+### DRAWING NOTES
+- <Exact text of drawing note 1>
+- <Exact text of drawing note 2>
+
+### FUNCTIONS
+Primary Functions:
+- <Active Verb + Noun>
+Performance Functions:
+- <Active Verb + Noun>
+Durability & Reliability Functions:
+- <Active Verb + Noun>
+Internal Traceability Functions:
+- <Active Verb + Noun>
+Assembly Functions (Internal):
+- <Active Verb + Noun>
+Assembly Functions (External / Vehicle):
+- <Active Verb + Noun>
+Manufacturability Functions:
+- <Active Verb + Noun>
+Appearance Functions:
+- <Active Verb + Noun>
+Environmental Functions:
+- <Active Verb + Noun>
+
+====================================================
+PAGE CONTROL
+====================================================
+If specific pages are excluded:
+Completely ignore excluded pages.
+Do not use excluded pages for characteristics.
+Do not use excluded pages for functions.
+Do not use excluded pages for notes.
+Analyze only the pages explicitly requested.
+
+====================================================
+GENERAL EXTRACTION RULES
+====================================================
+Extract ONLY information available on the drawing.
+Do NOT make engineering assumptions.
+Do NOT invent requirements.
+Do NOT create DFMEA content.
+Preserve drawing terminology whenever possible.
+Avoid duplicate characteristics.
+Extract each characteristic only once.
+If information is not available, do not create it.
+If no information exists for a category, omit that category entirely.
+Do not classify characteristics unless explicitly identified on drawing.
+Only include content directly supported by drawing evidence.
+Do not extract administrative information.
+Return only sections containing real extracted data.
+
+====================================================
+CHARACTERISTIC QUALIFICATION RULES
+====================================================
+The objective is to identify DFMEA-driving characteristics.
+Do NOT extract features merely because they exist on the drawing.
+Only include characteristics that influence:
+Form
+Fit
+Function
+Performance
+Reliability
+Durability
+Structural Integrity
+Manufacturability
+Assembly
+Serviceability
+Vehicle Integration
+Packaging
+Safety
+Regulatory Compliance
+Identification
+Traceability
+Appearance
+Environmental Resistance
+Thermal Behavior
+NVH Behavior
+
+Every extracted characteristic must satisfy at least one of the following:
+Product Characteristic
+Functional Characteristic
+Interface Characteristic
+Dimensional Characteristic
+Inspection Characteristic
+Manufacturing Characteristic
+Assembly Characteristic
+Special Characteristic
+
+If a feature contributes only administrative information, revision tracking, documentation control, or drawing management, it shall NOT be extracted.
+
+For every characteristic determine whether it affects:
+Product configuration
+Interface behavior
+Functional performance
+Inspection requirements
+Manufacturing requirements
+Assembly requirements
+Only then include it.
+
+====================================================
+PRODUCT CHARACTERISTICS
+====================================================
+Extract:
+Part names
+Assemblies
+Subassemblies
+Structural members
+Tubes
+Arms
+Plates
+Gussets
+Reinforcements
+Brackets
+Castings
+Forgings
+Weldments
+Covers
+Guards
+Supports
+Pins
+Shafts
+Bushings
+Bearings
+Weight
+Product identifiers
+Drawing identifiers
+
+====================================================
+DIMENSION INTERPRETATION RULE (MANDATORY)
+====================================================
+Do NOT output dimensions as numbers only.
+For every relevant dimension provide:
+Characteristic
+Drawing Requirement
+Engineering Intent
+
+Format:
+Characteristic:
+Drawing Requirement:
+Engineering Intent:
+
+Examples
+WRONG:
+1050 ±3
+Ø15
+Position Ø0.4 A
+
+CORRECT:
+Characteristic: Structural member spacing
+Drawing Requirement: 1050 ±3
+Engineering Intent: Controls spacing between structural members to maintain assembly geometry.
+
+Characteristic: Locating hole
+Drawing Requirement: Ø15
+Engineering Intent: Provides locating interface for mating feature.
+
+Characteristic: Controlled feature location
+Drawing Requirement: Position Ø0.4 relative to datum A
+Engineering Intent: Controls assembly alignment relative to datum structure.
+
+Do not invent intent.
+Engineering intent must be directly inferable from:
+Feature geometry
+Mating interfaces
+Drawing notes
+GD&T requirements
+Feature naming
+
+====================================================
+FUNCTIONAL CHARACTERISTICS
+====================================================
+Extract characteristics that influence:
+Load carrying
+Force transfer
+Motion transfer
+Retention
+Positioning
+Alignment
+Support
+Guidance
+Protection
+Sealing
+Structural integrity
+Location control
+Component integration
+
+Describe characteristic intent.
+Do not simply repeat dimensions.
+
+====================================================
+INTERFACE CHARACTERISTICS
+====================================================
+Extract:
+Mechanical interfaces
+Hydraulic interfaces
+Pneumatic interfaces
+Electrical interfaces
+Structural interfaces
+Bearing interfaces
+Bushing interfaces
+Pin interfaces
+Bracket interfaces
+Cylinder interfaces
+Mounting interfaces
+Attachment interfaces
+Cross-member interfaces
+Vehicle interfaces
+Operator interfaces
+
+Interpret interface purpose where supported by drawing.
+
+====================================================
+GD&T CHARACTERISTICS
+====================================================
+Extract ONLY GD&T controlling:
+Interface geometry
+Assembly fit
+Hole location
+Structural alignment
+Functional positioning
+Inspection requirements
+
+For each GD&T requirement extract:
+Controlled Feature
+GD&T Type
+Requirement Value
+Datum References
+Inspection Requirement (if shown)
+
+====================================================
+DATUM EXTRACTION RULE
+====================================================
+Extract only if explicitly shown:
+Datums
+Datum Targets
+Reference Planes
+Coordinate Systems
+Measure Zones
+Inspection Zones
+
+====================================================
+HOLE CHARACTERISTICS
+====================================================
+Extract:
+Hole Type
+Hole Diameter
+Hole Quantity
+Hole Spacing
+Hole Pattern
+Hole Location
+Hole Interface Purpose
+Datum Related Requirements
+Position Controlled Holes
+Clearance Holes
+Threaded Holes
+Mounting Holes
+Pivot Holes
+
+For each relevant hole include engineering intent.
+
+====================================================
+WELD CHARACTERISTICS
+====================================================
+Extract:
+Weld Type
+Weld Symbol
+Weld Size
+Weld Length
+Weld Quantity
+Weld Side
+Weld Location
+Weld Specification
+Weld Class
+Weld Quality Standard
+
+Interpret weld purpose only if obvious from drawing.
+
+====================================================
+MATERIAL CHARACTERISTICS
+====================================================
+Extract only if explicitly shown:
+Material Grade
+Material Standard
+Material Specification
+Heat Treatment
+Hardness
+Strength Requirement
+Material Condition
+Coating Substrate
+
+====================================================
+SURFACE / COATING CHARACTERISTICS
+====================================================
+Extract only if shown:
+Paint Requirements
+Paint System
+Surface Finish
+Surface Treatment
+Corrosion Protection
+Plating
+Zinc Coating
+Powder Coating
+Appearance Requirements
+Surface Quality Requirements
+
+====================================================
+INSPECTION CHARACTERISTICS
+====================================================
+Extract:
+Datums
+Inspection Zones
+Measure Zones
+Coordinate Systems
+Verification Instructions
+Inspection Notes
+Torque Verification Requirements
+Traceability Requirements
+Fit-up Requirements
+Geometric Verification Requirements
+
+====================================================
+SPECIAL CHARACTERISTICS
+====================================================
+Extract ONLY if explicitly marked:
+@1
+@2
+CC
+SC
+Critical
+Significant
+Safety Characteristic
+Regulatory Characteristic
+Key Characteristic
+
+For each report:
+Characteristic
+Requirement
+Classification
+Drawing Identifier
+Referenced Feature
+
+Do NOT report classification symbols by themselves.
+Extract only the actual controlled feature.
+
+====================================================
+NOISE FILTER
+====================================================
+Do NOT extract:
+Balloon Numbers
+Item Numbers
+Revision Tables
+Sheet References
+Grid References
+Zone Identifiers
+Detail Labels
+Section Labels
+Projection Symbols
+Administrative Data
+Approval Blocks
+Signatures
+Metadata
+
+Unless they define a product requirement.
+
+====================================================
+DRAWING NOTE EXTRACTION
+====================================================
+Extract ALL notes exactly as written.
+Including:
+Manufacturing Notes
+Welding Notes
+Assembly Notes
+Quality Notes
+Inspection Notes
+Marking Notes
+Packaging Notes
+Coating Notes
+Classification Notes
+Handling Notes
+Service Notes
+
+Preserve wording exactly.
+
+====================================================
+FUNCTION EXTRACTION RULE
+====================================================
+Functions shall use:
+ACTIVE VERB + NOUN
+
+Examples:
+Support loads
+Transfer forces
+Maintain alignment
+Locate components
+Resist corrosion
+Allow assembly
+Retain components
+
+Functions shall be derived ONLY from:
+Product structure
+Interfaces
+Drawing notes
+Inspection requirements
+Explicit drawing requirements
+
+Do NOT create functions solely from dimensions.
+Every function must be supported by drawing evidence.
+
+====================================================
+FUNCTION CLEAN-UP RULE (MANDATORY)
+====================================================
+Evaluate all function categories.
+Include ONLY categories where at least one function can be directly supported by:
+Product Structure
+Interfaces
+Explicit Notes
+Inspection Requirements
+Drawing Requirements
+
+If no supported function exists:
+REMOVE THE ENTIRE CATEGORY.
+
+Example:
+WRONG:
+Thermal Functions
+None Identified
+
+CORRECT:
+(Thermal Functions Section Removed)
+
+====================================================
+FUNCTION CATEGORY ANALYSIS
+====================================================
+Evaluate ALL applicable categories:
+Primary Functions
+Performance Functions
+Durability & Reliability Functions
+Safety Functions
+Regulatory Functions
+Internal Traceability Functions
+Customer Traceability Functions
+Assembly Functions (Internal)
+Assembly Functions (External / Vehicle)
+Manufacturability Functions
+Packaging Space Functions
+Appearance Functions
+NVH Functions
+Thermal Functions
+Environmental Functions
+
+Include only categories supported by actual drawing information.
+
+====================================================
+CONDITIONAL OUTPUT RULE (MANDATORY)
+====================================================
+Output ONLY categories containing actual extracted information.
+If a category contains no applicable extracted data:
+Do NOT create the category.
+Do NOT create empty sections.
+Do NOT write:
+Not Available
+Not Specified
+Not Shown
+Not Provided
+Not Applicable
+None
+No Information Found
+No Requirements Found
+No Characteristics Found
+
+Simply omit the category entirely.
+
+====================================================
+OUTPUT CLEAN-UP RULE (MANDATORY)
+====================================================
+Before generating final output review every category.
+If a category contains:
+No extracted characteristic
+No extracted note
+No extracted requirement
+No extracted function
+REMOVE THE ENTIRE CATEGORY.
+
+Final output must contain ONLY categories supported by actual drawing data.
+
+====================================================
+FINAL VALIDATION
+====================================================
+Verify:
+✓ Only drawing-derived information included
+✓ Only applicable categories shown
+✓ Empty categories removed
+✓ Dimensions converted into engineering characteristics
+✓ Functions derived from drawing content only
+✓ Only DFMEA-driving characteristics included
+✓ Product characteristics extracted
+✓ Functional characteristics extracted
+✓ Interface characteristics extracted
+✓ Relevant dimensions interpreted
+✓ GD&T extracted
+✓ Datums extracted
+✓ Hole features extracted
+✓ Weld features extracted
+✓ Material information extracted
+✓ Coating information extracted
+✓ Inspection requirements extracted
+✓ Special characteristics extracted
+✓ Drawing notes extracted
+✓ Every function category evaluated
+✓ No assumptions added
+✓ No DFMEA generated
+✓ No failure modes generated
+✓ No causes generated
+✓ No effects generated
+✓ No controls generated
+✓ No ratings generated
+✓ No Action Priority generated
+✓ No "Not Available" statements
+✓ No "None Found" statements
+✓ No empty categories
+
+Return ONLY categories containing actual extracted drawing information. No explanatory text before or after the output.`;
+
+const SAMPLE_LOADER_DRAWING_DATA = `### PRODUCT CHARACTERISTICS
+Part Name: Compact G3 Size 3-6 NSL Loader
+Product Type: Front Loader Assembly
+Name/Description: Compact G3 Size 3-6 NSL
+Drawing Number: 14 60044017
+Drawing Type: Assembly Drawing
+Weight Requirement: 192.4 kg
+Production Variant: C3NSL, C4NSL, C5NSL, C6NSL
+Structural Members Identified: Loader Arm, Cross Tube, Tool Carrier, Bearing Box, Support Leg, Stay, Locking Covers, Pivot Pins, Pressure Sensor Block, Multicoupling (MHK)
+Product Identification Features: Machine Sign, Serial Number Sign, Product Reference Number Sign, Type Identification Sign, Weight Identification Sign
+
+### FUNCTIONAL CHARACTERISTICS
+- Loader arm routing path for hydraulic hoses and electrical harness.
+- Cross tube cover installation requirement.
+- Locking cover fastening system requiring controlled torque and traceability.
+- Support leg retention mechanism allowing gravity-assisted deployment.
+- Stay retention mechanism allowing gravity-assisted deployment.
+- Hydraulic hose routing and bundling requirements.
+- Pivot pin installation interface.
+- Sensor magnet mounting interface.
+- Pressure sensor block positioning requirement.
+- Machine sign placement system.
+- Level indicator mounting system.
+
+### INTERFACE CHARACTERISTICS
+Hydraulic Interfaces:
+- Tilt hose interfaces.
+- Lift cylinder hose interfaces.
+- Multicoupling (MHK) hydraulic connection interface.
+- Hydraulic fitting interfaces requiring specified torque.
+- Pressure sensor block hydraulic interface.
+Mechanical Interfaces:
+- Support leg to threaded fastener interface.
+- Stay to threaded fastener interface.
+- Locking cover mounting interface.
+- Cross tube cover attachment interface.
+- Level indicator mounting interface.
+- Pivot pin interface with bearing box.
+- Pivot pin interface with tool carrier.
+Electrical Interfaces:
+- FMCU harness interface.
+- ECU mounting interface.
+- X1 Connector Interface.
+- X2 Connector Interface.
+- X3 Connector Interface.
+- X4 Connector Interface.
+- X5 Connector Interface.
+- X6 Connector Interface.
+- 3rd Function Harness Interface.
+Vehicle / Product Interfaces:
+- Tool carrier interface.
+- Bearing box interface.
+- Loader arm interface.
+- Machine sign application interface.
+- Level indicator interface.
+
+### DIMENSIONAL CHARACTERISTICS
+Characteristic: Locking cover screw clamp load
+Drawing Requirement: 37 ±3 Nm
+Engineering Intent: Controls fastening integrity of locking covers identified as safety critical joints while maintaining traceable assembly quality.
+
+Characteristic: Hydraulic hose fitting torque
+Drawing Requirement: 27 ±3 Nm
+Engineering Intent: Controls sealing integrity and retention of hydraulic connections.
+
+Characteristic: Level indicator fastening torque
+Drawing Requirement: 47 ±3 Nm
+Engineering Intent: Maintains secure attachment of level indicator assembly during operation.
+
+Characteristic: Machine sign placement offset
+Drawing Requirement: 30 mm
+Engineering Intent: Controls correct identification label location on loader structure.
+
+Characteristic: Machine sign secondary offset
+Drawing Requirement: 10 mm
+Engineering Intent: Establishes repeatable positioning of machine identification signs.
+
+Characteristic: Plastic cover deformation limit
+Drawing Requirement: Maximum 5 mm deformation
+Engineering Intent: Prevents excessive deformation during hose routing to maintain cover functionality and hose protection.
+
+### HOLE CHARACTERISTICS
+Characteristic: Alternative transport mounting hole
+Hole Type: Threaded mounting hole
+Hole Interface Purpose: Alternative attachment location for level indicator transport position.
+Engineering Intent: Provides alternate installation location while maintaining functional positioning.
+
+Characteristic: Machine sign locating hole
+Hole Type: Mounting reference hole
+Hole Interface Purpose: Reference location for machine sign placement.
+Engineering Intent: Controls repeatable positioning of identification markings.
+
+### MATERIAL CHARACTERISTICS
+- Hydraulic component torque specification according to Standard 60016000.
+
+### SURFACE / COATING CHARACTERISTICS
+- Appearance Requirement: Plastic cover shall not be deformed more than 5 mm after hose installation.
+
+### INSPECTION CHARACTERISTICS
+Torque Verification Requirements:
+- Locking cover screws: 37 ±3 Nm.
+- Hydraulic hose fittings: 27 ±3 Nm.
+- Level indicator fasteners: 47 ±3 Nm.
+Traceability Requirements:
+- All screws holding locking covers are classified as Safety Critical Joint.
+- Torques shall be secured and traceable for each loader.
+Fit-up Requirements:
+- Support legs shall be able to fall down by their own weight after assembly.
+- Stay shall be able to fall down by its own weight after assembly.
+Verification Requirements:
+- Plastic cover deformation shall not exceed 5 mm.
+- Verify flange orientation pointing upward on both sides.
+- Verify plug installation on all four openings.
+- Verify machine sign placement location.
+- Verify correct hose routing according to drawing illustrations.
+- Verify correct harness routing according to drawing illustrations.
+
+### DRAWING NOTES
+- Flange pointing up both sides. Assemble before the hoses are assembled.
+- Tighten support leg nut until its nylon ring have been fully attached to screw threads. Support legs shall be able to fall down by its own weight.
+- Stripe the hoses together with cable ties at these positions. (No stripes around the tube).
+- Cross tube cover according to 60042298.
+- Tighten the stay nut until its nylon ring have been fully attached to screw threads. The stay shall be able to fall down by its own weight.
+- 37±3 Nm All screws holding locking covers Safety Critical Joint. Torques shall be secured and traceable for each loader.
+- The shaft is assembled from the side on the assembly line.
+- Plug all 4 openings with plug 60046688.
+- Route the hoses according to these pictures. The plastic cover must not be deformed more than 5 mm.
+- Assemble the tilt hoses according to these pictures. Make it as slim as possible.
+- Pos balloons according to C3NSL, C4NSL, C5NSL, C6NSL.
+- Hydraulic component torque according to 60016000.
+- Tightening torque hose fitting 27±3 Nm.
+- Tightening torque 47±3 Nm.
+- Alternative transport position. Use other threaded hole.
+- The level indicator kit should be assembled on right side of the loader.
+- Note: See drawing 1126015 for dual machine sign application.
+- Inside left arm.
+
+### FUNCTIONS
+Primary Functions:
+- Support loads.
+- Transfer hydraulic forces.
+- Position hydraulic hoses.
+- Retain covers.
+- Locate machine identification signs.
+- Support level indicator assembly.
+- Guide harness routing.
+- Protect hoses.
+- Protect electrical harness.
+Performance Functions:
+- Maintain hydraulic connection integrity.
+- Maintain hose routing geometry.
+- Maintain locking cover retention.
+- Maintain component positioning.
+- Maintain loader identification.
+Durability & Reliability Functions:
+- Resist loosening through nylon locking features.
+- Maintain fastening torque integrity.
+- Protect hoses from routing damage.
+- Protect harness from mechanical interference.
+- Maintain stable hydraulic connections.
+Internal Traceability Functions:
+- Provide torque traceability for safety critical joints.
+- Identify product through machine signage.
+- Identify loader through serial number marking.
+Assembly Functions (Internal):
+- Allow support leg installation.
+- Allow stay installation.
+- Allow cross tube cover installation.
+- Allow hose bundling with cable ties.
+- Allow FMCU harness installation.
+- Allow level indicator installation.
+- Allow pivot pin installation.
+- Allow sensor magnet installation.
+- Allow connector installation.
+- Allow plug installation.
+Assembly Functions (External / Vehicle):
+- Interface with tool carrier.
+- Interface with bearing box.
+- Interface with lift cylinder hoses.
+- Connect hydraulic lines through multicoupling.
+Manufacturability Functions:
+- Enable controlled torque assembly.
+- Enable repeatable hose routing.
+- Enable repeatable harness routing.
+- Enable traceable assembly verification.
+Appearance Functions:
+- Maintain slim hose package routing.
+- Limit plastic cover deformation.
+- Maintain specified machine sign placement.
+Environmental Functions:
+- Protect hydraulic openings using plugs.
+- Protect routed harness inside loader arm.`;
+
+const aiWorkbench4State = {
+  currentNodeId: null,
+  currentStep: 1,
+  executionMode: 'MANUAL',
+  nodeDrawingData: {},
+  nodeFunctions: {},
+  nodeFailures: {},
+  nodeCauses: {},
+  nodeEffects: {},
+  nodeControls: {},
+  step5FmPointer: {},
+  updatedEffectsLibrary: {},
+  processedNodes: new Set(),
+  apiSettings: {
+    provider: 'openai',
+    apiKey: '',
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4o'
+  },
+  autoPilotConfig: null,
+  wb4AutoPilotResumeState: null,
+  apiInProgress: false
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL CONTROLS & NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openAiWorkbench4Modal(targetNodeId = null) {
+  if (!isAiFeatureModuleEnabled('workbench')) {
+    alert("Access Restricted: The AI Workbench module is currently disabled by System Admin policy.");
+    return;
+  }
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.structure) {
+    alert("Please open or initialize an FMEA study project first.");
+    return;
+  }
+
+  if (typeof restoreWorkbenchStateFromProjectData === 'function') {
+    restoreWorkbenchStateFromProjectData(ctx);
+  }
+
+  const activeId = targetNodeId || (aiWorkbench4State.currentNodeId || ctx.structure.id);
+  aiWorkbench4State.currentNodeId = activeId;
+
+  renderWb4StructureNavBar();
+  loadWb4NodeContext(activeId);
+  setWb4ExecutionMode(aiWorkbench4State.executionMode || 'MANUAL');
+  updateWb4StartFromHereButton();
+  openModal('aiWorkbench4Modal');
+
+  let resumeStep = 1;
+  const hasWb4Progress = !!(
+    (aiWorkbench4State.nodeFunctions[activeId] && aiWorkbench4State.nodeFunctions[activeId].length > 0) ||
+    (aiWorkbench4State.nodeDrawingData[activeId] && aiWorkbench4State.nodeDrawingData[activeId].parsed)
+  );
+
+  if (!targetNodeId || targetNodeId === aiWorkbench4State.currentNodeId) {
+    resumeStep = aiWorkbench4State.currentStep || 1;
+  } else if (hasWb4Progress) {
+    if (aiWorkbench4State.nodeControls && aiWorkbench4State.nodeControls[activeId] && Object.keys(aiWorkbench4State.nodeControls[activeId]).length > 0) {
+      resumeStep = 6;
+    } else if (aiWorkbench4State.nodeEffects && aiWorkbench4State.nodeEffects[activeId] && Object.keys(aiWorkbench4State.nodeEffects[activeId]).length > 0) {
+      resumeStep = 5;
+    } else if (aiWorkbench4State.nodeCauses && aiWorkbench4State.nodeCauses[activeId] && aiWorkbench4State.nodeCauses[activeId].length > 0) {
+      resumeStep = 4;
+    } else if (aiWorkbench4State.nodeFailures && aiWorkbench4State.nodeFailures[activeId] && aiWorkbench4State.nodeFailures[activeId].length > 0) {
+      resumeStep = 3;
+    } else if (aiWorkbench4State.nodeFunctions && aiWorkbench4State.nodeFunctions[activeId] && aiWorkbench4State.nodeFunctions[activeId].length > 0) {
+      resumeStep = 2;
+    }
+  }
+
+  goToWb4Step(resumeStep);
+}
+
+function closeAiWorkbench4Modal() {
+  try {
+    if (typeof saveCurrentWb4Inputs === 'function') saveCurrentWb4Inputs();
+  } catch (e) {
+    console.warn('Error saving WB4 inputs on close:', e);
+  }
+  try {
+    if (typeof syncWorkbenchStateToProjectData === 'function') syncWorkbenchStateToProjectData();
+  } catch (e) {
+    console.warn('Error syncing WB4 state on close:', e);
+  }
+  closeModal('aiWorkbench4Modal');
+  try {
+    if (typeof performAutoSave === 'function' && activeSharePointFileName) {
+      performAutoSave('Workbench 4 Progress Auto-Save');
+    }
+  } catch (e) {
+    console.warn('Error auto-saving on WB4 close:', e);
+  }
+}
+
+function renderWb4StructureNavBar() {
+  const nav = document.getElementById('wb4StructureNavBar');
+  if (!nav) return;
+  const ctx = getActiveFmeaData();
+  if (!ctx || !ctx.structure) return;
+
+  const allNodes = [];
+  function traverse(node, depth = 0) {
+    if (!node) return;
+    allNodes.push({ node, depth });
+    if (Array.isArray(node.children)) node.children.forEach(ch => traverse(ch, depth + 1));
+  }
+  traverse(ctx.structure);
+
+  nav.innerHTML = allNodes.map(({ node, depth }) => {
+    const isActive = (node.id === aiWorkbench4State.currentNodeId);
+    const hasData = aiWorkbench4State.processedNodes.has(node.id) ||
+      (aiWorkbench4State.nodeFunctions[node.id] && aiWorkbench4State.nodeFunctions[node.id].length > 0);
+    const isRoot = (node.id === ctx.structure.id);
+    const borderCol = isActive ? '#38bdf8' : (hasData ? '#059669' : '#334155');
+    const bgCol = isActive ? '#1e293b' : (hasData ? '#064e3b' : '#0f172a');
+    const textCol = isActive ? '#38bdf8' : (hasData ? '#a7f3d0' : '#94a3b8');
+    return `
+      <button type="button" class="btn btn-sm" onclick="switchWb4ActiveElement('${node.id}')"
+        style="padding:3px 10px; font-size:11px; font-weight:700; border-radius:6px; background:${bgCol}; color:${textCol}; border:1px solid ${borderCol}; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; cursor:pointer;"
+        title="${escapeHtml(node.name)} (${isRoot ? 'Root System' : 'Level ' + depth})">
+        ${hasData ? '<span style="color:#34d399; font-size:11px;">✅</span>' : '<span style="color:#64748b; font-size:10px;">○</span>'}
+        <span>${escapeHtml(node.name || 'Element')}</span>
+        ${isActive ? '<span style="font-size:9px; background:#0284c7; color:#fff; padding:1px 4px; border-radius:3px;">ACTIVE</span>' : ''}
+      </button>
+    `;
+  }).join('<span style="color:#475569; font-size:10px;">➔</span>');
+
+  const statusBadge = document.getElementById('wb4CurrentNavStatusBadge');
+  if (statusBadge) {
+    const hasData = aiWorkbench4State.processedNodes.has(aiWorkbench4State.currentNodeId) ||
+      ((aiWorkbench4State.nodeFunctions[aiWorkbench4State.currentNodeId] || []).length > 0);
+    statusBadge.innerHTML = hasData
+      ? '<span style="color:#34d399; font-weight:800;">✨ Drawing Ingested</span>'
+      : '<span style="color:#94a3b8;">○ Not Ingested</span>';
+  }
+}
+
+function switchWb4ActiveElement(nodeId) {
+  saveCurrentWb4Inputs();
+  if (typeof syncWorkbenchStateToProjectData === 'function') {
+    syncWorkbenchStateToProjectData();
+  }
+  aiWorkbench4State.currentNodeId = nodeId;
+  renderWb4StructureNavBar();
+  loadWb4NodeContext(nodeId);
+
+  let resumeStep = 1;
+  if (aiWorkbench4State.nodeControls && aiWorkbench4State.nodeControls[nodeId] && Object.keys(aiWorkbench4State.nodeControls[nodeId]).length > 0) {
+    resumeStep = 6;
+  } else if (aiWorkbench4State.nodeEffects && aiWorkbench4State.nodeEffects[nodeId] && Object.keys(aiWorkbench4State.nodeEffects[nodeId]).length > 0) {
+    resumeStep = 5;
+  } else if (aiWorkbench4State.nodeCauses && aiWorkbench4State.nodeCauses[nodeId] && aiWorkbench4State.nodeCauses[nodeId].length > 0) {
+    resumeStep = 4;
+  } else if (aiWorkbench4State.nodeFailures && aiWorkbench4State.nodeFailures[nodeId] && aiWorkbench4State.nodeFailures[nodeId].length > 0) {
+    resumeStep = 3;
+  } else if (aiWorkbench4State.nodeFunctions && aiWorkbench4State.nodeFunctions[nodeId] && aiWorkbench4State.nodeFunctions[nodeId].length > 0) {
+    resumeStep = 2;
+  }
+
+  goToWb4Step(resumeStep);
+}
+
+function loadWb4NodeContext(nodeId) {
+  const data = aiWorkbench4State.nodeDrawingData[nodeId];
+  const inputEl = document.getElementById('wb4RawDrawingInput');
+  if (inputEl) {
+    inputEl.value = data ? (data.rawText || '') : '';
+  }
+  if (data && data.parsed) {
+    renderWb4ParsedPreviewCard(nodeId);
+  } else {
+    const card = document.getElementById('wb4ParsedPreviewCard');
+    if (card) card.style.display = 'none';
+  }
+}
+
+function toggleWb4MasterPromptView() {
+  const viewer = document.getElementById('wb4MasterPromptViewer');
+  const txt = document.getElementById('wb4MasterPromptTextarea');
+  if (!viewer) return;
+  const isHidden = (viewer.style.display === 'none' || !viewer.style.display);
+  viewer.style.display = isHidden ? 'block' : 'none';
+  if (isHidden && txt) {
+    txt.value = MASTER_DRAWING_EXTRACTION_PROMPT;
+  }
+}
+
+function copyWb4MasterPrompt() {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(MASTER_DRAWING_EXTRACTION_PROMPT).then(() => {
+      if (typeof showToast === 'function') showToast('📋 Master Drawing Extraction Prompt copied to clipboard!', 'success');
+      else alert('Master Prompt copied to clipboard!');
+    });
+  } else {
+    alert('Clipboard access not available. Please copy manually from documentation.');
+  }
+}
+
+function loadWb4SampleDrawingData() {
+  const inputEl = document.getElementById('wb4RawDrawingInput');
+  if (inputEl) {
+    inputEl.value = SAMPLE_LOADER_DRAWING_DATA;
+    if (typeof showToast === 'function') showToast('📂 Sample Drawing Data loaded for Compact G3 Loader!', 'info');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DRAWING PARSER ENGINE (MULTI-FORMAT ROBUST EXTRACTOR)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function parseDrawingInput(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  const text = rawText.trim();
+  if (text.length < 10) return null;
+
+  const result = {
+    productInfo: {
+      partName: '',
+      productType: 'Assembly',
+      description: '',
+      drawingNumber: '',
+      drawingType: 'Assembly Drawing',
+      weight: '',
+      variants: '',
+      structuralMembers: '',
+      identificationFeatures: ''
+    },
+    functionalCharacteristics: [],
+    interfaceCharacteristics: [],
+    dimensionalCharacteristics: [],
+    gdtCharacteristics: [],
+    holeCharacteristics: [],
+    weldCharacteristics: [],
+    materialCharacteristics: [],
+    surfaceCharacteristics: [],
+    inspectionCharacteristics: {
+      torque: [],
+      traceability: [],
+      fitup: [],
+      verification: []
+    },
+    specialCharacteristics: [],
+    drawingNotes: [],
+    functions: {
+      primary: [],
+      performance: [],
+      durability: [],
+      traceability: [],
+      assemblyInternal: [],
+      assemblyExternal: [],
+      manufacturability: [],
+      appearance: [],
+      environmental: []
+    }
+  };
+
+  // Helper: Slice text between section headers
+  function getSectionText(headerRegex, endRegexes) {
+    const match = text.match(headerRegex);
+    if (!match) return '';
+    const startIndex = match.index + match[0].length;
+    let minEndIndex = text.length;
+    endRegexes.forEach(rgx => {
+      const em = text.slice(startIndex).match(rgx);
+      if (em && em.index !== undefined) {
+        minEndIndex = Math.min(minEndIndex, startIndex + em.index);
+      }
+    });
+    return text.slice(startIndex, minEndIndex).trim();
+  }
+
+  // Section regex patterns
+  const secHeadings = [
+    /(?:###\s*|\b)PRODUCT CHARACTERISTICS/i,
+    /(?:###\s*|\b)FUNCTIONAL CHARACTERISTICS/i,
+    /(?:###\s*|\b)INTERFACE CHARACTERISTICS/i,
+    /(?:###\s*|\b)DIMENSIONAL CHARACTERISTICS/i,
+    /(?:###\s*|\b)GD&T CHARACTERISTICS/i,
+    /(?:###\s*|\b)HOLE CHARACTERISTICS/i,
+    /(?:###\s*|\b)WELD CHARACTERISTICS/i,
+    /(?:###\s*|\b)MATERIAL CHARACTERISTICS/i,
+    /(?:###\s*|\b)SURFACE\s*(?:\/|\s*AND\s*)\s*COATING CHARACTERISTICS/i,
+    /(?:###\s*|\b)INSPECTION CHARACTERISTICS/i,
+    /(?:###\s*|\b)SPECIAL CHARACTERISTICS/i,
+    /(?:###\s*|\b)DRAWING NOTES/i,
+    /(?:###\s*|\b)FUNCTIONS/i
+  ];
+
+  // 1. PRODUCT CHARACTERISTICS
+  const prodText = getSectionText(secHeadings[0], secHeadings.slice(1));
+  if (prodText) {
+    const pnMatch = prodText.match(/Part Name:\s*([^\n\r]+?)(?=(?:Product Type:|Name\/Description:|Drawing Number:|Drawing Type:|Weight Requirement:|Production Variant:|Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (pnMatch) result.productInfo.partName = pnMatch[1].trim();
+
+    const ptMatch = prodText.match(/Product Type:\s*([^\n\r]+?)(?=(?:Name\/Description:|Description:|Drawing Number:|Drawing Type:|Weight Requirement:|Production Variant:|Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (ptMatch) result.productInfo.productType = ptMatch[1].trim();
+
+    const descMatch = prodText.match(/(?:Name\/Description|Description):\s*([^\n\r]+?)(?=(?:Drawing Number:|Drawing Type:|Weight Requirement:|Production Variant:|Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (descMatch) result.productInfo.description = descMatch[1].trim();
+
+    const dnMatch = prodText.match(/Drawing Number:\s*([^\n\r]+?)(?=(?:Drawing Type:|Weight Requirement:|Production Variant:|Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (dnMatch) result.productInfo.drawingNumber = dnMatch[1].trim();
+
+    const dtMatch = prodText.match(/Drawing Type:\s*([^\n\r]+?)(?=(?:Weight Requirement:|Production Variant:|Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (dtMatch) result.productInfo.drawingType = dtMatch[1].trim();
+
+    const wtMatch = prodText.match(/Weight Requirement:\s*([^\n\r]+?)(?=(?:Production Variant:|Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (wtMatch) result.productInfo.weight = wtMatch[1].trim();
+
+    const pvMatch = prodText.match(/Production Variant:\s*([^\n\r]+?)(?=(?:Structural Members Identified:|Product Identification Features:|\r|\n|$))/i);
+    if (pvMatch) result.productInfo.variants = pvMatch[1].trim();
+
+    const smMatch = prodText.match(/Structural Members Identified:\s*([^\n\r]+?)(?=(?:Product Identification Features:|\r|\n|$))/i);
+    if (smMatch) result.productInfo.structuralMembers = smMatch[1].trim();
+
+    const piMatch = prodText.match(/Product Identification Features:\s*([^\n\r]+?)(?=(?:\r|\n|$))/i);
+    if (piMatch) result.productInfo.identificationFeatures = piMatch[1].trim();
+  }
+
+  // 2. FUNCTIONAL CHARACTERISTICS
+  const funcCharText = getSectionText(secHeadings[1], secHeadings.slice(2));
+  if (funcCharText) {
+    result.functionalCharacteristics = funcCharText.split(/\n|\r/).map(l => l.replace(/^[-*•]\s*/, '').trim()).filter(l => l.length > 5);
+  }
+
+  // 3. INTERFACE CHARACTERISTICS
+  const ifaceText = getSectionText(secHeadings[2], secHeadings.slice(3));
+  if (ifaceText) {
+    let currentType = 'General';
+    ifaceText.split(/\n|\r/).forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (/Hydraulic Interfaces?:/i.test(trimmed)) currentType = 'Hydraulic';
+      else if (/Mechanical Interfaces?:/i.test(trimmed)) currentType = 'Mechanical';
+      else if (/Electrical Interfaces?:/i.test(trimmed)) currentType = 'Electrical';
+      else if (/Vehicle\s*(?:\/|\s*Product\s*)Interfaces?:/i.test(trimmed)) currentType = 'Vehicle';
+      else {
+        const clean = trimmed.replace(/^[-*•]\s*/, '');
+        if (clean.length > 3) {
+          result.interfaceCharacteristics.push({ type: currentType, desc: clean });
+        }
+      }
+    });
+  }
+
+  // 4. DIMENSIONAL CHARACTERISTICS
+  const dimText = getSectionText(secHeadings[3], secHeadings.slice(4));
+  if (dimText) {
+    const dimBlocks = dimText.split(/Characteristic:\s*/i).filter(b => b.trim().length > 0);
+    dimBlocks.forEach(block => {
+      const lines = block.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
+      const name = lines[0] || 'Dimension';
+      const reqMatch = block.match(/Drawing Requirement:\s*([^\n\r]+)/i);
+      const intentMatch = block.match(/Engineering Intent:\s*([^\n\r]+)/i);
+      result.dimensionalCharacteristics.push({
+        name: name.replace(/^[-*•]\s*/, '').trim(),
+        requirement: reqMatch ? reqMatch[1].trim() : '',
+        intent: intentMatch ? intentMatch[1].trim() : ''
+      });
+    });
+  }
+
+  // 5. HOLE CHARACTERISTICS
+  const holeText = getSectionText(secHeadings[5], secHeadings.slice(6));
+  if (holeText) {
+    const holeBlocks = holeText.split(/Characteristic:\s*/i).filter(b => b.trim().length > 0);
+    holeBlocks.forEach(block => {
+      const lines = block.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
+      const name = lines[0] || 'Hole Feature';
+      const typeMatch = block.match(/Hole Type:\s*([^\n\r]+)/i);
+      const reqMatch = block.match(/Drawing Requirement:\s*([^\n\r]+)/i);
+      const purposeMatch = block.match(/Hole Interface Purpose:\s*([^\n\r]+)/i);
+      const intentMatch = block.match(/Engineering Intent:\s*([^\n\r]+)/i);
+      result.holeCharacteristics.push({
+        name: name.replace(/^[-*•]\s*/, '').trim(),
+        holeType: typeMatch ? typeMatch[1].trim() : 'Clearance Hole',
+        requirement: reqMatch ? reqMatch[1].trim() : '',
+        purpose: purposeMatch ? purposeMatch[1].trim() : '',
+        intent: intentMatch ? intentMatch[1].trim() : ''
+      });
+    });
+  }
+
+  // 6. MATERIAL & COATING
+  const matText = getSectionText(secHeadings[7], secHeadings.slice(8));
+  if (matText) {
+    result.materialCharacteristics = matText.split(/\n|\r/).map(l => l.replace(/^[-*•]\s*/, '').trim()).filter(l => l.length > 3);
+  }
+  const surfText = getSectionText(secHeadings[8], secHeadings.slice(9));
+  if (surfText) {
+    result.surfaceCharacteristics = surfText.split(/\n|\r/).map(l => l.replace(/^[-*•]\s*/, '').trim()).filter(l => l.length > 3);
+  }
+
+  // 7. INSPECTION CHARACTERISTICS
+  const inspText = getSectionText(secHeadings[9], secHeadings.slice(10));
+  if (inspText) {
+    let currentCat = 'verification';
+    inspText.split(/\n|\r/).forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (/Torque Verification/i.test(trimmed)) currentCat = 'torque';
+      else if (/Traceability/i.test(trimmed)) currentCat = 'traceability';
+      else if (/Fit-up/i.test(trimmed)) currentCat = 'fitup';
+      else if (/Verification Requirements?/i.test(trimmed)) currentCat = 'verification';
+      else {
+        const clean = trimmed.replace(/^[-*•]\s*/, '');
+        if (clean.length > 3) {
+          result.inspectionCharacteristics[currentCat].push(clean);
+        }
+      }
+    });
+  }
+
+  // 8. DRAWING NOTES
+  const notesText = getSectionText(secHeadings[11], [secHeadings[12]]);
+  if (notesText) {
+    result.drawingNotes = notesText.split(/\n|\r/).map(l => l.replace(/^[-*•]\s*/, '').trim()).filter(l => l.length > 4);
+  }
+
+  // 9. FUNCTIONS
+  const fnText = getSectionText(secHeadings[12], []);
+  if (fnText) {
+    let currentDomain = 'primary';
+    fnText.split(/\n|\r/).forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      if (/Primary Functions?:/i.test(trimmed)) currentDomain = 'primary';
+      else if (/Performance Functions?:/i.test(trimmed)) currentDomain = 'performance';
+      else if (/Durability\s*(?:&|\s*and\s*)Reliability Functions?:/i.test(trimmed)) currentDomain = 'durability';
+      else if (/Internal Traceability Functions?:/i.test(trimmed)) currentDomain = 'traceability';
+      else if (/Assembly Functions\s*\(Internal\):/i.test(trimmed)) currentDomain = 'assemblyInternal';
+      else if (/Assembly Functions\s*\(External\s*(?:\/|\s*Vehicle\s*)\):/i.test(trimmed)) currentDomain = 'assemblyExternal';
+      else if (/Manufacturability Functions?:/i.test(trimmed)) currentDomain = 'manufacturability';
+      else if (/Appearance Functions?:/i.test(trimmed)) currentDomain = 'appearance';
+      else if (/Environmental Functions?:/i.test(trimmed)) currentDomain = 'environmental';
+      else {
+        const clean = trimmed.replace(/^[-*•]\s*/, '');
+        if (clean.length > 3 && !clean.endsWith(':')) {
+          if (!result.functions[currentDomain]) result.functions[currentDomain] = [];
+          result.functions[currentDomain].push(clean);
+        }
+      }
+    });
+  }
+
+  return result;
+}
+
+// Generates '*' AI-Proposed Characteristics (Not explicitly defined in drawing but critical for failure mode prevention)
+function generateWb4AiProposedCharacteristics(nodeId, parsedData) {
+  const proposed = [];
+  const partName = (parsedData.productInfo && parsedData.productInfo.partName) || 'Loader Component';
+
+  // 1. Thread engagement / screw clamp integrity
+  proposed.push({
+    name: '* Minimum thread engagement depth for safety-critical locking screws',
+    category: 'Dimensional / Assembly',
+    spec: 'Minimum 1.5 x d nominal screw diameter fully engaged into tapped hole',
+    intent: 'Prevents thread stripping and clamp load loss under dynamic cyclic vibration',
+    isAiProposed: true
+  });
+
+  // 2. Hose minimum bend radius
+  proposed.push({
+    name: '* Minimum dynamic hydraulic hose bend radius',
+    category: 'Functional / Routing',
+    spec: 'R_min ≥ 120 mm dynamic curvature envelope',
+    intent: 'Prevents internal wire reinforcement fatigue failure and premature hose burst',
+    isAiProposed: true
+  });
+
+  // 3. Sealing face planarity / roughness
+  proposed.push({
+    name: '* Hydraulic port & multicoupling sealing surface roughness (Ra)',
+    category: 'Surface / Sealing',
+    spec: 'Ra ≤ 1.6 µm with planarity tolerance 0.15 mm',
+    intent: 'Controls O-ring seal compression uniformity to prevent hydraulic fluid weeping',
+    isAiProposed: true
+  });
+
+  // 4. Sensor magnet air-gap tolerance
+  proposed.push({
+    name: '* Pressure sensor magnet interface air-gap limit',
+    category: 'Interface / Electrical',
+    spec: 'Operating gap 3.0 ± 0.5 mm under maximum structural deflection',
+    intent: 'Maintains consistent Hall-effect magnetic flux sensing without mechanical contact',
+    isAiProposed: true
+  });
+
+  // 5. Cable-tie bundle clamping tension
+  proposed.push({
+    name: '* Cable-tie bundling tension force limit',
+    category: 'Assembly / Packaging',
+    spec: 'Tension limit 180 ± 20 N; zero harness jacket pinching',
+    intent: 'Secures hydraulic lines without chafing electrical harness conductors',
+    isAiProposed: true
+  });
+
+  return proposed;
+}
+
+function parseWb4DrawingInput() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const inputEl = document.getElementById('wb4RawDrawingInput');
+  const rawText = inputEl ? inputEl.value.trim() : '';
+
+  if (!rawText) {
+    alert("Please paste extracted drawing data into the text area first.");
+    return;
+  }
+
+  const parsed = parseDrawingInput(rawText);
+  if (!parsed) {
+    alert("Could not parse drawing data. Please ensure input contains drawing characteristics or functions.");
+    return;
+  }
+
+  const aiProposed = generateWb4AiProposedCharacteristics(nodeId, parsed);
+
+  aiWorkbench4State.nodeDrawingData[nodeId] = {
+    rawText,
+    parsed,
+    aiProposed
+  };
+
+  // Sync to structure node if root or element
+  const ctx = getActiveFmeaData();
+  const node = getStructureNodeById(ctx.structure, nodeId);
+  if (node && parsed.productInfo.partName) {
+    node.name = parsed.productInfo.partName;
+    if (parsed.productInfo.drawingNumber) node.partNo = parsed.productInfo.drawingNumber;
+    if (parsed.productInfo.description) node.desc = parsed.productInfo.description;
+  }
+
+  renderWb4ParsedPreviewCard(nodeId);
+  populateWb4FunctionsFromDrawing(nodeId);
+  renderWb4StructureNavBar();
+
+  if (typeof showToast === 'function') {
+    showToast(`✅ Drawing parsed successfully: ${parsed.productInfo.partName || 'Component'}`, 'success');
+  }
+}
+
+function renderWb4ParsedPreviewCard(nodeId) {
+  const data = aiWorkbench4State.nodeDrawingData[nodeId];
+  if (!data || !data.parsed) return;
+  const p = data.parsed;
+
+  const card = document.getElementById('wb4ParsedPreviewCard');
+  if (card) card.style.display = 'block';
+
+  const partNameEl = document.getElementById('wb4ParsedPartName');
+  if (partNameEl) partNameEl.textContent = p.productInfo.partName || 'Assembly / Component';
+
+  const drwEl = document.getElementById('wb4ParsedDrawingNo');
+  if (drwEl) drwEl.textContent = p.productInfo.drawingNumber || 'N/A';
+
+  const typeEl = document.getElementById('wb4ParsedProductType');
+  if (typeEl) typeEl.textContent = p.productInfo.productType || 'Assembly';
+
+  const wtEl = document.getElementById('wb4ParsedWeight');
+  if (wtEl) wtEl.textContent = p.productInfo.weight || 'N/A';
+
+  const varEl = document.getElementById('wb4ParsedVariants');
+  if (varEl) varEl.textContent = p.productInfo.variants || 'Standard';
+
+  // AI-Proposed Characteristics
+  const aiBox = document.getElementById('wb4AiProposedCharsContainer');
+  if (aiBox && Array.isArray(data.aiProposed)) {
+    aiBox.innerHTML = data.aiProposed.map(ap => `
+      <div style="padding:4px 0; border-bottom:1px dashed rgba(245,158,11,0.2); display:flex; align-items:flex-start; gap:8px;">
+        <span style="color:#fbbf24; font-weight:800;">*</span>
+        <div>
+          <strong style="color:#fde68a;">${escapeHtml(ap.name)}</strong>: 
+          <span style="color:#cbd5e1;">${escapeHtml(ap.spec)}</span> — 
+          <em style="color:#94a3b8;">${escapeHtml(ap.intent)}</em>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Detailed Characteristics List
+  const detBox = document.getElementById('wb4DetailedCharsContainer');
+  if (detBox) {
+    const dimCount = p.dimensionalCharacteristics.length;
+    const holeCount = p.holeCharacteristics.length;
+    const ifaceCount = p.interfaceCharacteristics.length;
+    const notesCount = p.drawingNotes.length;
+    const fnTotal = Object.values(p.functions).reduce((acc, arr) => acc + arr.length, 0);
+
+    detBox.innerHTML = `
+      <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:700; color:#38bdf8; margin-bottom:8px;">
+        <span>📊 Extracted Characteristics Breakdown:</span>
+        <span>${dimCount} Dimensional &bull; ${holeCount} Holes &bull; ${ifaceCount} Interfaces &bull; ${notesCount} Notes &bull; ${fnTotal} Functions</span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:10.5px;">
+        <div>
+          <div style="font-weight:700; color:#cbd5e1; margin-bottom:4px;">📐 Dimensional Specifications:</div>
+          ${p.dimensionalCharacteristics.map(d => `<div style="padding:2px 0; color:#94a3b8;">• <strong>${escapeHtml(d.name)}</strong>: ${escapeHtml(d.requirement)} <span style="color:#64748b;">(${escapeHtml(d.intent)})</span></div>`).join('') || '<div style="color:#64748b;">None specified</div>'}
+        </div>
+        <div>
+          <div style="font-weight:700; color:#cbd5e1; margin-bottom:4px;">📝 Key Inspection &amp; Drawing Notes:</div>
+          ${p.drawingNotes.slice(0, 5).map(n => `<div style="padding:2px 0; color:#94a3b8;">• ${escapeHtml(n)}</div>`).join('')}
+          ${p.drawingNotes.length > 5 ? `<div style="color:#64748b; font-style:italic;">+ ${p.drawingNotes.length - 5} more notes...</div>` : ''}
+        </div>
+      </div>
+    `;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 2: FUNCTIONS EXTRACTION & N+1 PARENT LINKING
+// ══════════════════════════════════════════════════════════════════════════════
+
+function setWb4ExecutionMode(mode) {
+  aiWorkbench4State.executionMode = mode;
+  const isManual = (mode === 'MANUAL');
+
+  const btnManual = document.getElementById('wb4ModeBtnManual');
+  const btnApi = document.getElementById('wb4ModeBtnApi');
+  const compArea = document.getElementById('wb4CompanionArea');
+
+  if (btnManual) {
+    btnManual.style.background = isManual ? '#0284c7' : 'transparent';
+    btnManual.style.color = isManual ? '#ffffff' : '#94a3b8';
+  }
+  if (btnApi) {
+    btnApi.style.background = !isManual ? '#7c3aed' : 'transparent';
+    btnApi.style.color = !isManual ? '#ffffff' : '#94a3b8';
+  }
+  if (compArea) {
+    compArea.style.display = isManual ? 'inline-flex' : 'none';
+  }
+
+  [2, 3, 4, 5, 6].forEach(step => {
+    const manArea = document.getElementById(`wb4Step${step}ManualArea`);
+    const apiArea = document.getElementById(`wb4Step${step}ApiArea`);
+    const manBtn = document.getElementById(`wb4Step${step}ModeManualBtn`);
+    const apiBtn = document.getElementById(`wb4Step${step}ModeApiBtn`);
+
+    if (manArea) manArea.style.display = isManual ? 'block' : 'none';
+    if (apiArea) apiArea.style.display = !isManual ? 'block' : 'none';
+
+    if (manBtn) {
+      manBtn.style.background = isManual ? '#0284c7' : '#1e293b';
+      manBtn.style.color = isManual ? '#ffffff' : '#94a3b8';
+      manBtn.style.borderColor = isManual ? '#38bdf8' : '#334155';
+    }
+    if (apiBtn) {
+      apiBtn.style.background = !isManual ? '#7c3aed' : '#1e293b';
+      apiBtn.style.color = !isManual ? '#ffffff' : '#94a3b8';
+      apiBtn.style.borderColor = !isManual ? '#a855f7' : '#334155';
+    }
+  });
+
+  if (typeof showToast === 'function') {
+    showToast(`🧠 WB4 Mode switched to ${isManual ? '📋 MANUAL (Chat Companion / Prompts)' : '⚡ DIRECT API (Automatic Background)'}`, 'info');
+  }
+}
+
+function copyWb4StepPrompt(step) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  let promptText = '';
+  if (step === 2) promptText = generateWb4Step2Prompt(nodeId);
+  else if (step === 3) promptText = generateWb4Step3Prompt(nodeId);
+  else if (step === 6) promptText = generateWb4Step6Prompt(nodeId);
+
+  if (!promptText) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(promptText).then(() => {
+      if (typeof showToast === 'function') showToast(`📋 Step ${step} Prompt copied to clipboard!`, 'success');
+    });
+  } else {
+    alert(`Step ${step} Prompt copied to preview.`);
+  }
+}
+
+function generateWb4Step2Prompt(nodeId) {
+  const data = aiWorkbench4State.nodeDrawingData[nodeId];
+  const p = data ? data.parsed : null;
+  const ctx = getActiveFmeaData();
+  const node = (ctx && ctx.structure) ? getStructureNodeById(ctx.structure, nodeId) : { name: 'Assembly Element' };
+  const isRoot = (ctx && ctx.structure && node && node.id === ctx.structure.id);
+  const parentNode = (ctx && ctx.structure && !isRoot) ? getParentStructureNode(ctx.structure, nodeId) : null;
+  const parentFns = parentNode ? (aiWorkbench4State.nodeFunctions[parentNode.id] || []) : [];
+
+  const partName = (p && p.productInfo.partName) || node.name || 'Component';
+  const drawingNo = (p && p.productInfo.drawingNumber) || node.partNo || 'N/A';
+  const prodType = (p && p.productInfo.productType) || 'Assembly';
+  const wt = (p && p.productInfo.weight) || 'N/A';
+
+  const charsSummary = p ? `
+DRAWING CHARACTERISTICS EXTRACTED:
+- Functional: ${(p.functionalCharacteristics || []).join('; ') || 'Standard operation'}
+- Interfaces: ${(p.interfaceCharacteristics || []).map(i => `[${i.type}] ${i.desc}`).join('; ') || 'Standard mechanical interface'}
+- Key Dimensions: ${(p.dimensionalCharacteristics || []).map(d => `${d.name}: ${d.requirement}`).join('; ') || 'Per drawing'}
+- Holes/Welds: ${(p.holeCharacteristics || []).map(h => `${h.name} (${h.holeType})`).join('; ') || 'Standard'}
+- Inspection/Notes: ${(p.drawingNotes || []).slice(0, 5).join('; ') || 'Per drawing notes'}
+` : '';
+
+  const parentFnsContext = parentFns.length > 0
+    ? `\nPARENT FUNCTIONS (Level N+1) TO SUPPORT:\n` + parentFns.map(pf => `- [${pf.tempId || pf.id}] "${pf.name}" (${pf.domain || 'Primary function'})`).join('\n')
+    : '';
+
+  const prompt = `You are a Senior Automotive Reliability & Systems Engineer performing AIAG-VDA DFMEA Step 2 Function Analysis from engineering drawing data.
+
+DRAWING & PRODUCT INFORMATION:
+- Element Name: "${partName}"
+- Drawing Number: ${drawingNo}
+- Product Type: ${prodType} | Weight: ${wt}
+${charsSummary}${parentFnsContext}
+
+TASK DIRECTIVE:
+Derive ALL genuine, physically verifiable engineering functions for this element based strictly on the drawing characteristics and interfaces above.
+Categorize each function into one of the standard engineering domains:
+• Primary function (main intended operational purpose)
+• Performance function (pressure, force, speed ratings)
+• Durability function (cyclic fatigue, structural integrity)
+• Safety & Traceability (warning signs, torque records)
+• Internal Assembly (retention, fastener clamp)
+• Vehicle Interface Assembly (mounting to tractor/vehicle)
+• Manufacturability (clearance, tool access)
+• Appearance requirement (paint, coating)
+• Environmental protection (sealing, corrosion resistance)
+
+RULES:
+1. Function Name = **Active Verb + Measurable/Observable Noun** (e.g. "Maintain hydraulic line retention", "Transfer lifting force to loader arm").
+2. No vague verbs (e.g. avoid 'provide', 'ensure' unless necessary).
+3. Do not include failure modes, causes, or solutions in function names.
+4. If parent functions exist, link 'parentFunctionId' to the corresponding parent function tempId.
+5. Output JSON only.
+
+OUTPUT JSON FORMAT:
+{
+  "functions": [
+    {
+      "tempId": "wb4-fn-1",
+      "name": "<Active Verb + Noun>",
+      "domain": "Primary function",
+      "parentFunctionId": "${parentFns[0] ? (parentFns[0].tempId || parentFns[0].id) : ''}",
+      "requirementSpec": "Per drawing specification"
+    }
+  ]
+}`;
+
+  const preview = document.getElementById('wb4Step2PromptPreview');
+  if (preview) preview.value = prompt;
+  return prompt;
+}
+
+function parseWb4Step2Json() {
+  const input = document.getElementById('wb4Step2JsonResponseInput');
+  if (!input || !input.value.trim()) {
+    alert("Please paste the functions JSON response first.");
+    return;
+  }
+  try {
+    const raw = sanitizeJsonString(input.value);
+    const parsed = JSON.parse(raw);
+    const fns = parsed.functions || (Array.isArray(parsed) ? parsed : []);
+    if (!Array.isArray(fns) || fns.length === 0) {
+      alert("No valid functions found in JSON response.");
+      return;
+    }
+    const nodeId = aiWorkbench4State.currentNodeId;
+    aiWorkbench4State.nodeFunctions[nodeId] = fns.map((fn, idx) => ({
+      tempId: fn.tempId || `wb4-fn-${nodeId}-${idx + 1}`,
+      name: fn.name || 'Unnamed Function',
+      domain: fn.domain || fn.type || 'Primary function',
+      parentFunctionId: fn.parentFunctionId || fn.parentFunctionIds || '',
+      requirementSpec: fn.requirementSpec || 'Per drawing'
+    }));
+
+    renderWb4FunctionsTable();
+    generateWb4Step3Prompt(nodeId);
+    if (typeof showToast === 'function') showToast(`📥 Parsed & loaded ${fns.length} functions!`, 'success');
+  } catch (err) {
+    alert("JSON Parsing Error: " + err.message);
+  }
+}
+
+async function runWb4Step2Api() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const prompt = generateWb4Step2Prompt(nodeId);
+  const statusEl = document.getElementById('wb4ApiStep2Status');
+  if (statusEl) { statusEl.textContent = 'Querying AI for Drawing Functions...'; statusEl.style.color = '#38bdf8'; }
+
+  try {
+    const res = await executeWb3ApiQuery(prompt, 'wb4ApiStep2Status', 'wb4BtnRunApiStep2');
+    if (!res) return;
+    const input = document.getElementById('wb4Step2JsonResponseInput');
+    if (input) input.value = res;
+    parseWb4Step2Json();
+    if (statusEl) { statusEl.textContent = '✓ Functions generated successfully!'; statusEl.style.color = '#34d399'; }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ API Error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+function populateWb4FunctionsFromDrawing(nodeId) {
+  const data = aiWorkbench4State.nodeDrawingData[nodeId];
+  if (!data || !data.parsed) return;
+  const fns = data.parsed.functions || {};
+  const list = [];
+  let idx = 1;
+
+  const domainMap = {
+    primary: 'Primary function',
+    performance: 'Performance function',
+    durability: 'Durability function',
+    traceability: 'Safety & Traceability',
+    assemblyInternal: 'Internal Assembly',
+    assemblyExternal: 'Vehicle Interface Assembly',
+    manufacturability: 'Manufacturability',
+    appearance: 'Appearance requirement',
+    environmental: 'Environmental protection'
+  };
+
+  Object.entries(fns).forEach(([domainKey, arr]) => {
+    const domainName = domainMap[domainKey] || 'Primary function';
+    arr.forEach(fnStr => {
+      list.push({
+        tempId: `wb4-fn-${nodeId}-${idx++}`,
+        name: fnStr.trim(),
+        domain: domainName,
+        parentFunctionId: '',
+        requirementSpec: 'Per drawing specifications'
+      });
+    });
+  });
+
+  if (list.length > 0) {
+    aiWorkbench4State.nodeFunctions[nodeId] = list;
+  }
+  generateWb4Step2Prompt(nodeId);
+}
+
+function renderWb4FunctionsTable() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fns = aiWorkbench4State.nodeFunctions[nodeId] || [];
+  const countEl = document.getElementById('wb4FunctionsCount');
+  if (countEl) countEl.textContent = fns.length;
+  const tbody = document.getElementById('wb4FunctionsTableBody');
+  if (!tbody) return;
+
+  const ctx = getActiveFmeaData();
+  const parentNode = (ctx && ctx.structure) ? getParentStructureNode(ctx.structure, nodeId) : null;
+  const parentFns = parentNode ? ((aiWorkbench4State.nodeFunctions[parentNode.id] || ctx.functions || []).filter(f => f.structId === parentNode.id || true)) : [];
+
+  if (fns.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:18px; color:#64748b;">No functions extracted yet. Paste JSON or click Generate via API.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = fns.map((fn, idx) => {
+    const parentOpts = parentFns.map(pf => `<option value="${pf.tempId || pf.id}" ${fn.parentFunctionId === (pf.tempId || pf.id) ? 'selected' : ''}>${escapeHtml(pf.name)}</option>`).join('');
+    return `
+      <tr style="border-bottom:1px solid #1e293b;">
+        <td style="text-align:center; padding:6px; color:#64748b;">${idx + 1}</td>
+        <td style="padding:6px 8px;">
+          <span style="font-size:9.5px; font-weight:700; color:#38bdf8; background:rgba(2,132,199,0.15); padding:2px 6px; border-radius:4px; border:1px solid rgba(2,132,199,0.3);">
+            ${escapeHtml(fn.domain)}
+          </span>
+        </td>
+        <td style="padding:6px 8px;">
+          <input type="text" value="${escapeHtml(fn.name)}" onchange="updateWb4FnName(${idx}, this.value)" style="width:100%; box-sizing:border-box; background:#020617; border:1px solid #334155; border-radius:4px; color:#f8fafc; font-size:11px; padding:4px 8px;">
+        </td>
+        <td style="padding:6px 8px;">
+          <select onchange="updateWb4FnParent(${idx}, this.value)" style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#cbd5e1; font-size:10.5px; padding:4px;">
+            <option value="">-- No Parent Link (System/Root) --</option>
+            ${parentOpts}
+          </select>
+        </td>
+        <td style="text-align:center; padding:6px;">
+          <button type="button" onclick="deleteWb4FunctionRow(${idx})" style="background:transparent; border:1px solid #ef4444; color:#ef4444; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">✕</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateWb4FnName(idx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeFunctions[nodeId] && aiWorkbench4State.nodeFunctions[nodeId][idx]) {
+    aiWorkbench4State.nodeFunctions[nodeId][idx].name = val.trim();
+  }
+}
+
+function updateWb4FnParent(idx, parentId) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeFunctions[nodeId] && aiWorkbench4State.nodeFunctions[nodeId][idx]) {
+    aiWorkbench4State.nodeFunctions[nodeId][idx].parentFunctionId = parentId;
+  }
+}
+
+function addWb4FunctionRow() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (!aiWorkbench4State.nodeFunctions[nodeId]) aiWorkbench4State.nodeFunctions[nodeId] = [];
+  aiWorkbench4State.nodeFunctions[nodeId].push({
+    tempId: `wb4-fn-${nodeId}-${Date.now()}`,
+    name: 'Maintain required engineering function',
+    domain: 'Primary function',
+    parentFunctionId: '',
+    requirementSpec: 'Per drawing'
+  });
+  renderWb4FunctionsTable();
+}
+
+function deleteWb4FunctionRow(idx) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeFunctions[nodeId]) {
+    aiWorkbench4State.nodeFunctions[nodeId].splice(idx, 1);
+    renderWb4FunctionsTable();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 3: DIRECT FAILURE MODE DERIVATION (FOR ALL FUNCTIONS)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function generateWb4Step3Prompt(nodeId) {
+  const data = aiWorkbench4State.nodeDrawingData[nodeId];
+  const p = data ? data.parsed : null;
+  const ctx = getActiveFmeaData();
+  const node = (ctx && ctx.structure) ? getStructureNodeById(ctx.structure, nodeId) : { name: 'Assembly Element' };
+  const fns = aiWorkbench4State.nodeFunctions[nodeId] || [];
+
+  const partName = (p && p.productInfo.partName) || node.name || 'Component';
+  const drawingNo = (p && p.productInfo.drawingNumber) || node.partNo || 'N/A';
+
+  const fnsText = fns.length > 0
+    ? fns.map((f, i) => `  ${i + 1}. [${f.tempId}] "${f.name}" (${f.domain})`).join('\n')
+    : '  (No functions defined yet)';
+
+  const prompt = `You are a Senior Automotive Reliability & Safety Engineer performing AIAG-VDA 1st Edition DFMEA Step 3 Failure Mode Analysis.
+
+DRAWING & PRODUCT UNDER ANALYSIS:
+- Element Name: "${partName}" | Drawing No: ${drawingNo}
+
+VERIFIED ENGINEERING FUNCTIONS (STEP 2):
+${fnsText}
+
+TASK DIRECTIVE:
+For ALL functions listed above, derive the corresponding AIAG-VDA Failure Modes directly violating each function.
+Evaluate the 7 AIAG-VDA Failure Types:
+1. Loss of function (total inability to deliver function)
+2. Partial function (insufficient performance or incomplete delivery)
+3. Degradation over time (wear, loosening, micro-leakage over operating life)
+4. Intermittent function (erratic operation under vibration/temperature)
+5. Unintended function (uncontrolled motion, unintended engagement)
+6. Exceeding function (excessive pressure, over-travel)
+7. Delayed function (delayed hydraulic response or actuation)
+
+CRITICAL RULES:
+1. Every function must have at least 1-2 physically credible failure modes.
+2. For Primary/Performance functions: derive across Loss, Partial, Degradation over time, and Unintended.
+3. For Safety/Traceability/Assembly functions: formulate specific non-conformance (e.g. fastener loosening, illegible identification, harness chafing).
+4. Assign Preliminary Severity (S) on the standard 1-10 scale (8-10 for safety/retention loss; 6-7 for performance loss; 3-5 for minor/traceability).
+5. Output JSON only.
+
+OUTPUT JSON FORMAT:
+{
+  "failureModes": [
+    {
+      "tempId": "wb4-fm-1",
+      "functionTempId": "${fns[0] ? fns[0].tempId : 'wb4-fn-1'}",
+      "functionName": "${fns[0] ? fns[0].name.replace(/"/g, '') : 'Primary Function'}",
+      "name": "Loss of structural retention: locking joint fails under dynamic load",
+      "failureType": "Loss of function",
+      "severity": 8
+    }
+  ]
+}`;
+
+  const preview = document.getElementById('wb4Step3PromptPreview');
+  if (preview) preview.value = prompt;
+  return prompt;
+}
+
+function parseWb4Step3Json() {
+  const input = document.getElementById('wb4Step3JsonResponseInput');
+  if (!input || !input.value.trim()) {
+    alert("Please paste the failure modes JSON response first.");
+    return;
+  }
+  try {
+    const raw = sanitizeJsonString(input.value);
+    const parsed = JSON.parse(raw);
+    const modes = parsed.failureModes || parsed.modes || (Array.isArray(parsed) ? parsed : []);
+    if (!Array.isArray(modes) || modes.length === 0) {
+      alert("No valid failure modes found in JSON response.");
+      return;
+    }
+    const nodeId = aiWorkbench4State.currentNodeId;
+    aiWorkbench4State.nodeFailures[nodeId] = modes.map((fm, idx) => ({
+      tempId: fm.tempId || `wb4-fm-${nodeId}-${idx + 1}`,
+      functionTempId: fm.functionTempId || '',
+      functionName: fm.functionName || 'General Function',
+      name: fm.name || fm.failureName || `Failure Mode ${idx + 1}`,
+      failureType: fm.failureType || 'Loss of function',
+      severity: parseInt(fm.severity || 8, 10) || 8
+    }));
+
+    aiWorkbench4State.step5FmPointer[nodeId] = 0;
+    if (!aiWorkbench4State.step4FmPointer) aiWorkbench4State.step4FmPointer = {};
+    aiWorkbench4State.step4FmPointer[nodeId] = 0;
+
+    renderWb4FailureModesList();
+    if (typeof showToast === 'function') showToast(`📥 Parsed & loaded ${modes.length} failure modes!`, 'success');
+  } catch (err) {
+    alert("JSON Parsing Error: " + err.message);
+  }
+}
+
+async function runWb4Step3Api() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const prompt = generateWb4Step3Prompt(nodeId);
+  const statusEl = document.getElementById('wb4ApiStep3Status');
+  if (statusEl) { statusEl.textContent = 'Querying AI for Failure Modes for All Functions...'; statusEl.style.color = '#38bdf8'; }
+
+  try {
+    const res = await executeWb3ApiQuery(prompt, 'wb4ApiStep3Status', 'wb4BtnRunApiStep3');
+    if (!res) return;
+    const input = document.getElementById('wb4Step3JsonResponseInput');
+    if (input) input.value = res;
+    parseWb4Step3Json();
+    if (statusEl) { statusEl.textContent = '✓ Failure Modes generated successfully!'; statusEl.style.color = '#34d399'; }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ API Error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+function deriveWb4FailureModes(nodeId) {
+  const fns = aiWorkbench4State.nodeFunctions[nodeId] || [];
+  const fms = [];
+  let idx = 1;
+
+  fns.forEach(fn => {
+    const fnName = fn.name;
+    if (/support|carry|retain|secure|hold/i.test(fnName)) {
+      fms.push({
+        tempId: `wb4-fm-${nodeId}-${idx++}`,
+        functionTempId: fn.tempId,
+        functionName: fnName,
+        name: `Loss of structural retention: ${fnName.toLowerCase()} fails under dynamic load`,
+        failureType: 'Loss of function',
+        severity: 8
+      });
+      fms.push({
+        tempId: `wb4-fm-${nodeId}-${idx++}`,
+        functionTempId: fn.tempId,
+        functionName: fnName,
+        name: `Fastener loosening or micro-displacement degrading joint integrity`,
+        failureType: 'Degradation over time',
+        severity: 6
+      });
+    } else if (/transfer|hydraulic|pressure|connect|flow/i.test(fnName)) {
+      fms.push({
+        tempId: `wb4-fm-${nodeId}-${idx++}`,
+        functionTempId: fn.tempId,
+        functionName: fnName,
+        name: `Hydraulic fluid leakage / pressure drop at interface fitting`,
+        failureType: 'Loss of function',
+        severity: 8
+      });
+    } else if (/route|guide|protect|bundle|isolate/i.test(fnName)) {
+      fms.push({
+        tempId: `wb4-fm-${nodeId}-${idx++}`,
+        functionTempId: fn.tempId,
+        functionName: fnName,
+        name: `Hydraulic hose / harness jacket mechanical chafing against structural edges`,
+        failureType: 'Degradation over time',
+        severity: 7
+      });
+    } else if (/traceability|identify|sign|mark|label/i.test(fnName)) {
+      fms.push({
+        tempId: `wb4-fm-${nodeId}-${idx++}`,
+        functionTempId: fn.tempId,
+        functionName: fnName,
+        name: `Missing safety warning label or unrecorded critical joint torque`,
+        failureType: 'Partial function',
+        severity: 4
+      });
+    } else {
+      fms.push({
+        tempId: `wb4-fm-${nodeId}-${idx++}`,
+        functionTempId: fn.tempId,
+        functionName: fnName,
+        name: `Inability to ${fnName.toLowerCase()} within required specification`,
+        failureType: 'Loss of function',
+        severity: 7
+      });
+    }
+  });
+
+  aiWorkbench4State.nodeFailures[nodeId] = fms;
+  generateWb4Step3Prompt(nodeId);
+}
+
+function renderWb4FailureModesList() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const countEl = document.getElementById('wb4FailureModesCount');
+  if (countEl) countEl.textContent = fms.length;
+  const tbody = document.getElementById('wb4FailureModesTableBody');
+  if (!tbody) return;
+
+  if (fms.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:18px; color:#64748b;">No failure modes defined yet. Complete Step 2 first.</td></tr>';
+    return;
+  }
+
+  const typeColors = {
+    'Loss of function': '#ef4444',
+    'Partial function': '#f59e0b',
+    'Degradation over time': '#10b981',
+    'Intermittent function': '#8b5cf6',
+    'Unintended function': '#ec4899',
+    'Exceeding function': '#0284c7',
+    'Delayed function': '#64748b'
+  };
+
+  tbody.innerHTML = fms.map((fm, idx) => {
+    const tc = typeColors[fm.failureType] || '#38bdf8';
+    return `
+      <tr style="border-bottom:1px solid #1e293b;">
+        <td style="text-align:center; padding:6px;"><input type="checkbox" checked class="wb4-fm-chk" value="${fm.tempId}"></td>
+        <td style="padding:6px 8px; color:#94a3b8; font-size:10.5px;">${escapeHtml(fm.functionName || 'General Function')}</td>
+        <td style="padding:6px 8px;">
+          <input type="text" value="${escapeHtml(fm.name)}" onchange="updateWb4FmName(${idx}, this.value)" style="width:100%; box-sizing:border-box; background:#020617; border:1px solid #334155; border-radius:4px; color:#f8fafc; font-size:11px; padding:4px 8px;">
+        </td>
+        <td style="padding:6px 8px;">
+          <span style="font-size:10px; font-weight:700; color:${tc}; background:${tc}22; padding:2px 6px; border-radius:4px; border:1px solid ${tc}44;">
+            ${escapeHtml(fm.failureType)}
+          </span>
+        </td>
+        <td style="text-align:center; padding:6px;">
+          <input type="number" min="1" max="10" value="${fm.severity}" onchange="updateWb4FmSeverity(${idx}, this.value)" style="width:40px; background:#020617; border:1px solid #334155; border-radius:4px; color:#ef4444; font-weight:800; text-align:center; font-size:11px; padding:2px;">
+        </td>
+        <td style="text-align:center; padding:6px;">
+          <button type="button" onclick="deleteWb4FailureMode(${idx})" style="background:transparent; border:1px solid #ef4444; color:#ef4444; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">✕</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateWb4FmName(idx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeFailures[nodeId] && aiWorkbench4State.nodeFailures[nodeId][idx]) {
+    aiWorkbench4State.nodeFailures[nodeId][idx].name = val.trim();
+  }
+}
+
+function updateWb4FmSeverity(idx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeFailures[nodeId] && aiWorkbench4State.nodeFailures[nodeId][idx]) {
+    aiWorkbench4State.nodeFailures[nodeId][idx].severity = parseInt(val, 10) || 7;
+  }
+}
+
+function deleteWb4FailureMode(idx) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeFailures[nodeId]) {
+    aiWorkbench4State.nodeFailures[nodeId].splice(idx, 1);
+    renderWb4FailureModesList();
+  }
+}
+
+function addWb4FailureModeRow() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (!aiWorkbench4State.nodeFailures[nodeId]) aiWorkbench4State.nodeFailures[nodeId] = [];
+  aiWorkbench4State.nodeFailures[nodeId].push({
+    tempId: `wb4-fm-${nodeId}-${Date.now()}`,
+    functionTempId: '',
+    functionName: 'Custom Function',
+    name: 'Custom Failure Mode description',
+    failureType: 'Loss of function',
+    severity: 7
+  });
+  renderWb4FailureModesList();
+}
+
+function toggleWb4AllFmChecks(masterChk) {
+  document.querySelectorAll('.wb4-fm-chk').forEach(c => { c.checked = masterChk.checked; });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 4: CHARACTERISTIC CAUSES & FM TRIGGER LINKER (MICRO-STEP & API)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function renderWb4Step4MicroNav() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  if (!aiWorkbench4State.step4FmPointer) aiWorkbench4State.step4FmPointer = {};
+  const pointer = aiWorkbench4State.step4FmPointer[nodeId] || 0;
+  const nav = document.getElementById('wb4Step4MicroNav');
+  const causes = aiWorkbench4State.nodeCauses[nodeId] || [];
+  if (!nav) return;
+
+  if (fms.length === 0) {
+    nav.innerHTML = '<div style="text-align:center; padding:18px; color:#64748b; font-size:11px;">No failure modes defined. Complete Step 3 first.</div>';
+    return;
+  }
+
+  const fm = fms[pointer] || fms[0];
+  const fmCauses = causes.filter(c => c.failureTempId === (fm ? fm.tempId : ''));
+  const allDone = fms.every(f => causes.some(c => c.failureTempId === f.tempId));
+
+  nav.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px; background:#0f172a; border:1px solid #1e293b; border-radius:8px; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button type="button" onclick="goToWb4Step4Fm(${pointer - 1})" ${pointer === 0 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; cursor:${pointer === 0 ? 'not-allowed' : 'pointer'}; font-size:11px;">◀ Prev FM</button>
+        <div>
+          <div style="font-size:12px; font-weight:800; color:#f59e0b;">Failure Mode ${pointer + 1} / ${fms.length}</div>
+          <div style="font-size:10.5px; color:#cbd5e1; margin-top:2px;">${escapeHtml(fm ? fm.name : '')} ${fmCauses.length > 0 ? '<span style="color:#10b981; font-weight:700;">✓ ' + fmCauses.length + ' causes linked</span>' : ''}</div>
+        </div>
+        <button type="button" onclick="goToWb4Step4Fm(${pointer + 1})" ${pointer >= fms.length - 1 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; cursor:${pointer >= fms.length - 1 ? 'not-allowed' : 'pointer'}; font-size:11px;">Next FM ▶</button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${fms.map((f, i) => {
+          const done = causes.some(c => c.failureTempId === f.tempId);
+          return `
+            <button type="button" onclick="goToWb4Step4Fm(${i})" style="padding:2px 8px; font-size:10px; border-radius:4px; border:1px solid ${i === pointer ? '#f59e0b' : (done ? '#10b981' : '#334155')}; background:${i === pointer ? '#1e293b' : (done ? '#064e3b' : '#0f172a')}; color:${i === pointer ? '#f59e0b' : (done ? '#10b981' : '#64748b')}; cursor:pointer;" title="${escapeHtml(f.name)}">
+              ${done ? '✓ ' : ''}${i + 1}
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  generateWb4Step4FmPromptText(nodeId, pointer);
+  renderWb4CharacteristicCausesTable();
+}
+
+function goToWb4Step4Fm(idx) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  if (idx < 0 || idx >= fms.length) return;
+  if (!aiWorkbench4State.step4FmPointer) aiWorkbench4State.step4FmPointer = {};
+  aiWorkbench4State.step4FmPointer[nodeId] = idx;
+  renderWb4Step4MicroNav();
+}
+
+function generateWb4Step4FmPromptText(nodeId, fmIndex, isFirstCall = true) {
+  const dData = aiWorkbench4State.nodeDrawingData[nodeId];
+  const p = dData ? dData.parsed : null;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const fm = fms[fmIndex];
+  if (!fm) return '';
+
+  const partName = (p && p.productInfo.partName) || 'Component';
+  const drawingNo = (p && p.productInfo.drawingNumber) || 'N/A';
+
+  // Format Drawing Characteristics & Proposed
+  const dimLines = (p && p.dimensionalCharacteristics) ? p.dimensionalCharacteristics.map(d => `• [Dimensional] "${d.name}": ${d.requirement} (Intent: ${d.intent})`).join('\n') : '';
+  const holeLines = (p && p.holeCharacteristics) ? p.holeCharacteristics.map(h => `• [Hole/Interface] "${h.name}" (${h.holeType}): ${h.requirement} (Intent: ${h.intent})`).join('\n') : '';
+  const ifaceLines = (p && p.interfaceCharacteristics) ? p.interfaceCharacteristics.map(i => `• [${i.type} Interface] ${i.desc}`).join('\n') : '';
+  const noteLines = (p && p.drawingNotes) ? p.drawingNotes.slice(0, 6).map(n => `• [Drawing Note] ${n}`).join('\n') : '';
+
+  const proposedLines = Array.isArray(dData.aiProposed)
+    ? dData.aiProposed.map(ap => `• [AI-PROPOSED *] "${ap.name}": ${ap.spec} (Intent: ${ap.intent})`).join('\n')
+    : '';
+
+  const prompt = `You are a Senior DFMEA & Geometric Tolerancing Engineer evaluating drawing characteristics to derive Root Causes for Failure Modes.
+
+DRAWING UNDER ANALYSIS:
+- Part Name: "${partName}" | Drawing Number: ${drawingNo}
+
+FAILURE MODE UNDER ANALYSIS (FM ${fmIndex + 1}/${fms.length}):
+- Violated Function: "${fm.functionName || 'General Function'}"
+- Failure Mode: "${fm.name}"
+- AIAG-VDA Failure Type: "${fm.failureType}"
+- Severity (S): ${fm.severity}
+
+DRAWING CHARACTERISTICS EXTRACTED FROM DRAWING:
+${dimLines}
+${holeLines}
+${ifaceLines}
+${noteLines}
+
+AI-PROPOSED CHARACTERISTICS (NOT EXPLICITLY IN DRAWING — POTENTIAL FAILURE DRIVERS):
+${proposedLines}
+
+CRITICAL CAUSAL REASONING DIRECTIVE:
+For each relevant characteristic above, evaluate:
+"IF this characteristic is NOT properly defined in the drawing (omitted, inadequate tolerance, unspecified torque/tightening, missing surface roughness, or uncontrolled dynamic curvature), WHICH specific root cause triggers this Failure Mode?"
+
+RULES:
+1. For existing drawing callouts: derive cause as drawing specification deficiency or manufacturing non-conformance.
+2. For AI-proposed characteristics: YOU MUST KEEP THE LEADING '*' in characteristicName (e.g. "* Minimum thread engagement depth"). Formulate cause as an unconstrained design parameter causing the failure.
+3. Keep cause descriptions technical, measurable, and concise.
+4. Output JSON only.
+
+OUTPUT JSON FORMAT:
+{
+  "failureTempId": "${fm.tempId}",
+  "causes": [
+    {
+      "tempId": "wb4-cause-1",
+      "characteristicName": "* Minimum dynamic hydraulic hose bend radius",
+      "isAiProposed": true,
+      "causeDescription": "Dynamic hose bend radius below 120 mm envelope leading to internal wire reinforcement fatigue and burst",
+      "spec": "R_min >= 120 mm",
+      "intent": "Fatigue prevention",
+      "occurrence": 3,
+      "detection": 3
+    }
+  ]
+}`;
+
+  const preview = document.getElementById('wb4Step4FmPromptPreview');
+  if (preview) preview.value = prompt;
+  return prompt;
+}
+
+function copyWb4Step4FmPrompt(fmIndex) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const prompt = generateWb4Step4FmPromptText(nodeId, fmIndex, true);
+  if (!prompt) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(prompt).then(() => {
+      if (typeof showToast === 'function') showToast(`📋 Step 4 Prompt for FM ${fmIndex + 1} copied!`, 'success');
+    });
+  }
+}
+
+function parseWb4Step4FmJson(nodeId, fmIndex) {
+  const input = document.getElementById('wb4Step4FmJsonInput');
+  if (!input || !input.value.trim()) {
+    alert("Please paste the causes JSON for this failure mode first.");
+    return;
+  }
+  try {
+    const raw = sanitizeJsonString(input.value);
+    const parsed = JSON.parse(raw);
+    const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+    if (fms.length === 0) return;
+
+    // Check for multi-FM batch array response
+    const itemsArray = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.failureModes) ? parsed.failureModes : (Array.isArray(parsed.results) ? parsed.results : null));
+
+    if (itemsArray && itemsArray.length > 1 && itemsArray[0].causes) {
+      let parsedCount = 0;
+      if (!aiWorkbench4State.nodeCauses[nodeId]) aiWorkbench4State.nodeCauses[nodeId] = [];
+
+      itemsArray.forEach((item, idx) => {
+        let targetFm = fms.find(f => f.tempId === item.failureTempId || f.id === item.failureTempId);
+        if (!targetFm && idx < fms.length) targetFm = fms[idx];
+        if (!targetFm) return;
+
+        const causesList = item.causes || [];
+        if (Array.isArray(causesList) && causesList.length > 0) {
+          aiWorkbench4State.nodeCauses[nodeId] = aiWorkbench4State.nodeCauses[nodeId].filter(c => c.failureTempId !== targetFm.tempId);
+          causesList.forEach((c, cIdx) => {
+            const isProp = c.isAiProposed || (c.characteristicName && c.characteristicName.startsWith('*'));
+            aiWorkbench4State.nodeCauses[nodeId].push({
+              tempId: c.tempId || `wb4-cause-${nodeId}-${idx + 1}-${cIdx + 1}`,
+              failureTempId: targetFm.tempId,
+              failureName: targetFm.name,
+              characteristicName: c.characteristicName || 'Drawing Characteristic',
+              isAiProposed: isProp,
+              causeDescription: c.causeDescription || c.desc || 'Drawing characteristic deficiency',
+              spec: c.spec || '',
+              intent: c.intent || '',
+              occurrence: parseInt(c.occurrence || 3, 10) || 3,
+              detection: parseInt(c.detection || 3, 10) || 3
+            });
+          });
+          parsedCount++;
+        }
+      });
+
+      if (input) input.value = '';
+      if (typeof showToast === 'function') showToast(`🎉 Batch parsed causes for ${parsedCount} Failure Modes!`, 'success');
+      renderWb4Step4MicroNav();
+      return;
+    }
+
+    // Single FM causes parsing
+    const causesList = parsed.causes || (Array.isArray(parsed) ? parsed : []);
+    if (!Array.isArray(causesList) || causesList.length === 0) {
+      alert("No valid causes found in JSON response.");
+      return;
+    }
+
+    const fm = fms[fmIndex] || fms[0];
+    if (!fm) return;
+
+    if (!aiWorkbench4State.nodeCauses[nodeId]) aiWorkbench4State.nodeCauses[nodeId] = [];
+
+    // Filter out existing causes for this FM
+    aiWorkbench4State.nodeCauses[nodeId] = aiWorkbench4State.nodeCauses[nodeId].filter(c => c.failureTempId !== fm.tempId);
+
+    causesList.forEach((c, idx) => {
+      const isProp = c.isAiProposed || (c.characteristicName && c.characteristicName.startsWith('*'));
+      aiWorkbench4State.nodeCauses[nodeId].push({
+        tempId: c.tempId || `wb4-cause-${nodeId}-${fmIndex + 1}-${idx + 1}`,
+        failureTempId: fm.tempId,
+        failureName: fm.name,
+        characteristicName: c.characteristicName || 'Drawing Characteristic',
+        isAiProposed: isProp,
+        causeDescription: c.causeDescription || c.desc || 'Drawing characteristic deficiency',
+        spec: c.spec || '',
+        intent: c.intent || '',
+        occurrence: parseInt(c.occurrence || 3, 10) || 3,
+        detection: parseInt(c.detection || 3, 10) || 3
+      });
+    });
+
+    if (input) input.value = '';
+    if (typeof showToast === 'function') showToast(`📥 Parsed ${causesList.length} causes for FM ${fmIndex + 1}!`, 'success');
+
+    const nextIdx = fmIndex + 1;
+    if (nextIdx < fms.length) {
+      aiWorkbench4State.step4FmPointer[nodeId] = nextIdx;
+    }
+    renderWb4Step4MicroNav();
+  } catch (err) {
+    alert("JSON Parsing Error: " + err.message);
+  }
+}
+
+async function runWb4Step4Api(nodeId, fmIndex) {
+  const prompt = generateWb4Step4FmPromptText(nodeId, fmIndex, true);
+  const statusEl = document.getElementById('wb4Step4ApiStatus');
+  if (statusEl) { statusEl.textContent = `Querying AI for FM ${fmIndex + 1} Characteristic Causes...`; statusEl.style.color = '#38bdf8'; }
+
+  try {
+    const res = await executeWb3ApiQuery(prompt, 'wb4Step4ApiStatus', 'wb4BtnRunApiStep4Single');
+    if (!res) return;
+    const input = document.getElementById('wb4Step4FmJsonInput');
+    if (input) input.value = res;
+    parseWb4Step4FmJson(nodeId, fmIndex);
+    if (statusEl) { statusEl.textContent = `✓ Causes generated for FM ${fmIndex + 1}!`; statusEl.style.color = '#34d399'; }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ API Error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+async function runWb4Step4AllApi(options = {}) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  if (fms.length === 0) { alert("No failure modes to process."); return; }
+
+  const statusEl = document.getElementById('wb4Step4ApiStatus');
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `Processing all ${fms.length} FMs for characteristic causes...`; statusEl.style.color = '#38bdf8'; }
+
+  try {
+    for (let i = 0; i < fms.length; i++) {
+      if (!aiWorkbench4State.step4FmPointer) aiWorkbench4State.step4FmPointer = {};
+      aiWorkbench4State.step4FmPointer[nodeId] = i;
+      if (statusEl) statusEl.textContent = `Processing FM ${i + 1}/${fms.length}: "${fms[i].name.slice(0, 45)}"...`;
+      renderWb4Step4MicroNav();
+
+      const prompt = generateWb4Step4FmPromptText(nodeId, i, i === 0);
+      const res = await executeWb3ApiQuery(prompt, 'wb4Step4ApiStatus', null);
+      if (!res) continue;
+
+      const raw = sanitizeJsonString(res);
+      const parsed = JSON.parse(raw);
+      const causesList = parsed.causes || (Array.isArray(parsed) ? parsed : []);
+      if (Array.isArray(causesList) && causesList.length > 0) {
+        if (!aiWorkbench4State.nodeCauses[nodeId]) aiWorkbench4State.nodeCauses[nodeId] = [];
+        aiWorkbench4State.nodeCauses[nodeId] = aiWorkbench4State.nodeCauses[nodeId].filter(c => c.failureTempId !== fms[i].tempId);
+        causesList.forEach((c, idx) => {
+          const isProp = c.isAiProposed || (c.characteristicName && c.characteristicName.startsWith('*'));
+          aiWorkbench4State.nodeCauses[nodeId].push({
+            tempId: c.tempId || `wb4-cause-${nodeId}-${i + 1}-${idx + 1}`,
+            failureTempId: fms[i].tempId,
+            failureName: fms[i].name,
+            characteristicName: c.characteristicName || 'Drawing Characteristic',
+            isAiProposed: isProp,
+            causeDescription: c.causeDescription || c.desc || 'Drawing characteristic deficiency',
+            spec: c.spec || '',
+            intent: c.intent || '',
+            occurrence: parseInt(c.occurrence || 3, 10) || 3,
+            detection: parseInt(c.detection || 3, 10) || 3
+          });
+        });
+      }
+    }
+
+    if (statusEl) { statusEl.textContent = `✅ All ${fms.length} FMs characteristic causes generated! Auto-advancing to Step 5...`; statusEl.style.color = '#34d399'; }
+    renderWb4Step4MicroNav();
+    setTimeout(() => { goToWb4Step(5); }, 800);
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ Step 4 All API error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+function deriveWb4CharacteristicCauses(nodeId) {
+  const dData = aiWorkbench4State.nodeDrawingData[nodeId];
+  if (!dData || !dData.parsed) return;
+  const p = dData.parsed;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const causes = [];
+  let idx = 1;
+
+  p.dimensionalCharacteristics.forEach(dim => {
+    const matchingFm = fms.find(f => /retention|loosening|fastener|clamp|hydraulic|leak/i.test(f.name)) || fms[0];
+    causes.push({
+      tempId: `wb4-cause-${nodeId}-${idx++}`,
+      failureTempId: matchingFm ? matchingFm.tempId : '',
+      failureName: matchingFm ? matchingFm.name : 'Primary Failure Mode',
+      characteristicName: dim.name,
+      isAiProposed: false,
+      causeDescription: `${dim.name} specified without adequate tolerance or tightening procedure (${dim.requirement}) leading to clamp load relaxation under cyclic loading`,
+      spec: dim.requirement,
+      intent: dim.intent,
+      occurrence: 3,
+      detection: 3
+    });
+  });
+
+  p.drawingNotes.slice(0, 4).forEach(note => {
+    const matchingFm = fms.find(f => /support|stay|drop|routing|plug/i.test(f.name)) || fms[0];
+    causes.push({
+      tempId: `wb4-cause-${nodeId}-${idx++}`,
+      failureTempId: matchingFm ? matchingFm.tempId : '',
+      failureName: matchingFm ? matchingFm.name : 'Primary Failure Mode',
+      characteristicName: 'Drawing Note Requirement',
+      isAiProposed: false,
+      causeDescription: `Assembly non-conformance to drawing note ("${note.slice(0, 60)}...") resulting in mechanical interference or binding`,
+      spec: note.slice(0, 40),
+      intent: 'Drawing compliance',
+      occurrence: 2,
+      detection: 2
+    });
+  });
+
+  if (Array.isArray(dData.aiProposed)) {
+    dData.aiProposed.forEach(ap => {
+      const matchingFm = fms.find(f => /thread|hose|seal|gap|chafing/i.test(f.name)) || fms[0];
+      causes.push({
+        tempId: `wb4-cause-${nodeId}-${idx++}`,
+        failureTempId: matchingFm ? matchingFm.tempId : '',
+        failureName: matchingFm ? matchingFm.name : 'Primary Failure Mode',
+        characteristicName: ap.name,
+        isAiProposed: true,
+        causeDescription: `Uncontrolled parameter: ${ap.name.replace(/^\*\s*/, '')} not constrained in drawing (${ap.spec})`,
+        spec: ap.spec,
+        intent: ap.intent,
+        occurrence: 3,
+        detection: 4
+      });
+    });
+  }
+
+  aiWorkbench4State.nodeCauses[nodeId] = causes;
+}
+
+function renderWb4CharacteristicCausesTable() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const causes = aiWorkbench4State.nodeCauses[nodeId] || [];
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const countEl = document.getElementById('wb4CausesCount');
+  if (countEl) countEl.textContent = causes.length;
+  const container = document.getElementById('wb4CharacteristicCausesContainer');
+  if (!container) return;
+
+  if (causes.length === 0) {
+    container.innerHTML = '<div style="color:#64748b; font-size:11px; text-align:center; padding:20px;">No characteristic causes generated yet. Paste JSON or click Generate via API above.</div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; overflow:hidden;">
+      <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+        <thead>
+          <tr style="background:#1e293b; color:#94a3b8; font-weight:700; border-bottom:1px solid #334155;">
+            <th style="padding:8px 10px; width:40px; text-align:center;">#</th>
+            <th style="padding:8px 10px; width:220px;">Drawing Characteristic</th>
+            <th style="padding:8px 10px;">Root Cause Description (Deficiency if not properly defined)</th>
+            <th style="padding:8px 10px; width:260px;">Triggered Failure Mode (Causal Link)</th>
+            <th style="padding:8px 10px; width:50px; text-align:center;">Del</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${causes.map((c, idx) => {
+            const fmOpts = fms.map(f => `<option value="${f.tempId}" ${c.failureTempId === f.tempId ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('');
+            const badge = c.isAiProposed
+              ? '<span style="font-size:9px; color:#fbbf24; background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); padding:1px 4px; border-radius:3px; display:inline-block; margin-top:2px;">* AI Proposed</span>'
+              : '<span style="font-size:9px; color:#38bdf8; background:rgba(2,132,199,0.15); border:1px solid rgba(2,132,199,0.3); padding:1px 4px; border-radius:3px; display:inline-block; margin-top:2px;">Drawing Callout</span>';
+            return `
+              <tr style="border-bottom:1px solid #1e293b;">
+                <td style="text-align:center; padding:6px; color:#64748b;">${idx + 1}</td>
+                <td style="padding:6px 8px;">
+                  <strong style="color:${c.isAiProposed ? '#fbbf24' : '#f8fafc'};">${escapeHtml(c.characteristicName)}</strong>
+                  <div>${badge}</div>
+                  <div style="font-size:9.5px; color:#94a3b8; margin-top:2px;">${escapeHtml(c.spec || '')}</div>
+                </td>
+                <td style="padding:6px 8px;">
+                  <textarea rows="2" onchange="updateWb4CauseDesc(${idx}, this.value)" style="width:100%; box-sizing:border-box; background:#020617; border:1px solid #334155; border-radius:4px; color:#e2e8f0; font-size:10.5px; padding:4px;">${escapeHtml(c.causeDescription)}</textarea>
+                </td>
+                <td style="padding:6px 8px;">
+                  <select onchange="updateWb4CauseFmLink(${idx}, this.value)" style="width:100%; background:#020617; border:1px solid #334155; border-radius:4px; color:#38bdf8; font-size:10.5px; padding:4px;">
+                    ${fmOpts}
+                  </select>
+                </td>
+                <td style="text-align:center; padding:6px;">
+                  <button type="button" onclick="deleteWb4CauseRow(${idx})" style="background:transparent; border:1px solid #ef4444; color:#ef4444; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">✕</button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function updateWb4CauseDesc(idx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeCauses[nodeId] && aiWorkbench4State.nodeCauses[nodeId][idx]) {
+    aiWorkbench4State.nodeCauses[nodeId][idx].causeDescription = val.trim();
+  }
+}
+
+function updateWb4CauseFmLink(idx, fmId) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeCauses[nodeId] && aiWorkbench4State.nodeCauses[nodeId][idx]) {
+    aiWorkbench4State.nodeCauses[nodeId][idx].failureTempId = fmId;
+    const fm = (aiWorkbench4State.nodeFailures[nodeId] || []).find(f => f.tempId === fmId);
+    if (fm) aiWorkbench4State.nodeCauses[nodeId][idx].failureName = fm.name;
+  }
+}
+
+function deleteWb4CauseRow(idx) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeCauses[nodeId]) {
+    aiWorkbench4State.nodeCauses[nodeId].splice(idx, 1);
+    renderWb4CharacteristicCausesTable();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 5: EFFECTS ANALYSIS & N+1 / ROOT LIBRARY REUSE (MICRO-STEP & API)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function renderWb4Step5MicroNav() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const pointer = aiWorkbench4State.step5FmPointer[nodeId] || 0;
+  const nav = document.getElementById('wb4Step5MicroNav');
+  if (!nav) return;
+
+  if (fms.length === 0) {
+    nav.innerHTML = '<div style="text-align:center; padding:18px; color:#64748b; font-size:11px;">No failure modes defined. Complete Step 3 first.</div>';
+    return;
+  }
+
+  const fm = fms[pointer] || fms[0];
+  const effs = (aiWorkbench4State.nodeEffects[nodeId] && aiWorkbench4State.nodeEffects[nodeId][fm ? fm.tempId : '']) || [];
+  const allDone = fms.every(f => (aiWorkbench4State.nodeEffects[nodeId] && aiWorkbench4State.nodeEffects[nodeId][f.tempId] && aiWorkbench4State.nodeEffects[nodeId][f.tempId].length > 0));
+
+  nav.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:10px; background:#0f172a; border:1px solid #1e293b; border-radius:8px; margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button type="button" onclick="goToWb4Step5Fm(${pointer - 1})" ${pointer === 0 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; cursor:${pointer === 0 ? 'not-allowed' : 'pointer'}; font-size:11px;">◀ Prev FM</button>
+        <div>
+          <div style="font-size:12px; font-weight:800; color:#38bdf8;">Failure Mode ${pointer + 1} / ${fms.length}</div>
+          <div style="font-size:10.5px; color:#cbd5e1; margin-top:2px;">${escapeHtml(fm ? fm.name : '')} ${effs.length > 0 ? '<span style="color:#10b981; font-weight:700;">✓ ' + effs.length + ' effects linked (S=' + (fm.severity || 8) + ')</span>' : ''}</div>
+        </div>
+        <button type="button" onclick="goToWb4Step5Fm(${pointer + 1})" ${pointer >= fms.length - 1 ? 'disabled' : ''} style="padding:4px 10px; background:#1e293b; border:1px solid #334155; border-radius:6px; color:#94a3b8; cursor:${pointer >= fms.length - 1 ? 'not-allowed' : 'pointer'}; font-size:11px;">Next FM ▶</button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${fms.map((f, i) => {
+          const done = (aiWorkbench4State.nodeEffects[nodeId] && aiWorkbench4State.nodeEffects[nodeId][f.tempId] && aiWorkbench4State.nodeEffects[nodeId][f.tempId].length > 0);
+          return `
+            <button type="button" onclick="goToWb4Step5Fm(${i})" style="padding:2px 8px; font-size:10px; border-radius:4px; border:1px solid ${i === pointer ? '#38bdf8' : (done ? '#10b981' : '#334155')}; background:${i === pointer ? '#1e293b' : (done ? '#064e3b' : '#0f172a')}; color:${i === pointer ? '#38bdf8' : (done ? '#10b981' : '#64748b')}; cursor:pointer;" title="${escapeHtml(f.name)}">
+              ${done ? '✓ ' : ''}${i + 1}
+            </button>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  generateWb4Step5FmPromptText(nodeId, pointer);
+  renderWb4Step5EffectsContent(nodeId, pointer);
+}
+
+function goToWb4Step5Fm(idx) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  if (idx < 0 || idx >= fms.length) return;
+  aiWorkbench4State.step5FmPointer[nodeId] = idx;
+  renderWb4Step5MicroNav();
+  generateWb4Step5FmPromptText(nodeId, idx, true);
+  renderWb4Step5EffectsContent(nodeId, idx);
+}
+
+function generateWb4Step5FmPromptText(nodeId, fmIndex, isFirstCall = true) {
+  const ctx = getActiveFmeaData();
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const fm = fms[fmIndex];
+  if (!fm) return '';
+
+  const node = (ctx && ctx.structure) ? getStructureNodeById(ctx.structure, nodeId) : { id: nodeId, name: 'Assembly Element' };
+  const isRoot = (ctx && ctx.structure && node.id === ctx.structure.id);
+  const parentNode = (ctx && ctx.structure && !isRoot) ? getParentStructureNode(ctx.structure, nodeId) : null;
+
+  // Specific function violated by this failure mode
+  const nodeFnsFromCtx = (ctx && ctx.functions) ? (ctx.functions || []).filter(f => f.structId === nodeId) : [];
+  const nodeFnsFromState = (aiWorkbench4State.nodeFunctions && aiWorkbench4State.nodeFunctions[nodeId]) || [];
+  const allNodeFns = nodeFnsFromCtx.length > 0
+    ? nodeFnsFromCtx
+    : nodeFnsFromState.map(f => ({ id: f.tempId || f.id, name: f.name, type: f.type }));
+
+  const targetFnId = fm.functionTempId || fm.functionId || fm.funcId || fm.fnTempId || '';
+  const linkedFn = allNodeFns.find(f => (f.tempId && f.tempId === targetFnId) || (f.id && f.id === targetFnId) || (fm.functionName && f.name === fm.functionName));
+  const violatedFns = linkedFn ? [linkedFn] : (targetFnId ? allNodeFns.filter(f => (f.tempId && f.tempId === targetFnId) || (f.id && f.id === targetFnId)) : (allNodeFns.length > 0 ? [allNodeFns[0]] : []));
+  const nodeFnsText = violatedFns.length > 0
+    ? '\nFunction violated: ' + violatedFns.map(f => `[${f.id || f.tempId}] "${f.name}"`).join(', ') + '\n'
+    : '';
+
+  // ── ROOT ELEMENT ────────────────────────────────────────────────────────────
+  if (isRoot || !parentNode) {
+    if (!isFirstCall) {
+      const prompt = `AIAG-VDA DFMEA Step 5 Failure Effects (Root) — continuation.
+FM ${fmIndex + 1}/${fms.length}: [${fm.tempId}] "${fm.name}" | Type: ${fm.failureType}${nodeFnsText}
+Apply same 3-level stakeholder consequences (End User, OEM Plant, Component Plant) and severity scale as FM 1. Keep description concise (max 12 words).
+OUTPUT ONLY VALID JSON:
+{
+  "failureTempId": "${fm.tempId}",
+  "isRootSystem": true,
+  "effects": [
+    {
+      "tempId": "wb4-eff-${Date.now()}-1",
+      "category": "End User Level",
+      "desc": "<effect description>",
+      "severity": ${fm.severity || 8}
+    }
+  ]
+}`;
+      const preview = document.getElementById('wb4Step5FmPromptPreview');
+      if (preview) preview.value = prompt;
+      return prompt;
+    }
+
+    const prompt = `You are a Senior Systems Safety Engineer performing AIAG-VDA DFMEA Step 5 Failure Effects Analysis for a ROOT SYSTEM.
+
+ROOT SYSTEM UNDER ANALYSIS:
+- System Element: "${node.name}"
+- Specific Failure Mode (FM ${fmIndex + 1}/${fms.length}): "${fm.name}"
+- Temp ID: "${fm.tempId}"
+- Failure Type: "${fm.failureType}" | Severity: ${fm.severity || 8}
+${nodeFnsText}
+TASK:
+Derive the 3-Level Stakeholder Consequences / Failure Effects:
+1. End User Level: Safety hazard / vehicle breakdown / primary operational loss.
+2. OEM Assembly Plant: Assembly line stoppage / off-line repair / containment.
+3. Component Manufacturing Plant: Scrap / sorting / containment.
+
+OUTPUT JSON FORMAT:
+{
+  "failureTempId": "${fm.tempId}",
+  "isRootSystem": true,
+  "effects": [
+    {
+      "tempId": "wb4-eff-1",
+      "category": "End User Level",
+      "desc": "Loss of primary functional operation leaving equipment stranded in field",
+      "severity": ${fm.severity || 8}
+    },
+    {
+      "tempId": "wb4-eff-2",
+      "category": "OEM Assembly Plant",
+      "desc": "Line stoppage during final assembly integration",
+      "severity": 6
+    }
+  ]
+}`;
+    const preview = document.getElementById('wb4Step5FmPromptPreview');
+    if (preview) preview.value = prompt;
+    return prompt;
+  }
+
+  // ── NON-ROOT ELEMENT: N+1 PARENT HIERARCHY ──────────────────────────────────
+  const parentFnsMap = {};
+  const wb4ParentFns = (aiWorkbench4State.nodeFunctions && aiWorkbench4State.nodeFunctions[parentNode.id]) || [];
+  wb4ParentFns.forEach(fn => {
+    parentFnsMap[fn.tempId || fn.id] = { id: fn.tempId || fn.id, name: fn.name, type: fn.type || 'Primary function', fms: [] };
+  });
+  if (ctx) {
+    (ctx.functions || []).filter(f => f.structId === parentNode.id).forEach(fn => {
+      if (!parentFnsMap[fn.id] || parentFnsMap[fn.id].name === 'Parent Element Main Function') {
+        parentFnsMap[fn.id] = { id: fn.id, name: fn.name, type: fn.type || 'Primary function', fms: [] };
+      }
+    });
+  }
+  const wb4ParentFms = (aiWorkbench4State.nodeFailures && aiWorkbench4State.nodeFailures[parentNode.id]) || [];
+  wb4ParentFms.forEach(pfm => {
+    const fnId = pfm.functionTempId || Object.keys(parentFnsMap)[0] || 'parent-fn-1';
+    if (!parentFnsMap[fnId]) parentFnsMap[fnId] = { id: fnId, name: 'Parent Element Main Function', type: 'Primary function', fms: [] };
+    const chainSev = (typeof getUpstreamFailureChainSeverity === 'function')
+      ? getUpstreamFailureChainSeverity(parentNode.id, pfm.tempId || pfm.id)
+      : (parseInt(pfm.severity, 10) || 8);
+    parentFnsMap[fnId].fms.push({ id: pfm.tempId || pfm.id, name: pfm.name, failureType: pfm.failureType || 'Loss of function', severity: chainSev || 8 });
+  });
+  if (ctx) {
+    (ctx.functionLines || []).filter(fl => fl.structId === parentNode.id).forEach(fl => {
+      const fnId = fl.functionId || Object.keys(parentFnsMap)[0] || 'parent-fn-1';
+      if (!parentFnsMap[fnId]) parentFnsMap[fnId] = { id: fnId, name: fl.functionName || 'Parent Element Main Function', type: 'Primary function', fms: [] };
+      const existing = parentFnsMap[fnId].fms.find(f => f.id === fl.failureModeId || f.name === fl.failureModeName);
+      if (!existing && fl.failureModeName) {
+        const chainSev = (typeof getUpstreamFailureChainSeverity === 'function')
+          ? getUpstreamFailureChainSeverity(parentNode.id, fl.failureModeId || fl.id)
+          : (parseInt(fl.severity, 10) || 8);
+        parentFnsMap[fnId].fms.push({ id: fl.failureModeId || fl.id, name: fl.failureModeName, failureType: fl.failureType || 'Loss of function', severity: Math.max(chainSev, parseInt(fl.severity, 10) || 8) });
+      }
+    });
+  }
+
+  // Build parent hierarchy text
+  const parentFnKeys = Object.keys(parentFnsMap);
+  let totalParentFms = 0;
+  let parentHierarchyText = '';
+  if (parentFnKeys.length > 0) {
+    parentHierarchyText = parentFnKeys.map(k => {
+      const fnObj = parentFnsMap[k];
+      totalParentFms += fnObj.fms.length;
+      let out = `▶ PARENT FUNCTION [${fnObj.id}]: "${fnObj.name}" (${fnObj.type})\n`;
+      if (fnObj.fms.length > 0) {
+        out += fnObj.fms.map(pf => `    • N+1 FAILURE MODE [${pf.id}]: "${pf.name}" | Chain Severity: ${pf.severity} | Type: ${pf.failureType}`).join('\n');
+      } else {
+        out += '    (No failure modes defined yet for this parent function)';
+      }
+      return out;
+    }).join('\n\n');
+  }
+  if (!parentHierarchyText || totalParentFms === 0) {
+    parentHierarchyText = `▶ PARENT ELEMENT: "${parentNode.name}" [${parentNode.partNo || 'PN-001'}]\n(Parent element functions and failure modes are not yet populated in the project. Please identify the parent functional failure mode triggered by this component failure).`;
+  }
+
+  const exFirstFm = parentFnKeys.length > 0 && parentFnsMap[parentFnKeys[0]].fms.length > 0
+    ? parentFnsMap[parentFnKeys[0]].fms[0].id : 'pfm-1';
+  const exFirstFmName = parentFnKeys.length > 0 && parentFnsMap[parentFnKeys[0]].fms.length > 0
+    ? parentFnsMap[parentFnKeys[0]].fms[0].name : 'Parent Failure Mode';
+  const exFirstFnName = parentFnKeys.length > 0
+    ? parentFnsMap[parentFnKeys[0]].name : 'Parent Function';
+
+  if (!isFirstCall) {
+    const prompt = `AIAG-VDA DFMEA Step 5 Failure Network Linkage — continuation.
+FOCUSED COMPONENT (Level N): "${node.name}"
+SPECIFIC FAILURE MODE UNDER ANALYSIS (FM ${fmIndex + 1}/${fms.length}):
+- Temp ID: "${fm.tempId}"
+- Name: "${fm.name}"
+- Failure Type: "${fm.failureType}"${nodeFnsText}
+PARENT ELEMENT (Level N+1): "${parentNode.name}"
+
+🧠 MEMORY RECALL INSTRUCTION:
+Refer to the N+1 Parent Functions & Failure Modes provided in the initial prompt and stored in your active session memory.
+Identify which N+1 parent failure mode(s) from memory are PHYSICALLY CAUSED by this component failure mode ("${fm.name}").
+Do NOT invent new effects or sentences. Pick directly from remembered parent failure modes.
+
+OUTPUT ONLY VALID JSON:
+{
+  "failureTempId": "${fm.tempId}",
+  "isRootSystem": false,
+  "linkedParentFailureModes": [
+    {
+      "parentFmId": "${exFirstFm}",
+      "parentFmName": "${exFirstFmName}",
+      "parentFunction": "${exFirstFnName}",
+      "chainSeverity": 8
+    }
+  ]
+}`;
+    const preview = document.getElementById('wb4Step5FmPromptPreview');
+    if (preview) preview.value = prompt;
+    return prompt;
+  }
+
+  const prompt = `You are an Automotive Reliability Engineer performing AIAG-VDA DFMEA Step 5 Failure Network Linkage.
+
+FOCUSED COMPONENT (Level N): "${node.name}"
+FAILURE MODE UNDER ANALYSIS (FM ${fmIndex + 1}/${fms.length}):
+- Temp ID: "${fm.tempId}"
+- Name: "${fm.name}"
+- Failure Type: "${fm.failureType}"
+${nodeFnsText}
+PARENT ELEMENT (Level N+1): "${parentNode.name}"
+
+AVAILABLE N+1 PARENT FUNCTIONS & FAILURE MODES (THE ONLY VALID EFFECTS FOR THIS COMPONENT):
+Below is the verified hierarchy of functions and failure modes of the parent element, including their total upstream chain severity:
+
+${parentHierarchyText}
+
+🧠 MEMORY & LINKAGE CONTEXT (AI: STORE IN SESSION MEMORY):
+Store all of the above N+1 Parent Functions and Failure Modes in your active session context.
+For all subsequent failure modes in this loop/session, you must link directly against these in-memory N+1 failure mode IDs without requiring them to be re-transmitted.
+
+🔴 STRICT AIAG-VDA FAILURE NETWORK RULES:
+1. ZERO NEW EFFECT GENERATION:
+   - You MUST NOT invent, write, or generate any new failure effects, descriptions, or sentences.
+   - The generic 3-Level Effects criteria (End User/OEM/Own Plant) is NOT valid for this element level and MUST NOT be used.
+2. STRICT N+1 LINKAGE ONLY:
+   - In AIAG-VDA DFMEA, the Failure Effects of a component (Level N) ARE the Failure Modes of its Parent Element (Level N+1).
+   - Evaluate which specific N+1 parent failure mode(s) listed above are PHYSICALLY CAUSED by this component failure mode ("${fm.name}").
+   - You MUST pick directly from the available N+1 Failure Mode IDs listed above.
+3. MULTI-CHAIN SEVERITY INHERITANCE:
+   - For each linked N+1 failure mode, the chain severity traces upstream through N+2 up to the ultimate Root Effect.
+   - If this component failure mode links to multiple N+1 failure modes, resolve severity as the maximum of all linked chains.
+
+OUTPUT ONLY VALID JSON:
+{
+  "failureTempId": "${fm.tempId}",
+  "isRootSystem": false,
+  "linkedParentFailureModes": [
+    {
+      "parentFmId": "${exFirstFm}",
+      "parentFmName": "${exFirstFmName}",
+      "parentFunction": "${exFirstFnName}",
+      "chainSeverity": 8
+    }
+  ]
+}`;
+
+  const preview = document.getElementById('wb4Step5FmPromptPreview');
+  if (preview) preview.value = prompt;
+  return prompt;
+}
+
+function copyWb4Step5FmPrompt(fmIndex) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const prompt = generateWb4Step5FmPromptText(nodeId, fmIndex, true);
+  if (!prompt) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(prompt).then(() => {
+      if (typeof showToast === 'function') showToast(`📋 Step 5 Prompt for FM ${fmIndex + 1} copied!`, 'success');
+    });
+  }
+}
+
+function parseWb4Step5FmJson(nodeId, fmIndex) {
+  const input = document.getElementById('wb4Step5FmJsonInput');
+  if (!input || !input.value.trim()) {
+    alert("Please paste the effects JSON for this failure mode first.");
+    return;
+  }
+  try {
+    const raw = sanitizeJsonString(input.value);
+    const parsed = JSON.parse(raw);
+    const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+    if (fms.length === 0) return;
+
+    // Check for multi-FM batch array response
+    const itemsArray = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.failureModes) ? parsed.failureModes : (Array.isArray(parsed.results) ? parsed.results : null));
+
+    if (itemsArray && itemsArray.length > 1 && (itemsArray[0].linkedParentFailureModes || itemsArray[0].effects || itemsArray[0].failureTempId)) {
+      let parsedCount = 0;
+      if (!aiWorkbench4State.nodeEffects[nodeId]) aiWorkbench4State.nodeEffects[nodeId] = {};
+
+      itemsArray.forEach((item, idx) => {
+        let targetFm = fms.find(f => f.tempId === item.failureTempId || f.id === item.failureTempId);
+        if (!targetFm && idx < fms.length) targetFm = fms[idx];
+        if (!targetFm) return;
+
+        let rawEffects = [];
+        if (Array.isArray(item.linkedParentFailureModes) && item.linkedParentFailureModes.length > 0) {
+          rawEffects = item.linkedParentFailureModes.map((l, lIdx) => ({
+            tempId: l.parentFmId || `wb4-eff-${nodeId}-${idx + 1}-${lIdx + 1}`,
+            category: 'Next Higher Level (N+1)',
+            desc: l.parentFmName || l.desc || 'Parent Failure Mode',
+            severity: parseInt(l.chainSeverity || l.severity || 8, 10) || 8,
+            parentFunction: l.parentFunction || '',
+            causalRationale: l.causalRationale || ''
+          }));
+        } else if (Array.isArray(item.effects)) {
+          rawEffects = item.effects.map((e, eIdx) => ({
+            tempId: e.tempId || `wb4-eff-${nodeId}-${idx + 1}-${eIdx + 1}`,
+            category: e.category || 'End User Level',
+            desc: e.desc || e.description || 'System effect',
+            severity: parseInt(e.severity || 8, 10) || 8,
+            parentFunction: e.parentFunction || '',
+            causalRationale: e.causalRationale || ''
+          }));
+        }
+
+        if (rawEffects.length > 0) {
+          aiWorkbench4State.nodeEffects[nodeId][targetFm.tempId] = rawEffects;
+          targetFm.severity = Math.max(...rawEffects.map(e => e.severity));
+          parsedCount++;
+        }
+      });
+
+      if (input) input.value = '';
+      if (typeof showToast === 'function') showToast(`🎉 Batch parsed effects for ${parsedCount} Failure Modes!`, 'success');
+      renderWb4Step5MicroNav();
+      return;
+    }
+
+    // Single FM effects parsing
+    const fm = fms[fmIndex] || fms[0];
+    if (!fm) return;
+
+    let effectsList = [];
+    if (Array.isArray(parsed.linkedParentFailureModes) && parsed.linkedParentFailureModes.length > 0) {
+      effectsList = parsed.linkedParentFailureModes.map((l, idx) => ({
+        tempId: l.parentFmId || `wb4-eff-${nodeId}-${fmIndex + 1}-${idx + 1}`,
+        category: 'Next Higher Level (N+1)',
+        desc: l.parentFmName || l.desc || 'Parent Failure Mode',
+        severity: parseInt(l.chainSeverity || l.severity || 8, 10) || 8,
+        parentFunction: l.parentFunction || '',
+        causalRationale: l.causalRationale || ''
+      }));
+    } else if (Array.isArray(parsed.effects)) {
+      effectsList = parsed.effects.map((e, idx) => ({
+        tempId: e.tempId || `wb4-eff-${nodeId}-${fmIndex + 1}-${idx + 1}`,
+        category: e.category || 'End User Level',
+        desc: e.desc || e.description || 'System effect',
+        severity: parseInt(e.severity || 8, 10) || 8,
+        parentFunction: e.parentFunction || '',
+        causalRationale: e.causalRationale || ''
+      }));
+    }
+
+    if (effectsList.length === 0) {
+      alert("No valid effects found in JSON response.");
+      return;
+    }
+
+    if (!aiWorkbench4State.nodeEffects[nodeId]) aiWorkbench4State.nodeEffects[nodeId] = {};
+    aiWorkbench4State.nodeEffects[nodeId][fm.tempId] = effectsList;
+
+    const maxSev = Math.max(...effectsList.map(e => e.severity));
+    fm.severity = maxSev;
+
+    if (input) input.value = '';
+    if (typeof showToast === 'function') showToast(`📥 Parsed ${effectsList.length} effects for FM ${fmIndex + 1} (Max S=${maxSev})!`, 'success');
+
+    const nextIdx = fmIndex + 1;
+    if (nextIdx < fms.length) {
+      aiWorkbench4State.step5FmPointer[nodeId] = nextIdx;
+    }
+    renderWb4Step5MicroNav();
+  } catch (err) {
+    alert("JSON Parsing Error: " + err.message);
+  }
+}
+
+async function runWb4Step5Api(nodeId, fmIndex) {
+  const prompt = generateWb4Step5FmPromptText(nodeId, fmIndex, true);
+  const statusEl = document.getElementById('wb4Step5ApiStatus');
+  if (statusEl) { statusEl.textContent = `Querying AI for FM ${fmIndex + 1} Effects...`; statusEl.style.color = '#38bdf8'; }
+
+  try {
+    const res = await executeWb3ApiQuery(prompt, 'wb4Step5ApiStatus', 'wb4BtnRunApiStep5Single');
+    if (!res) return;
+    const input = document.getElementById('wb4Step5FmJsonInput');
+    if (input) input.value = res;
+    parseWb4Step5FmJson(nodeId, fmIndex);
+    if (statusEl) { statusEl.textContent = `✓ Effects generated for FM ${fmIndex + 1}!`; statusEl.style.color = '#34d399'; }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ API Error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+async function runWb4Step5AllApi(options = {}) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  if (fms.length === 0) { alert("No failure modes to process."); return; }
+
+  const statusEl = document.getElementById('wb4Step5ApiStatus');
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = `Processing all ${fms.length} FMs for effects...`; statusEl.style.color = '#38bdf8'; }
+
+  let justOpenedNewStep5Window = true;
+  try {
+    for (let i = 0; i < fms.length; i++) {
+      aiWorkbench4State.step5FmPointer[nodeId] = i;
+      if (statusEl) statusEl.textContent = `Processing FM ${i + 1}/${fms.length}: "${fms[i].name.slice(0, 45)}"...`;
+      renderWb4Step5MicroNav();
+
+      if (i > 0 && i % 10 === 0) {
+        if (typeof resetWb3ChatCompanionForNewChat === 'function') {
+          await resetWb3ChatCompanionForNewChat(`Step 5: ${i} Effects Processed`);
+        }
+        justOpenedNewStep5Window = true;
+      }
+
+      const prompt = generateWb4Step5FmPromptText(nodeId, i, justOpenedNewStep5Window);
+      justOpenedNewStep5Window = false;
+      const res = await executeWb3ApiQuery(prompt, 'wb4Step5ApiStatus', null);
+      if (!res) continue;
+
+      const raw = sanitizeJsonString(res);
+      const parsed = JSON.parse(raw);
+      let effectsList = [];
+      if (Array.isArray(parsed.linkedParentFailureModes) && parsed.linkedParentFailureModes.length > 0) {
+        effectsList = parsed.linkedParentFailureModes.map((l, idx) => ({
+          tempId: l.parentFmId || `wb4-eff-${nodeId}-${i + 1}-${idx + 1}`,
+          category: 'Next Higher Level (N+1)',
+          desc: l.parentFmName || l.desc || 'Parent Failure Mode',
+          severity: parseInt(l.chainSeverity || l.severity || 8, 10) || 8,
+          parentFunction: l.parentFunction || '',
+          causalRationale: l.causalRationale || ''
+        }));
+      } else if (Array.isArray(parsed.effects)) {
+        effectsList = parsed.effects.map((e, idx) => ({
+          tempId: e.tempId || `wb4-eff-${nodeId}-${i + 1}-${idx + 1}`,
+          category: e.category || 'End User Level',
+          desc: e.desc || e.description || 'System effect',
+          severity: parseInt(e.severity || 8, 10) || 8,
+          parentFunction: e.parentFunction || '',
+          causalRationale: e.causalRationale || ''
+        }));
+      }
+
+      if (effectsList.length > 0) {
+        if (!aiWorkbench4State.nodeEffects[nodeId]) aiWorkbench4State.nodeEffects[nodeId] = {};
+        aiWorkbench4State.nodeEffects[nodeId][fms[i].tempId] = effectsList;
+        fms[i].severity = Math.max(...effectsList.map(e => e.severity));
+      }
+    }
+
+    if (statusEl) { statusEl.textContent = `✅ All ${fms.length} FMs effects resolved! Auto-advancing to Step 6 Controls...`; statusEl.style.color = '#34d399'; }
+    renderWb4Step5MicroNav();
+    setTimeout(() => { goToWb4Step(6); }, 800);
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ Step 5 All API error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+function renderWb4Step5EffectsContent(nodeId, pointer) {
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const fm = fms[pointer];
+  const container = document.getElementById('wb4Step5EffectsContent');
+  if (!container || !fm) return;
+
+  const effs = (aiWorkbench4State.nodeEffects[nodeId] && aiWorkbench4State.nodeEffects[nodeId][fm.tempId]) || [];
+
+  if (effs.length === 0) {
+    container.innerHTML = '<div style="color:#64748b; font-size:11px; text-align:center; padding:10px;">No effects parsed for this FM yet. Paste JSON or click Generate via API above.</div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:12px;">
+      <div style="font-size:12px; font-weight:700; color:#cbd5e1; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <span>Effects for: </span>
+          <span style="color:#38bdf8;">"${escapeHtml(fm.name)}"</span>
+        </div>
+        <span style="background:#dc2626; color:#fff; padding:2px 8px; border-radius:4px; font-size:10.5px; font-weight:800;">Max S=${fm.severity || 8}</span>
+      </div>
+      <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+        <thead>
+          <tr style="background:#1e293b; color:#94a3b8; font-weight:700;">
+            <th style="padding:6px 8px; width:180px;">Stakeholder Tier / Link</th>
+            <th style="padding:6px 8px;">Consequence / Effect Description</th>
+            <th style="padding:6px 8px; width:70px; text-align:center;">Sev (S)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${effs.map((e, idx) => `
+            <tr style="border-bottom:1px solid #1e293b;">
+              <td style="padding:6px 8px; color:#38bdf8; font-weight:700;">
+                <div>${escapeHtml(e.category)}</div>
+                ${e.parentFunction ? `<div style="font-size:9.5px; color:#94a3b8; font-weight:normal; margin-top:2px;">Fn: ${escapeHtml(e.parentFunction)}</div>` : ''}
+              </td>
+              <td style="padding:6px 8px;">
+                <input type="text" value="${escapeHtml(e.desc)}" onchange="updateWb4EffDesc('${fm.tempId}', ${idx}, this.value)" style="width:100%; box-sizing:border-box; background:#020617; border:1px solid #334155; border-radius:4px; color:#f8fafc; font-size:11px; padding:4px 8px;">
+                ${e.causalRationale ? `<div style="font-size:9.5px; color:#34d399; margin-top:3px;">Rationale: ${escapeHtml(e.causalRationale)}</div>` : ''}
+              </td>
+              <td style="text-align:center; padding:6px;">
+                <input type="number" min="1" max="10" value="${e.severity}" onchange="updateWb4EffSeverity('${fm.tempId}', ${idx}, this.value)" style="width:40px; background:#020617; border:1px solid #334155; border-radius:4px; color:#ef4444; font-weight:800; text-align:center; font-size:11px; padding:2px;">
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function updateWb4EffDesc(fmTempId, idx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeEffects[nodeId] && aiWorkbench4State.nodeEffects[nodeId][fmTempId] && aiWorkbench4State.nodeEffects[nodeId][fmTempId][idx]) {
+    aiWorkbench4State.nodeEffects[nodeId][fmTempId][idx].desc = val.trim();
+  }
+}
+
+function updateWb4EffSeverity(fmTempId, idx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (aiWorkbench4State.nodeEffects[nodeId] && aiWorkbench4State.nodeEffects[nodeId][fmTempId] && aiWorkbench4State.nodeEffects[nodeId][fmTempId][idx]) {
+    aiWorkbench4State.nodeEffects[nodeId][fmTempId][idx].severity = parseInt(val, 10) || 8;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 6: CONTROLS & AP CALCULATION (DEDUPLICATED BY UNIQUE CAUSE)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function getWb4UniqueCauses(nodeId) {
+  const causes = aiWorkbench4State.nodeCauses[nodeId] || [];
+  const uniqueMap = new Map();
+
+  causes.forEach(c => {
+    const rawText = (c.causeDescription || c.desc || '').trim();
+    const key = rawText.toLowerCase();
+    if (!key) return;
+
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, {
+        uniqueKey: key,
+        tempId: c.tempId,
+        causeDescription: rawText,
+        characteristicName: c.characteristicName || 'Drawing Characteristic',
+        spec: c.spec || '',
+        intent: c.intent || '',
+        occurrence: parseInt(c.occurrence, 10) || 3,
+        detection: parseInt(c.detection, 10) || 3,
+        linkedFmTempIds: c.failureTempId ? [c.failureTempId] : [],
+        linkedCauseTempIds: [c.tempId]
+      });
+    } else {
+      const existing = uniqueMap.get(key);
+      if (c.failureTempId && !existing.linkedFmTempIds.includes(c.failureTempId)) {
+        existing.linkedFmTempIds.push(c.failureTempId);
+      }
+      if (!existing.linkedCauseTempIds.includes(c.tempId)) {
+        existing.linkedCauseTempIds.push(c.tempId);
+      }
+    }
+  });
+
+  return Array.from(uniqueMap.values());
+}
+
+function generateWb4Step6Prompt(nodeId) {
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const causesText = uniqueCauses.map((c, i) => `  ${i + 1}. [${c.tempId}] "${c.causeDescription}" (Char: "${c.characteristicName}")`).join('\n');
+
+  const prompt = `You are a Senior Automotive Quality & Controls Engineer performing AIAG-VDA DFMEA Step 6 Prevention & Detection Controls Analysis.
+
+ROOT CAUSES IDENTIFIED FOR THIS ELEMENT (${uniqueCauses.length} Unique Causes):
+${causesText}
+
+TASK DIRECTIVE:
+For each failure cause listed above:
+1. Define Current Prevention Controls (PC): Engineering standards, design calculation rules (e.g. VDI 2230 bolt calculation), CAE stress simulations, CAD envelope verification.
+2. Assign Occurrence Rating (O: 1-10) reflecting preventive design robustness.
+3. Define Current Detection Controls (DC): Physical design verification tests, torque-angle audits, end-of-line leak tests, drop test verification, drawing callout inspection.
+4. Assign Detection Rating (D: 1-10) reflecting test maturity before design freeze.
+5. Output JSON only.
+
+OUTPUT JSON FORMAT:
+{
+  "controls": [
+    {
+      "causeTempId": "${uniqueCauses[0] ? uniqueCauses[0].tempId : 'wb4-cause-1'}",
+      "preventionControls": ["CAD 3D dynamic hose sweep simulation across full loader articulation"],
+      "occurrence": 3,
+      "detectionControls": ["Physical visual routing audit on prototype and pressure cycle endurance test"],
+      "detection": 3
+    }
+  ]
+}`;
+
+  const preview = document.getElementById('wb4Step6PromptPreview');
+  if (preview) preview.value = prompt;
+  return prompt;
+}
+
+function parseWb4Step6Json() {
+  const input = document.getElementById('wb4Step6JsonResponseInput');
+  if (!input || !input.value.trim()) {
+    alert("Please paste the controls JSON response first.");
+    return;
+  }
+  try {
+    const raw = sanitizeJsonString(input.value);
+    const parsed = JSON.parse(raw);
+    const ctrlsList = parsed.controls || (Array.isArray(parsed) ? parsed : []);
+    if (!Array.isArray(ctrlsList) || ctrlsList.length === 0) {
+      alert("No valid controls found in JSON response.");
+      return;
+    }
+    const nodeId = aiWorkbench4State.currentNodeId;
+    if (!aiWorkbench4State.nodeControls[nodeId]) aiWorkbench4State.nodeControls[nodeId] = {};
+    const uniqueCauses = getWb4UniqueCauses(nodeId);
+    const allCauses = aiWorkbench4State.nodeCauses[nodeId] || [];
+
+    ctrlsList.forEach((c, idx) => {
+      // Match by causeTempId or index
+      let targetUc = uniqueCauses.find(uc => uc.linkedCauseTempIds.includes(c.causeTempId));
+      if (!targetUc && idx < uniqueCauses.length) targetUc = uniqueCauses[idx];
+      if (!targetUc) return;
+
+      const controlData = {
+        prevList: Array.isArray(c.preventionControls) ? c.preventionControls : [c.preventionControl || c.pc || 'Design standards'],
+        detList: Array.isArray(c.detectionControls) ? c.detectionControls : [c.detectionControl || c.dc || 'Visual check']
+      };
+
+      // Propagate across all linked causes for this unique cause
+      targetUc.linkedCauseTempIds.forEach(tid => {
+        aiWorkbench4State.nodeControls[nodeId][tid] = { ...controlData };
+      });
+
+      // Update O & D on all matching causes
+      allCauses.forEach(cs => {
+        if (targetUc.linkedCauseTempIds.includes(cs.tempId)) {
+          if (c.occurrence) cs.occurrence = parseInt(c.occurrence, 10) || 3;
+          if (c.detection) cs.detection = parseInt(c.detection, 10) || 3;
+        }
+      });
+    });
+
+    renderWb4ControlsTable();
+    if (typeof showToast === 'function') showToast(`📥 Parsed controls for ${ctrlsList.length} unique causes!`, 'success');
+  } catch (err) {
+    alert("JSON Parsing Error: " + err.message);
+  }
+}
+
+async function runWb4Step6Api() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const prompt = generateWb4Step6Prompt(nodeId);
+  const statusEl = document.getElementById('wb4ApiStep6Status');
+  if (statusEl) { statusEl.textContent = 'Querying AI for Prevention & Detection Controls...'; statusEl.style.color = '#38bdf8'; }
+
+  try {
+    const res = await executeWb3ApiQuery(prompt, 'wb4ApiStep6Status', 'wb4BtnRunApiStep6');
+    if (!res) return;
+    const input = document.getElementById('wb4Step6JsonResponseInput');
+    if (input) input.value = res;
+    parseWb4Step6Json();
+    if (statusEl) { statusEl.textContent = '✓ Controls & AP calculated successfully!'; statusEl.style.color = '#34d399'; }
+  } catch (err) {
+    if (statusEl) { statusEl.textContent = `❌ API Error: ${err.message}`; statusEl.style.color = '#ef4444'; }
+  }
+}
+
+function deriveWb4ControlsAndAp(nodeId) {
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const controls = aiWorkbench4State.nodeControls[nodeId] || {};
+
+  uniqueCauses.forEach(uc => {
+    let pc = 'CAD clearance envelope & joint clamp calculation VDI 2230';
+    let dc = '100% torque-angle audit with calibrated tool & drop test verification';
+
+    if (/hydraulic|leak|pressure/i.test(uc.causeDescription)) {
+      pc = 'Standard 60016000 hydraulic fitting specification & O-ring groove standard';
+      dc = 'End-of-line high pressure hydrostatic leak check (1.5x working pressure)';
+    } else if (/hose|chafing|routing/i.test(uc.causeDescription)) {
+      pc = 'CAD 3D dynamic hose sweep volume simulation across full loader travel';
+      dc = 'Visual routing check against drawing illustrations & deformation limit check (<= 5mm)';
+    }
+
+    const controlData = {
+      prevList: [pc],
+      detList: [dc]
+    };
+
+    uc.linkedCauseTempIds.forEach(tid => {
+      controls[tid] = { ...controlData };
+    });
+  });
+
+  aiWorkbench4State.nodeControls[nodeId] = controls;
+  generateWb4Step6Prompt(nodeId);
+}
+
+function calculateWb4Ap(s, o, d) {
+  s = parseInt(s, 10) || 1;
+  o = parseInt(o, 10) || 1;
+  d = parseInt(d, 10) || 1;
+  if (s >= 9) {
+    if (o >= 4 || d >= 5) return 'H';
+    if (o >= 2 && d >= 2) return 'M';
+    return 'L';
+  }
+  if (s >= 7) {
+    if (o >= 6 || (o >= 4 && d >= 5)) return 'H';
+    if (o >= 3 || d >= 5) return 'M';
+    return 'L';
+  }
+  if (s >= 4) {
+    if (o >= 8 && d >= 5) return 'H';
+    if (o >= 4 || d >= 7) return 'M';
+    return 'L';
+  }
+  return 'L';
+}
+
+function renderWb4ControlsTable() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const ctrls = aiWorkbench4State.nodeControls[nodeId] || {};
+  const container = document.getElementById('wb4ControlsTableContainer');
+  if (!container) return;
+
+  if (uniqueCauses.length === 0) {
+    container.innerHTML = '<div style="color:#64748b; font-size:11px; text-align:center; padding:20px;">No root causes defined. Complete Step 4 first.</div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; overflow:hidden;">
+      <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+        <thead>
+          <tr style="background:#1e293b; color:#94a3b8; font-weight:700; border-bottom:1px solid #334155;">
+            <th style="padding:8px 10px; width:40px; text-align:center;">#</th>
+            <th style="padding:8px 10px; width:220px;">Root Cause & Linked FMs</th>
+            <th style="padding:8px 10px;">Prevention Control (PC)</th>
+            <th style="padding:8px 10px; width:45px; text-align:center;">O</th>
+            <th style="padding:8px 10px;">Detection Control (DC)</th>
+            <th style="padding:8px 10px; width:45px; text-align:center;">D</th>
+            <th style="padding:8px 10px; width:55px; text-align:center;">AP</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${uniqueCauses.map((c, idx) => {
+            let ctrl = null;
+            for (const tid of c.linkedCauseTempIds) {
+              if (ctrls[tid]) { ctrl = ctrls[tid]; break; }
+            }
+            if (!ctrl) ctrl = { prevList: ['Design standards'], detList: ['Visual inspection'] };
+
+            // Find highest severity among linked FMs
+            let maxSeverity = 7;
+            const linkedFmNames = c.linkedFmTempIds.map(fid => {
+              const fm = fms.find(f => f.tempId === fid);
+              if (fm && fm.severity && fm.severity > maxSeverity) maxSeverity = fm.severity;
+              return fm ? fm.name : fid;
+            });
+
+            const ap = calculateWb4Ap(maxSeverity, c.occurrence, c.detection);
+            const apColors = { 'H': '#ef4444', 'M': '#f59e0b', 'L': '#10b981' };
+            const apBg = apColors[ap] || '#10b981';
+            const fmBadges = linkedFmNames.map(name => `<span style="background:#1e293b; color:#94a3b8; padding:1px 5px; border-radius:3px; font-size:9.5px; border:1px solid #334155;">⚡ ${escapeHtml(name.slice(0, 35))}</span>`).join(' ');
+
+            return `
+              <tr style="border-bottom:1px solid #1e293b;">
+                <td style="text-align:center; padding:6px; color:#64748b;">${idx + 1}</td>
+                <td style="padding:6px 8px;">
+                  <div style="color:#cbd5e1; font-weight:700;">${escapeHtml(c.causeDescription.slice(0, 60))}</div>
+                  <div style="font-size:9.5px; color:#64748b; margin-top:2px;">Char: ${escapeHtml(c.characteristicName)}</div>
+                  <div style="margin-top:4px; display:flex; gap:3px; flex-wrap:wrap;">${fmBadges}</div>
+                </td>
+                <td style="padding:6px 8px;">
+                  <input type="text" value="${escapeHtml(ctrl.prevList[0] || '')}" onchange="updateWb4ControlPc('${c.tempId}', this.value)" style="width:100%; box-sizing:border-box; background:#020617; border:1px solid #334155; border-radius:4px; color:#f8fafc; font-size:10.5px; padding:4px;">
+                </td>
+                <td style="text-align:center; padding:6px;">
+                  <input type="number" min="1" max="10" value="${c.occurrence || 3}" onchange="updateWb4CauseO(${idx}, this.value)" style="width:36px; background:#020617; border:1px solid #334155; border-radius:4px; color:#f59e0b; font-weight:800; text-align:center; font-size:11px; padding:2px;">
+                </td>
+                <td style="padding:6px 8px;">
+                  <input type="text" value="${escapeHtml(ctrl.detList[0] || '')}" onchange="updateWb4ControlDc('${c.tempId}', this.value)" style="width:100%; box-sizing:border-box; background:#020617; border:1px solid #334155; border-radius:4px; color:#f8fafc; font-size:10.5px; padding:4px;">
+                </td>
+                <td style="text-align:center; padding:6px;">
+                  <input type="number" min="1" max="10" value="${c.detection || 3}" onchange="updateWb4CauseD(${idx}, this.value)" style="width:36px; background:#020617; border:1px solid #334155; border-radius:4px; color:#38bdf8; font-weight:800; text-align:center; font-size:11px; padding:2px;">
+                </td>
+                <td style="text-align:center; padding:6px;">
+                  <span style="font-weight:900; font-size:11px; padding:2px 8px; border-radius:4px; background:${apBg}22; color:${apBg}; border:1px solid ${apBg}55;">
+                    ${ap}
+                  </span>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function updateWb4ControlPc(causeTempId, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const targetUc = uniqueCauses.find(uc => uc.linkedCauseTempIds.includes(causeTempId)) || { linkedCauseTempIds: [causeTempId] };
+
+  if (!aiWorkbench4State.nodeControls[nodeId]) aiWorkbench4State.nodeControls[nodeId] = {};
+  targetUc.linkedCauseTempIds.forEach(tid => {
+    if (!aiWorkbench4State.nodeControls[nodeId][tid]) aiWorkbench4State.nodeControls[nodeId][tid] = { prevList: [], detList: [] };
+    aiWorkbench4State.nodeControls[nodeId][tid].prevList = [val.trim()];
+  });
+}
+
+function updateWb4ControlDc(causeTempId, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const targetUc = uniqueCauses.find(uc => uc.linkedCauseTempIds.includes(causeTempId)) || { linkedCauseTempIds: [causeTempId] };
+
+  if (!aiWorkbench4State.nodeControls[nodeId]) aiWorkbench4State.nodeControls[nodeId] = {};
+  targetUc.linkedCauseTempIds.forEach(tid => {
+    if (!aiWorkbench4State.nodeControls[nodeId][tid]) aiWorkbench4State.nodeControls[nodeId][tid] = { prevList: [], detList: [] };
+    aiWorkbench4State.nodeControls[nodeId][tid].detList = [val.trim()];
+  });
+}
+
+function updateWb4CauseO(uniqueIdx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const targetUc = uniqueCauses[uniqueIdx];
+  if (!targetUc) return;
+  const num = parseInt(val, 10) || 3;
+
+  const allCauses = aiWorkbench4State.nodeCauses[nodeId] || [];
+  allCauses.forEach(cs => {
+    if (targetUc.linkedCauseTempIds.includes(cs.tempId)) {
+      cs.occurrence = num;
+    }
+  });
+  renderWb4ControlsTable();
+}
+
+function updateWb4CauseD(uniqueIdx, val) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const uniqueCauses = getWb4UniqueCauses(nodeId);
+  const targetUc = uniqueCauses[uniqueIdx];
+  if (!targetUc) return;
+  const num = parseInt(val, 10) || 3;
+
+  const allCauses = aiWorkbench4State.nodeCauses[nodeId] || [];
+  allCauses.forEach(cs => {
+    if (targetUc.linkedCauseTempIds.includes(cs.tempId)) {
+      cs.detection = num;
+    }
+  });
+  renderWb4ControlsTable();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 7: COMPLETE CAUSAL FAILURE CHAIN MATRIX
+// ══════════════════════════════════════════════════════════════════════════════
+
+function renderWb4Matrix() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const causes = aiWorkbench4State.nodeCauses[nodeId] || [];
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const effsMap = aiWorkbench4State.nodeEffects[nodeId] || {};
+  const ctrls = aiWorkbench4State.nodeControls[nodeId] || {};
+  const container = document.getElementById('wb4MatrixContainer');
+  if (!container) return;
+
+  container.innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:10.5px; text-align:left;">
+      <thead>
+        <tr style="background:#1e293b; color:#94a3b8; font-weight:700; border-bottom:1px solid #334155;">
+          <th style="padding:6px 8px; width:180px;">Drawing Characteristic</th>
+          <th style="padding:6px 8px; width:220px;">Root Cause (Deficiency)</th>
+          <th style="padding:6px 8px; width:220px;">Failure Mode</th>
+          <th style="padding:6px 8px; width:220px;">Effect (Consequence)</th>
+          <th style="padding:6px 8px; width:35px; text-align:center;">S</th>
+          <th style="padding:6px 8px; width:35px; text-align:center;">O</th>
+          <th style="padding:6px 8px; width:35px; text-align:center;">D</th>
+          <th style="padding:6px 8px; width:45px; text-align:center;">AP</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${causes.map(c => {
+          const fm = fms.find(f => f.tempId === c.failureTempId) || { name: 'Functional Failure', severity: 8 };
+          const effList = effsMap[fm.tempId] || [{ desc: 'Operational degradation', severity: fm.severity || 8 }];
+          const eff = effList[0] || { desc: 'Operational degradation', severity: fm.severity || 8 };
+          const ap = calculateWb4Ap(eff.severity || fm.severity, c.occurrence, c.detection);
+          const apColors = { 'H': '#ef4444', 'M': '#f59e0b', 'L': '#10b981' };
+          const apBg = apColors[ap] || '#10b981';
+          return `
+            <tr style="border-bottom:1px solid #1e293b;">
+              <td style="padding:6px 8px; color:${c.isAiProposed ? '#fbbf24' : '#38bdf8'}; font-weight:700;">${escapeHtml(c.characteristicName)}</td>
+              <td style="padding:6px 8px; color:#e2e8f0;">${escapeHtml(c.causeDescription)}</td>
+              <td style="padding:6px 8px; color:#f59e0b; font-weight:600;">${escapeHtml(fm.name)}</td>
+              <td style="padding:6px 8px; color:#c084fc;">${escapeHtml(eff.desc)}</td>
+              <td style="text-align:center; padding:6px; color:#ef4444; font-weight:800;">${eff.severity || fm.severity}</td>
+              <td style="text-align:center; padding:6px; color:#f59e0b; font-weight:800;">${c.occurrence || 3}</td>
+              <td style="text-align:center; padding:6px; color:#38bdf8; font-weight:800;">${c.detection || 3}</td>
+              <td style="text-align:center; padding:6px;">
+                <span style="font-weight:900; font-size:10.5px; padding:1px 6px; border-radius:3px; background:${apBg}22; color:${apBg}; border:1px solid ${apBg}55;">
+                  ${ap}
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEP 8: INGESTION & COMMIT TO PROJECT STUDY TREE
+// ══════════════════════════════════════════════════════════════════════════════
+
+function updateWb4Step8Dashboard() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const fns = aiWorkbench4State.nodeFunctions[nodeId] || [];
+  const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+  const causes = aiWorkbench4State.nodeCauses[nodeId] || [];
+  const effs = Object.values(aiWorkbench4State.nodeEffects[nodeId] || {}).flat();
+  const ctrls = Object.keys(aiWorkbench4State.nodeControls[nodeId] || {}).length;
+
+  const fnEl = document.getElementById('wb4KpiFns');
+  const fmEl = document.getElementById('wb4KpiFms');
+  const cEl = document.getElementById('wb4KpiCauses');
+  const eEl = document.getElementById('wb4KpiEffects');
+  const ctrlEl = document.getElementById('wb4KpiControls');
+
+  if (fnEl) fnEl.textContent = fns.length;
+  if (fmEl) fmEl.textContent = fms.length;
+  if (cEl) cEl.textContent = causes.length;
+  if (eEl) eEl.textContent = effs.length;
+  if (ctrlEl) ctrlEl.textContent = ctrls;
+}
+
+function ingestWb4IntoProject() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  const ctx = getActiveFmeaData();
+  if (!ctx || !nodeId) return;
+
+  const stateFns  = aiWorkbench4State.nodeFunctions[nodeId] || [];
+  const stateFms  = aiWorkbench4State.nodeFailures[nodeId]  || [];
+  const stateCauses = aiWorkbench4State.nodeCauses[nodeId]  || [];
+  const effsMap   = aiWorkbench4State.nodeEffects[nodeId]   || {};
+  const stateCtrl = aiWorkbench4State.nodeControls[nodeId]  || {};
+
+  if (stateFns.length === 0 || stateFms.length === 0) {
+    alert('Cannot ingest: Functions or Failure Modes are missing. Please complete earlier steps.');
+    return;
+  }
+
+  const node = getStructureNodeById(ctx.structure, nodeId);
+  const tsPrefix = 'wb4-' + (nodeId ? String(nodeId).replace(/[^a-zA-Z0-9]/g, '').slice(-4) : 'nd') + '-' + Date.now().toString().slice(-4);
+
+  // ── 1. FUNCTIONS ──────────────────────────────────────────────────────────
+  const pkgFunctions = stateFns.map((fn, i) => ({
+    id: fn.tempId || fn.id || `fn-${tsPrefix}-${i + 1}`,
+    name: fn.name || 'Function',
+    type: fn.type || fn.domain || 'Primary function',
+    structId: nodeId,
+    variants: ['ALL']
+  }));
+  const fnIdMap = {};
+  stateFns.forEach((fn, i) => { fnIdMap[fn.tempId || fn.id] = pkgFunctions[i].id; });
+
+  const isRootNode = (ctx.structure && node && node.id === ctx.structure.id);
+  if (isRootNode) {
+    if (typeof fmeaData !== 'undefined') {
+      fmeaData.libraries = fmeaData.libraries || {};
+      fmeaData.libraries.mainEffectFunctions = fmeaData.libraries.mainEffectFunctions || [];
+      pkgFunctions.forEach(fn => {
+        if (!fmeaData.libraries.mainEffectFunctions.some(mf => (mf.name || '').trim().toLowerCase() === (fn.name || '').trim().toLowerCase())) {
+          fmeaData.libraries.mainEffectFunctions.push({ id: fn.id, name: fn.name });
+        }
+      });
+    }
+  }
+
+  // ── 2. FAILURE MODES (per function) ───────────────────────────────────────
+  const fmIdMap = {};
+  let fmCounter = 0;
+  stateFms.forEach(fm => {
+    fmIdMap[fm.tempId || fm.id] = `fm-${tsPrefix}-${++fmCounter}`;
+  });
+
+  // ── 3. EFFECTS ────────────────────────────────────────────────────────────
+  const localEffects = [];
+  const failureModeEffects = {};
+  let effCounter = 0;
+  stateFms.forEach(fm => {
+    const finalFmId = fmIdMap[fm.tempId || fm.id];
+    failureModeEffects[finalFmId] = [];
+    const effList = effsMap[fm.tempId || fm.id] || [{ desc: 'Loss of operational performance', severity: fm.severity || 8 }];
+    effList.forEach(e => {
+      const effDesc = (e.desc || e.effectDesc || e.name || '').trim() || 'System consequence';
+      const existing = localEffects.find(le => (le.desc || '').toLowerCase() === effDesc.toLowerCase());
+      let assignedEffId;
+      if (existing) {
+        assignedEffId = existing.id;
+      } else {
+        const isRootNode = (ctx.structure && node && node.id === ctx.structure.id);
+        assignedEffId = `eff-${tsPrefix}-${++effCounter}`;
+        localEffects.push({
+          id: assignedEffId,
+          category: e.category || 'End User Level',
+          desc: effDesc,
+          severity: parseInt(e.severity, 10) || parseInt(fm.severity, 10) || 8,
+          structId: isRootNode ? 'main-effect-node' : nodeId,
+          systemId: isRootNode ? 'main-effect-node' : nodeId,
+          systemName: isRootNode ? 'Main Effect Node' : (node ? node.name : '')
+        });
+      }
+      if (!failureModeEffects[finalFmId].includes(assignedEffId)) {
+        failureModeEffects[finalFmId].push(assignedEffId);
+      }
+    });
+  });
+
+  // ── 4. CAUSES ─────────────────────────────────────────────────────────────
+  const localCauses = [];
+  const failureModeCauses = {};
+  const causeIdMap = {};
+  let causeCounter = 0;
+  stateFms.forEach(fm => {
+    const finalFmId = fmIdMap[fm.tempId || fm.id];
+    failureModeCauses[finalFmId] = [];
+    const fmCauses = stateCauses.filter(c => c.failureTempId === (fm.tempId || fm.id));
+    fmCauses.forEach(c => {
+      const cDesc = (c.causeDescription || c.details || c.desc || c.name || '').trim() || 'Root cause mechanism';
+      const existing = localCauses.find(lc => (lc.desc || '').toLowerCase() === cDesc.toLowerCase());
+      let assignedCauseId;
+      if (existing) {
+        assignedCauseId = existing.id;
+      } else {
+        assignedCauseId = `cause-${tsPrefix}-${++causeCounter}`;
+        localCauses.push({
+          id: assignedCauseId,
+          details: cDesc,
+          desc: cDesc,
+          name: cDesc,
+          characteristics: c.characteristicName || c.characteristics || 'Design Characteristic',
+          spec: c.spec || '____',
+          occurrence: parseInt(c.occurrence, 10) || 3,
+          detection: parseInt(c.detection, 10) || 3,
+          ap: c.ap || calculateWb4Ap(
+            (effsMap[fm.tempId || fm.id] || [{ severity: fm.severity || 8 }])[0]?.severity || fm.severity || 8,
+            parseInt(c.occurrence, 10) || 3,
+            parseInt(c.detection, 10) || 3
+          ) || 'M',
+          structId: nodeId,
+          systemElement: node ? node.name : '',
+          variants: ['ALL'],
+          origin: 'DFMEA-WB4'
+        });
+      }
+      causeIdMap[c.tempId || c.id] = assignedCauseId;
+      if (!failureModeCauses[finalFmId].includes(assignedCauseId)) {
+        failureModeCauses[finalFmId].push(assignedCauseId);
+      }
+    });
+  });
+
+  // ── 5. CONTROLS ───────────────────────────────────────────────────────────
+  const localControls = [];
+  const causeControls = {};
+  let ctrlCounter = 0;
+  stateCauses.forEach(c => {
+    const assignedCauseId = causeIdMap[c.tempId || c.id];
+    if (!assignedCauseId) return;
+    const ctrl = stateCtrl[c.tempId || c.id] || stateCtrl[c.id] || { prevList: [], detList: [] };
+    const ctrlList = [];
+
+    const prevItems = ctrl.prevList || (ctrl.prevention ? [ctrl.prevention] : []);
+    const detItems  = ctrl.detList  || (ctrl.detection  ? [ctrl.detection]  : []);
+
+    prevItems.forEach(pItem => {
+      const prevDesc = (typeof pItem === 'object' ? (pItem.desc || pItem.name || '') : String(pItem || '')).trim();
+      if (!prevDesc) return;
+      const existing = localControls.find(lc => lc.type === 'Prevention' && (lc.desc || '').toLowerCase() === prevDesc.toLowerCase());
+      let id;
+      if (existing) { id = existing.id; }
+      else { id = `ctrl-prev-${tsPrefix}-${++ctrlCounter}`; localControls.push({ id, desc: prevDesc, type: 'Prevention' }); }
+      if (!ctrlList.includes(id)) ctrlList.push(id);
+    });
+
+    detItems.forEach(dItem => {
+      const detDesc = (typeof dItem === 'object' ? (dItem.desc || dItem.name || '') : String(dItem || '')).trim();
+      if (!detDesc) return;
+      const existing = localControls.find(lc => lc.type === 'Detection' && (lc.desc || '').toLowerCase() === detDesc.toLowerCase());
+      let id;
+      if (existing) { id = existing.id; }
+      else { id = `ctrl-det-${tsPrefix}-${++ctrlCounter}`; localControls.push({ id, desc: detDesc, type: 'Detection' }); }
+      if (!ctrlList.includes(id)) ctrlList.push(id);
+    });
+
+    causeControls[assignedCauseId] = ctrlList;
+  });
+
+  // ── 5B. CHARACTERISTICS (DRAWING & AI-PROPOSED REGISTERED TO LIBRARY) ──────
+  const localCharacteristics = [];
+  const wb4CharSet = new Set();
+  const dData = aiWorkbench4State.nodeDrawingData[nodeId] || {};
+  const pData = dData.parsed || {};
+
+  (pData.dimensionalCharacteristics || []).forEach(dim => {
+    const cName = (dim.name || '').trim();
+    if (!cName || wb4CharSet.has(cName.toLowerCase())) return;
+    wb4CharSet.add(cName.toLowerCase());
+    localCharacteristics.push({
+      id: `char-${tsPrefix}-${localCharacteristics.length + 1}`,
+      name: cName,
+      spec: dim.requirement || dim.spec || '',
+      intent: dim.intent || '',
+      category: 'Dimensional / Drawing',
+      classSymbol: 'None',
+      structId: nodeId,
+      systemElement: node ? node.name : '',
+      variants: ['ALL'],
+      applicability: 'ALL',
+      origin: 'DFMEA-WB4'
+    });
+  });
+
+  (dData.aiProposed || []).forEach(ap => {
+    const cName = (ap.name || '').trim();
+    if (!cName || wb4CharSet.has(cName.toLowerCase())) return;
+    wb4CharSet.add(cName.toLowerCase());
+    localCharacteristics.push({
+      id: `char-${tsPrefix}-${localCharacteristics.length + 1}`,
+      name: cName,
+      spec: ap.spec || '',
+      intent: ap.intent || '',
+      category: ap.category || 'AI-Proposed / Drawing',
+      classSymbol: 'None',
+      structId: nodeId,
+      systemElement: node ? node.name : '',
+      variants: ['ALL'],
+      applicability: 'ALL',
+      origin: 'DFMEA-WB4'
+    });
+  });
+
+  localCauses.forEach(c => {
+    const rawChars = (c.characteristics || c.characteristicName || '').trim();
+    if (rawChars && rawChars !== '-') {
+      const parts = rawChars.split(/,|\n|;/).map(s => s.trim()).filter(Boolean);
+      c.characteristicIds = c.characteristicIds || [];
+      parts.forEach(pName => {
+        let existing = localCharacteristics.find(lc => lc.name.toLowerCase() === pName.toLowerCase());
+        if (!existing) {
+          existing = {
+            id: `char-${tsPrefix}-${localCharacteristics.length + 1}`,
+            name: pName,
+            spec: c.spec || '',
+            classSymbol: c.classSymbol || 'None',
+            structId: nodeId,
+            systemElement: node ? node.name : '',
+            variants: ['ALL'],
+            applicability: 'ALL',
+            origin: 'DFMEA-WB4'
+          };
+          localCharacteristics.push(existing);
+        }
+        if (!c.characteristicIds.includes(existing.id)) {
+          c.characteristicIds.push(existing.id);
+        }
+      });
+    }
+  });
+
+  // ── 6. FUNCTION LINES ─────────────────────────────────────────────────────
+  const pkgFunctionLines = stateFns.map((fn, i) => {
+    const fnId = pkgFunctions[i].id;
+    const fmSubset = stateFms.filter(fm => fm.functionTempId === (fn.tempId || fn.id));
+    const fmArray = fmSubset.map(fm => ({
+      id: fmIdMap[fm.tempId || fm.id],
+      name: fm.name || 'Failure Mode',
+      severity: parseInt(fm.severity, 10) || 8,
+      occurrence: stateCauses.filter(c => c.failureTempId === (fm.tempId || fm.id)).reduce((mx, c) => Math.max(mx, parseInt(c.occurrence, 10) || 3), 3),
+      detection: stateCauses.filter(c => c.failureTempId === (fm.tempId || fm.id)).reduce((mx, c) => Math.max(mx, parseInt(c.detection, 10) || 3), 3),
+      ap: 'M'
+    }));
+    return {
+      id: `fl-${tsPrefix}-${i + 1}`,
+      funcId: fnId,
+      functionId: fnId,
+      structId: nodeId,
+      functionName: fn.name,
+      functionType: fn.type || fn.domain || 'Primary function',
+      isConsidered: true,
+      failureModes: fmArray
+    };
+  });
+
+  // ── 7. BUILD PACKAGE AND INGEST ───────────────────────────────────────────
+  const pkg = {
+    packageMagic: 'JOST_FMEA_SUBFILE_PKG_V1',
+    projectName: `${node ? node.name : nodeId} DFMEA Subpackage (WB4)`,
+    exportedAt: new Date().toISOString(),
+    structure: [{
+      id: nodeId,
+      name: node ? node.name : nodeId,
+      type: 'Component',
+      partNumber: node ? (node.partNo || node.partNumber || 'PN-001') : 'PN-001',
+      description: node ? (node.desc || node.description || '') : ''
+    }],
+    variants: ['ALL'],
+    functions: pkgFunctions,
+    requirements: [],
+    functionLines: pkgFunctionLines,
+    libraries: {
+      effects: localEffects,
+      causes: localCauses,
+      controls: localControls
+    },
+    failureModeEffects,
+    failureModeCauses,
+    causeControls,
+    functionNetworkLinks: [],
+    failureNetworkLinks: []
+  };
+
+  parseAndIngestWb2FullSubpackage(pkg);
+
+  aiWorkbench4State.processedNodes.add(nodeId);
+  renderWb4StructureNavBar();
+  closeAiWorkbench4Modal();
+
+  if (typeof renderFMEATable === 'function') renderFMEATable();
+  if (typeof updateFmeaTable === 'function') updateFmeaTable();
+  if (typeof updateStructureTree === 'function') updateStructureTree();
+  if (typeof refreshAllLibraries === 'function') refreshAllLibraries();
+  if (typeof performAutoSave === 'function') performAutoSave('WB4 Drawing DFMEA Ingest');
+  if (typeof showToast === 'function') showToast(`✅ WB4 Drawing DFMEA successfully committed for "${node ? node.name : nodeId}"!`, 'success');
+  else alert('Ingestion complete!');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STEPPER STEP NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+
+function goToWb4Step(step, force = false) {
+  saveCurrentWb4Inputs();
+  aiWorkbench4State.currentStep = step;
+  updateWb4StartFromHereButton();
+
+  for (let i = 1; i <= 8; i++) {
+    const badge = document.getElementById(`wb4StepBadge${i}`);
+    const line = document.getElementById(`wb4StepLine${i}`);
+    const panel = document.getElementById(`wb4Step${i}Panel`);
+    if (badge) {
+      if (i === step) badge.className = 'stepper-step active';
+      else if (i < step) badge.className = 'stepper-step completed';
+      else badge.className = 'stepper-step';
+    }
+    if (line) line.className = (i < step) ? 'stepper-line completed' : 'stepper-line';
+    if (panel) panel.style.display = (i === step) ? 'block' : 'none';
+  }
+
+  const btnPrev = document.getElementById('wb4BtnPrevStep');
+  const btnNext = document.getElementById('wb4BtnNextStep');
+  if (btnPrev) btnPrev.style.display = (step > 1) ? 'inline-block' : 'none';
+
+  if (btnNext) {
+    if (step === 1) btnNext.innerHTML = 'Next Step: Functions ➡️';
+    else if (step === 2) btnNext.innerHTML = 'Next Step: Failure Modes ➡️';
+    else if (step === 3) btnNext.innerHTML = 'Next Step: Characteristic Causes ➡️';
+    else if (step === 4) btnNext.innerHTML = 'Next Step: Effects (Micro) ➡️';
+    else if (step === 5) btnNext.innerHTML = 'Next Step: Controls &amp; AP ➡️';
+    else if (step === 6) btnNext.innerHTML = 'Next Step: Failure Matrix ➡️';
+    else if (step === 7) btnNext.innerHTML = 'Next Step: Ingest &amp; Review ➡️';
+    else if (step === 8) btnNext.innerHTML = '✓ Finish &amp; Commit';
+  }
+
+  const nodeId = aiWorkbench4State.currentNodeId;
+
+  if (step === 2) {
+    generateWb4Step2Prompt(nodeId);
+    renderWb4FunctionsTable();
+  } else if (step === 3) {
+    if (!aiWorkbench4State.nodeFailures[nodeId] || aiWorkbench4State.nodeFailures[nodeId].length === 0) {
+      deriveWb4FailureModes(nodeId);
+    }
+    generateWb4Step3Prompt(nodeId);
+    renderWb4FailureModesList();
+  } else if (step === 4) {
+    if (!aiWorkbench4State.nodeCauses[nodeId] || aiWorkbench4State.nodeCauses[nodeId].length === 0) {
+      deriveWb4CharacteristicCauses(nodeId);
+    }
+    renderWb4Step4MicroNav();
+  } else if (step === 5) {
+    renderWb4Step5MicroNav();
+  } else if (step === 6) {
+    deriveWb4ControlsAndAp(nodeId);
+    generateWb4Step6Prompt(nodeId);
+    renderWb4ControlsTable();
+  } else if (step === 7) {
+    renderWb4Matrix();
+  } else if (step === 8) {
+    updateWb4Step8Dashboard();
+  }
+}
+
+function nextWb4Step() {
+  const cur = aiWorkbench4State.currentStep;
+  if (cur === 8) {
+    ingestWb4IntoProject();
+    return;
+  }
+  goToWb4Step(cur + 1);
+}
+
+function prevWb4Step() {
+  const cur = aiWorkbench4State.currentStep;
+  if (cur > 1) goToWb4Step(cur - 1);
+}
+
+function saveCurrentWb4Inputs() {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (!nodeId) return;
+  const inputEl = document.getElementById('wb4RawDrawingInput');
+  if (inputEl && inputEl.value.trim()) {
+    if (!aiWorkbench4State.nodeDrawingData[nodeId]) {
+      aiWorkbench4State.nodeDrawingData[nodeId] = { rawText: inputEl.value.trim() };
+    } else {
+      aiWorkbench4State.nodeDrawingData[nodeId].rawText = inputEl.value.trim();
+    }
+  }
+}
+
+async function saveWb4ProgressToFile() {
+  saveCurrentWb4Inputs();
+  if (typeof syncWorkbenchStateToProjectData === 'function') {
+    syncWorkbenchStateToProjectData();
+  }
+  const badge = document.getElementById('wb4SavedStatusBadge');
+  if (badge) {
+    badge.style.display = 'inline-flex';
+    setTimeout(() => { if (badge) badge.style.display = 'none'; }, 3000);
+  }
+  if (typeof performAutoSave === 'function') {
+    await performAutoSave('Manual WB4 Progress Save');
+  }
+  if (typeof showToast === 'function') showToast('💾 WB4 Progress saved in project file!', 'success');
+}
+
+function clearWb4NodeState() {
+  showWorkbenchClearScopeModal('WB4');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTO-PILOT & COMPANION INTEGRATION
+// ══════════════════════════════════════════════════════════════════════════════
+
+function onWb4AiModeChange() {
+  const sel = document.getElementById('wb4AiModeSelect');
+  const btn = document.getElementById('wb4CompanionBtnText');
+  if (!sel || !btn) return;
+  const val = sel.value;
+  const labels = {
+    chatgpt: 'ChatGPT',
+    gemini: 'Gemini',
+    copilot: 'Copilot',
+    deepseek: 'DeepSeek',
+    kimi: 'Kimi',
+    claude: 'Claude',
+    qwen: 'Qwen',
+    api: 'API Config'
+  };
+  btn.textContent = labels[val] || 'Companion';
+  setWb4ExecutionMode(val === 'api' ? 'API' : 'MANUAL');
+}
+
+function openWb4ChatCompanion() {
+  const sel = document.getElementById('wb4AiModeSelect');
+  const mode = sel ? sel.value : 'chatgpt';
+  if (mode === 'api') {
+    openWb3ApiSettingsModal();
+    return;
+  }
+  if (typeof openAiChatCompanionWindow === 'function') {
+    openAiChatCompanionWindow(mode);
+  } else {
+    alert(`Companion window integration active for ${mode.toUpperCase()}.`);
+  }
+}
+
+function onWb4ChkAllLevelsChange() {
+  updateWb4StartFromHereButton();
+}
+
+function updateWb4StartFromHereButton() {
+  const btnText = document.getElementById('wb4AutoPilotBtnText');
+  const chkAll = document.getElementById('wb4ChkAllLevels');
+  const runStepOnlyText = document.getElementById('wb4RunStepOnlyBtnText');
+  const runStepOnlyBtn = document.getElementById('wb4BtnRunStepOnly');
+  if (!btnText) return;
+
+  const startStep = Math.max(2, aiWorkbench4State.currentStep || 2);
+  const isAll = chkAll ? chkAll.checked : false;
+
+  if (isAll) {
+    btnText.textContent = `Start All (Steps ${startStep}–6)`;
+  } else {
+    btnText.textContent = `Start (Steps ${startStep}–6)`;
+  }
+
+  if (runStepOnlyText) {
+    runStepOnlyText.textContent = `Step ${startStep} Only`;
+    if (runStepOnlyBtn) {
+      runStepOnlyBtn.style.display = (startStep >= 2 && startStep <= 6) ? 'inline-flex' : 'none';
+    }
+  }
+}
+
+function toggleWb4AutoPilot() {
+  if (aiWorkbench4State.apiInProgress) {
+    stopWb4AutoPilot(true);
+  } else {
+    startWb4AutoPilotWithOptions();
+  }
+}
+
+function updateWb4AutoPilotUi(isRunning, statusText = '') {
+  const btnText = document.getElementById('wb4AutoPilotBtnText');
+  const icon = document.getElementById('wb4AutoPilotIcon');
+  const banner = document.getElementById('wb4AutoPilotBanner');
+  const bStatus = document.getElementById('wb4AutoPilotStatusText');
+
+  if (banner) banner.style.display = isRunning ? 'flex' : 'none';
+  if (bStatus && statusText) bStatus.textContent = statusText;
+
+  if (isRunning) {
+    if (icon) icon.textContent = '⏹️';
+    if (btnText) btnText.textContent = 'Stop Auto-Pilot';
+  } else {
+    if (icon) icon.textContent = '▶️';
+    updateWb4StartFromHereButton();
+  }
+}
+
+function stopWb4AutoPilot(notify = true) {
+  aiWorkbench4State.apiInProgress = false;
+  updateWb4AutoPilotUi(false);
+  if (notify && typeof showToast === 'function') {
+    showToast('⏹ Auto-Pilot stopped.', 'info');
+  }
+}
+
+async function startWb4AutoPilotWithOptions(options = {}) {
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (!nodeId) return;
+
+  aiWorkbench4State.apiInProgress = true;
+  updateWb4AutoPilotUi(true, '🤖 Auto-Pilot: Processing Drawing Ingestion & Characteristics...');
+
+  try {
+    const isApiMode = (aiWorkbench4State.executionMode === 'API');
+
+    // Step 1: Ensure Drawing is parsed
+    if (!aiWorkbench4State.nodeDrawingData[nodeId] || !aiWorkbench4State.nodeDrawingData[nodeId].parsed) {
+      loadWb4SampleDrawingData();
+      parseWb4DrawingInput();
+    }
+
+    if (isApiMode) {
+      // Step 2: Functions via Direct API
+      updateWb4AutoPilotUi(true, '⚡ Auto-Pilot [API]: Calling AI Model for Functions & N+1 Parent Linking...');
+      await runWb4Step2Api();
+      goToWb4Step(2);
+
+      // Step 3: Failure Modes via Direct API
+      updateWb4AutoPilotUi(true, '⚡ Auto-Pilot [API]: Calling AI Model for Failure Modes...');
+      await runWb4Step3Api();
+      goToWb4Step(3);
+
+      // Step 4: Characteristic Causes via Direct API
+      updateWb4AutoPilotUi(true, '⚡ Auto-Pilot [API]: Calling AI Model for Characteristic Deficiency Causes...');
+      await runWb4Step4AllApi();
+      goToWb4Step(4);
+
+      // Step 5: Effects via Direct API
+      updateWb4AutoPilotUi(true, '⚡ Auto-Pilot [API]: Calling AI Model for Failure Effects (N+1/System)...');
+      await runWb4Step5AllApi();
+      goToWb4Step(5);
+
+      // Step 6: Controls & AP via Direct API
+      updateWb4AutoPilotUi(true, '⚡ Auto-Pilot [API]: Calling AI Model for Prevention/Detection Controls & AP...');
+      await runWb4Step6Api();
+      goToWb4Step(6);
+    } else {
+      // Step 2: Functions
+      updateWb4AutoPilotUi(true, '🤖 Auto-Pilot: Categorizing Functions & Establishing N+1 Links...');
+      await new Promise(r => setTimeout(r, 600));
+      populateWb4FunctionsFromDrawing(nodeId);
+      goToWb4Step(2);
+
+      // Step 3: Failure Modes
+      updateWb4AutoPilotUi(true, '🤖 Auto-Pilot: Deriving AIAG-VDA Failure Modes from Functions...');
+      await new Promise(r => setTimeout(r, 600));
+      deriveWb4FailureModes(nodeId);
+      goToWb4Step(3);
+
+      // Step 4: Characteristic Causes
+      updateWb4AutoPilotUi(true, '🤖 Auto-Pilot: Evaluating Drawing Characteristics & Linking Deficiency Causes...');
+      await new Promise(r => setTimeout(r, 700));
+      deriveWb4CharacteristicCauses(nodeId);
+      goToWb4Step(4);
+
+      // Step 5: Effects
+      updateWb4AutoPilotUi(true, '🤖 Auto-Pilot: Resolving Upstream N+1 Effects & Root Library Matching...');
+      await new Promise(r => setTimeout(r, 700));
+      const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+      fms.forEach((_, i) => deriveWb4EffectsForFm(nodeId, i));
+      goToWb4Step(5);
+
+      // Step 6: Controls & AP
+      updateWb4AutoPilotUi(true, '🤖 Auto-Pilot: Deriving Prevention/Detection Controls & Computing AP...');
+      await new Promise(r => setTimeout(r, 600));
+      deriveWb4ControlsAndAp(nodeId);
+      goToWb4Step(6);
+    }
+
+    stopWb4AutoPilot(false);
+    if (typeof showToast === 'function') {
+      showToast(`✨ Auto-Pilot completed Steps 1 through 6 (${isApiMode ? 'Direct API' : 'Manual / Local'})! Ready for Matrix Review & Ingestion.`, 'success');
+    }
+  } catch (err) {
+    console.error('WB4 Auto-Pilot error:', err);
+    stopWb4AutoPilot(false);
+    alert('Auto-Pilot error: ' + err.message);
+  }
+}
+
+async function startWb4RunStepOnly() {
+  const step = aiWorkbench4State.currentStep || 1;
+  const nodeId = aiWorkbench4State.currentNodeId;
+  if (!nodeId) return;
+
+  const isApiMode = (aiWorkbench4State.executionMode === 'API');
+
+  if (step === 1) {
+    parseWb4DrawingInput();
+  } else if (step === 2) {
+    if (isApiMode) await runWb4Step2Api();
+    else populateWb4FunctionsFromDrawing(nodeId);
+  } else if (step === 3) {
+    if (isApiMode) await runWb4Step3Api();
+    else deriveWb4FailureModes(nodeId);
+  } else if (step === 4) {
+    if (isApiMode) await runWb4Step4AllApi();
+    else deriveWb4CharacteristicCauses(nodeId);
+  } else if (step === 5) {
+    if (isApiMode) await runWb4Step5AllApi();
+    else {
+      const fms = aiWorkbench4State.nodeFailures[nodeId] || [];
+      fms.forEach((_, i) => deriveWb4EffectsForFm(nodeId, i));
+    }
+  } else if (step === 6) {
+    if (isApiMode) await runWb4Step6Api();
+    else deriveWb4ControlsAndAp(nodeId);
+  }
+
+  goToWb4Step(step);
+  if (typeof showToast === 'function') showToast(`🎯 Completed Step ${step} Only (${isApiMode ? 'Direct API' : 'Local / Manual'}).`, 'success');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WINDOW GLOBAL EXPORTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+window.openAiWorkbench4Modal = openAiWorkbench4Modal;
+window.closeAiWorkbench4Modal = closeAiWorkbench4Modal;
+window.switchWb4ActiveElement = switchWb4ActiveElement;
+window.copyWb4MasterPrompt = copyWb4MasterPrompt;
+window.toggleWb4MasterPromptView = toggleWb4MasterPromptView;
+window.loadWb4SampleDrawingData = loadWb4SampleDrawingData;
+window.parseWb4DrawingInput = parseWb4DrawingInput;
+window.goToWb4Step = goToWb4Step;
+window.nextWb4Step = nextWb4Step;
+window.prevWb4Step = prevWb4Step;
+window.saveWb4ProgressToFile = saveWb4ProgressToFile;
+window.clearWb4NodeState = clearWb4NodeState;
+window.setWb4ExecutionMode = setWb4ExecutionMode;
+window.copyWb4StepPrompt = copyWb4StepPrompt;
+window.generateWb4Step2Prompt = generateWb4Step2Prompt;
+window.parseWb4Step2Json = parseWb4Step2Json;
+window.runWb4Step2Api = runWb4Step2Api;
+window.addWb4FunctionRow = addWb4FunctionRow;
+window.deleteWb4FunctionRow = deleteWb4FunctionRow;
+window.updateWb4FnName = updateWb4FnName;
+window.updateWb4FnParent = updateWb4FnParent;
+window.generateWb4Step3Prompt = generateWb4Step3Prompt;
+window.parseWb4Step3Json = parseWb4Step3Json;
+window.runWb4Step3Api = runWb4Step3Api;
+window.addWb4FailureModeRow = addWb4FailureModeRow;
+window.deleteWb4FailureMode = deleteWb4FailureMode;
+window.updateWb4FmName = updateWb4FmName;
+window.updateWb4FmSeverity = updateWb4FmSeverity;
+window.toggleWb4AllFmChecks = toggleWb4AllFmChecks;
+window.renderWb4Step4MicroNav = renderWb4Step4MicroNav;
+window.goToWb4Step4Fm = goToWb4Step4Fm;
+window.generateWb4Step4FmPromptText = generateWb4Step4FmPromptText;
+window.copyWb4Step4FmPrompt = copyWb4Step4FmPrompt;
+window.parseWb4Step4FmJson = parseWb4Step4FmJson;
+window.runWb4Step4Api = runWb4Step4Api;
+window.runWb4Step4AllApi = runWb4Step4AllApi;
+window.updateWb4CauseDesc = updateWb4CauseDesc;
+window.updateWb4CauseFmLink = updateWb4CauseFmLink;
+window.deleteWb4CauseRow = deleteWb4CauseRow;
+window.renderWb4Step5MicroNav = renderWb4Step5MicroNav;
+window.goToWb4Step5Fm = goToWb4Step5Fm;
+window.generateWb4Step5FmPromptText = generateWb4Step5FmPromptText;
+window.copyWb4Step5FmPrompt = copyWb4Step5FmPrompt;
+window.parseWb4Step5FmJson = parseWb4Step5FmJson;
+window.runWb4Step5Api = runWb4Step5Api;
+window.runWb4Step5AllApi = runWb4Step5AllApi;
+window.updateWb4EffDesc = updateWb4EffDesc;
+window.updateWb4EffSeverity = updateWb4EffSeverity;
+window.generateWb4Step6Prompt = generateWb4Step6Prompt;
+window.parseWb4Step6Json = parseWb4Step6Json;
+window.runWb4Step6Api = runWb4Step6Api;
+window.updateWb4ControlPc = updateWb4ControlPc;
+window.updateWb4ControlDc = updateWb4ControlDc;
+window.updateWb4CauseO = updateWb4CauseO;
+window.updateWb4CauseD = updateWb4CauseD;
+window.ingestWb4IntoProject = ingestWb4IntoProject;
+window.onWb4AiModeChange = onWb4AiModeChange;
+window.openWb4ChatCompanion = openWb4ChatCompanion;
+window.onWb4ChkAllLevelsChange = onWb4ChkAllLevelsChange;
+window.toggleWb4AutoPilot = toggleWb4AutoPilot;
+window.startWb4RunStepOnly = startWb4RunStepOnly;
+window.getWb3UniqueCauses = getWb3UniqueCauses;
+window.getWb4UniqueCauses = getWb4UniqueCauses;
+
+if (typeof initFmeaContextMenu === "function") initFmeaContextMenu();
+
+if (typeof initCtrlDblClickListeners === "function") initCtrlDblClickListeners();
+
+
+// ----------------------------------------------------
+// Global: Remove default browser context menu view across all application
+// ----------------------------------------------------
+window.addEventListener('contextmenu', function (e) {
+  // Allow text selection context menu only on editable input or textarea elements
+  const isEditable = (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !e.target.readOnly && !e.target.disabled;
+  if (!isEditable) {
+    e.preventDefault();
+  }
+}, true);
